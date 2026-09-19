@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rai-card"
+version = "2.0.0"
+description = "Responsible AI gate: model card and compliance bundle for NL→ODRL→Cedar/Rego assistants."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "pydantic>=2.7",
+  "eval_type_backport>=0.2",
+  "pyyaml>=6.0",
+  "fastapi>=0.110",
+  "httpx>=0.27",
+  "uvicorn>=0.27",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+rai-card = "rai_card.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["rai_card*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"

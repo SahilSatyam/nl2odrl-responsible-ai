@@ -1,0 +1,30 @@
+name: rai-gate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  governance:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: .
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -r requirements.txt
+      - name: Unit tests
+        run: pytest
+      - name: Generate model card (must pass)
+        run: python generate_card.py
+      - name: Broken-card fixture must fail
+        run: |
+          python generate_card.py \
+            --static model_card_BROKEN_demo.yaml \
+            --report /tmp/broken.json \
+            --output /tmp/should-not-write.md \
+            && echo "expected non-zero" && exit 1 \
+            || test $? -eq 1

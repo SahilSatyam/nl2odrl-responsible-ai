@@ -1,0 +1,28 @@
+# Human-authored release inventory. CI checks this against the model card.
+# It does not compile ODRL, Cedar, or Rego.
+
+bundle_id: "nl2odrl-compliance-v1"
+system_id: "nl2odrl-v1"
+owner_team: "Policy Language Team — Responsible AI"
+
+required_artifacts:
+  - model_card.yaml
+  - metrics.json
+  - policies/governance.yaml
+  - MODEL_CARD.md
+  - COMPLIANCE_BUNDLE.md
+  - rai-gate.json
+  - exhibits/gold_set/
+
+attestations:
+  not_legal_advice: true
+  no_auto_pep_attach: true
+  fail_closed_on_ambiguity: true
+  gold_set_frozen: true
+
+exhibit_paths:
+  - exhibits/gold_set/README.md
+  - exhibits/gold_set/01.nl.txt
+  - exhibits/gold_set/01.odrl.jsonld
+  - exhibits/gold_set/01.cedar
+  - exhibits/gold_set/01.rego

@@ -1,0 +1,4 @@
+Members of the research group may read dataset D.
+Only the data steward may export dataset D.
+No principal may share dataset D with parties outside the research group.
+Every read of dataset D carries an obligation to write an access log.
