@@ -1,0 +1,112 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}</style><style>:root{color-scheme:light dark;--md-bg:#fff;--md-text:rgba(0,0,0,.8);--md-muted:rgba(0,0,0,.6);--md-fill:rgba(0,0,0,.04);--md-fill-strong:rgba(0,0,0,.06);--md-rule:rgba(0,0,0,.1);--md-rule-strong:rgba(0,0,0,.16);--md-link:hsl(210 100% 45%)}@media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])){--md-bg:#0d0d0d;--md-text:rgba(255,255,255,.85);--md-muted:rgba(255,255,255,.6);--md-fill:rgba(255,255,255,.06);--md-fill-strong:rgba(255,255,255,.09);--md-rule:rgba(255,255,255,.14);--md-rule-strong:rgba(255,255,255,.22);--md-link:hsl(210 100% 72%)}}:root[data-theme="dark"]{color-scheme:dark;--md-bg:#0d0d0d;--md-text:rgba(255,255,255,.85);--md-muted:rgba(255,255,255,.6);--md-fill:rgba(255,255,255,.06);--md-fill-strong:rgba(255,255,255,.09);--md-rule:rgba(255,255,255,.14);--md-rule-strong:rgba(255,255,255,.22);--md-link:hsl(210 100% 72%)}:root[data-theme="light"]{color-scheme:light}@media print{:root,:root[data-theme="dark"]{color-scheme:light;--md-bg:#fff;--md-text:rgba(0,0,0,.8);--md-muted:rgba(0,0,0,.6);--md-fill:rgba(0,0,0,.04);--md-fill-strong:rgba(0,0,0,.06);--md-rule:rgba(0,0,0,.1);--md-rule-strong:rgba(0,0,0,.16);--md-link:hsl(210 100% 45%)}}body{background:var(--md-bg);color:var(--md-text);max-width:720px;margin:0 auto;padding:32px;display:flex;flex-direction:column;gap:10px;font:14px/1.55 -apple-system,BlinkMacSystemFont,'SF Pro','Segoe UI',sans-serif;overflow-wrap:break-word}body>:first-child{margin-top:0}h1,h2,h3,h4,h5,h6{margin:6px 0 0;line-height:1.25;font-weight:600;text-wrap:balance}h1{font-size:1.35em}h2{font-size:1.15em;color:var(--md-muted)}h3,h4,h5,h6{font-size:1em}p,ul,ol,blockquote,table,pre,hr{margin:0}strong{font-weight:600}a{color:var(--md-link);text-decoration:none}a:hover{text-decoration:underline}ul,ol{display:flex;flex-direction:column;gap:6px;padding-left:22px}ul{list-style:disc}ol{list-style:decimal}:is(li,td,th)>*+:is(p,ul,ol,blockquote){margin-top:6px}blockquote{display:flex;flex-direction:column;gap:10px;border-left:2px solid var(--md-rule);padding-left:10px;color:var(--md-muted)}:not(pre)>code{background:var(--md-fill);padding:1px 3px;border-radius:4px;font:.92em 'SF Mono',ui-monospace,Menlo,Consolas,monospace}a>code{background:none;color:inherit}pre{background:var(--md-fill);padding:10px 12px;border-radius:6px;overflow-x:auto;font:12px/1.5 'SF Mono',ui-monospace,Menlo,Consolas,monospace;margin-block:4px}pre code{background:none;padding:0;font:inherit}table{width:100%;border-collapse:separate;border-spacing:2px;font:inherit}th,td{padding:6px 8px;border-radius:3px;text-align:left;vertical-align:top}th{background:var(--md-fill-strong);font-weight:600}td{background:var(--md-fill)}:is(th,td) :not(pre)>code{background:transparent}hr{border:0;border-top:1px solid var(--md-rule-strong);margin-block:10px}img{max-width:100%;height:auto;border-radius:4px}</style>
+</head><body>
+<h1>Responsible &amp; Ethical AI — 30-Minute Talk Script</h1>
+<p><em>A continuous narrative, structured around 7 principles of Responsible AI, closing with a live demo of the CCB Data Governance Policy Studio.</em></p>
+<hr>
+<h2>The throughline</h2>
+<p>Everything hangs off <strong>one running story</strong>: Maria Chen, a bakery owner, applies for a $30,000 loan at <strong>CCB</strong>. Her AI-assisted loan process goes wrong in a small way early on — and you keep returning to her case as the illustration for each of the seven principles. At the end, you pull back the curtain: her data is exactly the kind of thing your <strong>Policy Studio</strong> was built to govern, and you show the real system doing it live.</p>
+<p><strong>The 7 principles, in the order you'll walk through them:</strong></p>
+<ol>
+<li>Fairness</li>
+<li>Safety and Robustness</li>
+<li>Privacy and Security</li>
+<li>Interpretability and Explainability</li>
+<li>Accountability and Governance</li>
+<li>Responsible Data Practices <em>(→ live demo lands here)</em></li>
+<li>Scientific Excellence</li>
+</ol>
+<hr>
+<h2>0:00–2:00 — Cold open</h2>
+<blockquote>
+<p>&quot;Maria Chen runs a bakery. She's applied for a $30,000 loan from CCB to buy a second oven. The AI-assisted underwriting system rejects her in four seconds. She asks why. The loan officer shrugs — 'the algorithm decided.' Nobody can tell her more than that.</p>
+<p>Every failure mode I'm going to walk through today is hiding somewhere in those four seconds. And there's a real, unglamorous reason most of them go uncaught: nobody wrote down, in an enforceable way, what this system was and wasn't allowed to do with Maria's data and Maria's case. That's actually where I want to end today — with a live look at a system we built to fix exactly that. But first, let's walk through <em>why</em> it's needed, one principle at a time.&quot;</p>
+</blockquote>
+<p><strong>Transition:</strong> &quot;Principle one: is the decision itself fair?&quot;</p>
+<hr>
+<h2>2:00–5:30 — Fairness</h2>
+<p><em>Identifying and preventing unjust, prejudicial, or biased treatment in algorithmic systems and training data.</em></p>
+<blockquote>
+<p>&quot;CCB's model hits 94% accuracy overall. Nobody asked: accurate <em>for whom</em>? A model can be 94% accurate in aggregate while being close to a coin-flip for one demographic group, because the majority group's performance drowns out the minority group's failure in the average. This is exactly what happened with COMPAS, the US criminal-risk-scoring tool — nearly twice as likely to falsely flag Black defendants as future reoffenders, while the aggregate numbers looked clean.</p>
+<p>In Maria's case, her zip code is quietly doing a lot of work — standing in as a proxy for income history and neighborhood demographics the model was never explicitly given. Deleting the 'protected attribute' column doesn't fix this; models are correlation engines, they'll find the proxy anyway.</p>
+<p>And there's a hard mathematical result here worth knowing (Kleinberg et al.): you <em>cannot</em> simultaneously satisfy every reasonable definition of fairness — calibration, equal true-positive rates, and equal false-positive rates all conflict with each other. So the real discipline isn't asking 'is this fair?' — it's asking 'which kind of unfairness is least acceptable for this decision?' For a loan denial, you'd prioritize equal false-positive rates: don't disproportionately punish creditworthy people in any one group.&quot;</p>
+</blockquote>
+<p><strong>Transition:</strong> &quot;Say the fairness audit passes. That still doesn't mean the system is <em>safe</em> to run in production.&quot;</p>
+<hr>
+<h2>5:30–9:00 — Safety and Robustness</h2>
+<p><em>Strong engineering practices and adversarial testing to avoid unintended, unreliable, or harmful results.</em></p>
+<blockquote>
+<p>&quot;Suppose CCB adds a chatbot so Maria can ask about her rejection directly. Two new failure modes show up immediately.</p>
+<p>First: <strong>confident fabrication.</strong> If that chatbot answers using retrieval over CCB's policy documents, it can blend the retrieved text with its own pre-trained knowledge and state something false, fluently. 'This loan program covers businesses of any age' — when the actual policy says 'excluding businesses under one year old.' That kind of omission looks exactly like a correct answer. The fix is grounding: force every claim back to an exact sentence in the source document, and reject anything that can't be traced.</p>
+<p>Second: <strong>prompt injection</strong> — the SQL injection of the AI era. If Maria pastes something crafted into the chat box, she might get the bot to ignore its instructions and reveal internal approval thresholds, or worse, another customer's information. This works because LLMs treat instructions and user input as one undifferentiated stream of text. You defend against it with filtering <em>outside</em> the model, not by hoping the model refuses on its own.</p>
+<p>Robustness means this isn't a one-time test before launch — it's continuous adversarial testing, because new attack patterns get published every week.&quot;</p>
+</blockquote>
+<p><strong>Transition:</strong> &quot;All of this runs on Maria's data. That data is its own liability.&quot;</p>
+<hr>
+<h2>9:00–12:30 — Privacy and Security</h2>
+<p><em>Protecting personal data, adhering to regulations, and privacy-by-design.</em></p>
+<blockquote>
+<p>&quot;Raw customer data isn't an asset sitting in a warehouse — it's closer to toxic waste. Valuable when refined, hazardous in its raw state. One leaked email address in a training set can trigger regulatory fines up to 4% of global revenue, or enable a model-inversion attack that reconstructs training examples from the model itself.</p>
+<p>Say CCB pipes loan applications through a third-party LLM API to draft rejection letters. If Maria's account number goes into that prompt, that data has left the building. The fix is a privacy vault: tokenize PII before it leaves your system, send only the token to the vendor, restore the real value only inside your own trust boundary.</p>
+<p>And here's the sharper problem: if Maria closes her account and invokes her right to erasure, deleting her row from a database is easy — but her data already shaped the <em>weights</em> of a trained model. You can't surgically remove one person's influence from a neural network after the fact without a deliberate architecture for it — techniques like sharded, isolated training exist specifically so that deleting one person's data means retraining one shard, not the whole model.&quot;</p>
+</blockquote>
+<p><strong>Transition:</strong> &quot;Say the fairness, safety, and privacy checks all pass. Can anyone actually explain what happened?&quot;</p>
+<hr>
+<h2>12:30–16:00 — Interpretability and Explainability</h2>
+<p><em>Helping users and developers understand how a model produced a specific prediction.</em></p>
+<blockquote>
+<p>&quot;This is where attribution tools like SHAP come in — they trace a prediction back to specific input features. For Maria: 'debt-to-income ratio contributed −0.4, business age contributed −0.2.' That's a real answer, not a shrug.</p>
+<p>But here's the twist with today's LLM-based systems: if you <em>ask</em> a language model why it made a decision, it will happily generate a fluent, confident explanation that may have nothing to do with what actually drove the output. This is post-hoc rationalization — research shows models will confidently justify an answer using reasoning that isn't the true cause. An LLM is a very convincing liar, not out of malice, but because generating a plausible-sounding reason and generating the <em>true</em> reason are different tasks, and nothing forces them to match.</p>
+<p>So 'the model gave an explanation' is not the same as 'the model gave the <em>true</em> explanation.' You need to probe the actual internal reasoning path, not just trust the narrated one.&quot;</p>
+</blockquote>
+<p><strong>Transition:</strong> &quot;So who's actually responsible when one of these checks fails — and who signs off before the decision goes out the door?&quot;</p>
+<hr>
+<h2>16:00–19:30 — Accountability and Governance</h2>
+<p><em>Diverse review bodies, risk assessments, and human oversight, so teams answer to people.</em></p>
+<blockquote>
+<p>&quot;An AI system can search records and draft an explanation all day, autonomously, at basically zero risk. But the moment it takes an irreversible, high-stakes action — finalizing a rejection, issuing a refund, sending a legally binding notice — that's a different category of action, and it needs a human checkpoint before it executes. The reason is blunt: an LLM cannot be held legally liable. CCB can.</p>
+<p>This is also where documentation stops being optional. Every model needs a living record of what it is, what it's for, and what it explicitly is <em>not</em> for — think of it as a nutrition label. The trap most teams fall into is writing that record once, as a PDF, at launch, and then retraining the model three times while the PDF never updates. Under regulations like the EU AI Act, that's not just embarrassing — for high-risk systems like credit scoring, it's a legal violation, with fines up to €35 million or 7% of global turnover.</p>
+<p>The fix: generate that documentation automatically, every time the model retrains, and — this is the part people miss — let it <strong>block deployment</strong> if a required field is missing or a metric falls below threshold. Governance stops being a policy on a wiki page and becomes a gate the code actually enforces.&quot;</p>
+</blockquote>
+<p><strong>Transition:</strong> &quot;That idea — turning a written policy into something the system actually enforces — is exactly the problem underneath everything we've talked about today. Let me show you what that looks like when you generalize it beyond just model documentation, to <em>any</em> rule about how data can be used.&quot;</p>
+<hr>
+<h2>19:30–27:00 — Responsible Data Practices <em>(→ live demo)</em></h2>
+<p><em>Managing the full spectrum of ML datasets — from ethical collection to tooling and curation.</em></p>
+<blockquote>
+<p>&quot;Here's the problem in its most general form: CCB has dozens of teams — underwriting, marketing, fraud, collections — all wanting to use customer data, including Maria's, for different purposes. A compliance officer can write a policy in plain English: <em>'Marketing may use aggregated, anonymized loan data for trend analysis. Individual applicant records may never be used for advertising or profiling.'</em></p>
+<p>The traditional path from there is: email that sentence around, put it in a PDF, and hope every engineer remembers it correctly six months from now when they're building a new pipeline. That's not governance — that's a rumor.</p>
+<p>So we built a <strong>Policy Studio</strong>. Here's the pipeline, live.&quot;</p>
+</blockquote>
+<p><strong>[DEMO CUE — walk through the actual Policy Studio, narrating each stage as it happens]</strong></p>
+<ol>
+<li><strong>Natural language in.</strong> &quot;The compliance officer types the sentence above. An AI agent parses intent — who's the assignee, what's the action, what's the constraint, what's explicitly prohibited.&quot;</li>
+<li><strong>ODRL out.</strong> &quot;That intent gets compiled into ODRL — the Open Digital Rights Language, a W3C standard for expressing permissions, prohibitions, and duties over data or content. This is now a structured, machine-readable policy object, not a sentence someone might misremember.&quot;</li>
+<li><strong>SHACL validates it.</strong> &quot;Before we trust that policy, SHACL checks its shape — does it name an assigner, a target dataset, a purpose, an expiry? This is the exact same idea as the model card gate from a minute ago: incomplete governance doesn't ship. If the policy is missing a required field, it's rejected here, not discovered during an actual audit.&quot;</li>
+<li><strong>Compiled to CEDAR / OPA.</strong> &quot;Once validated, the ODRL policy compiles down into an executable authorization policy — CEDAR or Rego, depending on the stack. This is no longer a document. It's runtime logic.&quot;</li>
+<li><strong>The decision engine, live.</strong> &quot;Now watch two requests hit the same policy. Marketing's agent asks for <em>aggregated</em> loan trend data, tagged <code>purpose:trend-analysis</code> — <strong>PERMIT</strong>. The same agent then asks for Maria's <em>individual</em> record for an ad-targeting campaign, tagged <code>purpose:advertising</code> — <strong>DENY</strong>, and the reason is legible: it violates the prohibition clause, not a black-box refusal.&quot;</li>
+</ol>
+<blockquote>
+<p>&quot;Notice what just happened: a compliance officer who has never written a line of code produced a rule that a downstream engineer <em>cannot accidentally violate</em>, because it's enforced at request time, against the actual dataset tags, not hoped for at policy-review time. That's Responsible Data Practices stopped being a PDF and became infrastructure.&quot;</p>
+</blockquote>
+<p><strong>Transition:</strong> &quot;One last principle, and it's less a step in the pipeline than the discipline that keeps everything else honest.&quot;</p>
+<hr>
+<h2>27:00–29:00 — Scientific Excellence</h2>
+<p><em>Rigorous standards and peer-reviewed research to advance safe AI capabilities responsibly.</em></p>
+<blockquote>
+<p>&quot;Everything I've shown you today — the fairness audit, the grounding check, the privacy vault, the SHAP explanation, the policy engine — none of it is a one-time certification. Systems need continuous red-teaming: an ongoing 'immune system' that tests for new failure modes <em>after</em> launch, because the attack surface for natural language evolves weekly. Passing an audit on launch day tells you nothing about next Tuesday.</p>
+<p>Scientific excellence, in this context, just means treating your own safety claims with the same skepticism you'd bring to someone else's research — measure it, publish the methodology internally, and let people try to break it.&quot;</p>
+</blockquote>
+<hr>
+<h2>29:00–30:00 — Close</h2>
+<blockquote>
+<p>&quot;Maria never sees any of this. She just sees whether her loan gets approved, and whether someone can tell her why. Fairness, safety, privacy, explainability, accountability, responsible data practices, scientific rigor — none of these are abstractions. They're the plumbing that turns 'the algorithm decided' into an actual answer. Today you saw one piece of that plumbing running live. Build the rest the same way.&quot;</p>
+</blockquote>
+<hr>
+<h2>Facilitator notes</h2>
+<ul>
+<li><strong>Total runtime:</strong> ~30 min as written; the demo block (19:30–27:00) is the longest single section on purpose — protect it if you're running short elsewhere.</li>
+<li><strong>CCB and Maria Chen stay constant throughout</strong> — the demo at the end is literally about governing Maria's own data, which is what makes the ending land instead of feeling like a topic-switch.</li>
+<li>The two SHACL/model-card &quot;gate&quot; moments (Accountability section → Data Practices section) are a deliberate callback — call it out explicitly if your audience seems to be tracking well (&quot;notice this is the same pattern as a minute ago&quot;).</li>
+<li>If asked to compress to 20 minutes: cut Safety and Robustness down to just the grounding point, and shorten the Scientific Excellence section to one sentence before the close.</li>
+</ul>
+
+</body></html>
