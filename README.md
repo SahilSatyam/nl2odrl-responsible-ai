@@ -28,6 +28,34 @@ odrl-host run --scenario odrl_convert_timeout --seed 42
 Python 3.11+ is required for the converter (`odrl_agent`); the envelope
 (`rai_card`, auditor API, gates) still supports Python 3.9+.
 
+## LLM API key (only needed for live model calls)
+
+Everything above the converter line — envelope, card/bundle/gate,
+auditor API, full test suite, `odrl-host seed`, `check`, `diagnose`,
+`serve` — works **with no key**. Only live model calls need one:
+
+| Needs `LLAMA_API_KEY` + `LLAMA_BASE_URL` | Works offline, no key |
+|---|---|
+| `odrl-host run` (live ReAct conversion) | `odrl-host seed` (fixture-backed runs into `agentcrash.db`) |
+| `odrl-host optimize-prompts` (live DSPy probe; refuses without a key) | `odrl-host check` / `diagnose` (fixture reference patch; `diagnose` only tries the live patch path when `LLAMA_BASE_URL` is set) |
+| Live metrics (`scripts/metrics.py`) | `agentcrash check --plugin odrl_agent.verifiers`, PII scan, full pytest suite |
+
+Set both before any live call (any OpenAI-compatible
+`{LLAMA_BASE_URL}/chat/completions` endpoint works; default model is
+`muse-spark-1.3`):
+
+```bash
+export LLAMA_API_KEY=<your-key>      # header only, never logged or traced
+export LLAMA_BASE_URL=<your-endpoint>/v1
+# optional tuning (defaults shown):
+# export LLAMA_TIMEOUT_S=60
+# export LLAMA_MAX_TOKENS=8000
+```
+
+Without a key, `odrl-host run` fails closed with `E_MODEL_API`
+(exit 5) telling you exactly which variables are missing — that is
+intentional, not an install problem.
+
 The ethical red line is **over-permission**: the conversion grants a right the source sentence did not. Fluency is not a control.
 
 Speaker notes: [`presentation_flow.md`](presentation_flow.md). Argument sources: [Day 056 (dynamic model card)](https://veritas-one-theta.vercel.app/day/056), [Day 060 (audit defense / compliance bundle)](https://veritas-one-theta.vercel.app/day/060).
@@ -307,3 +335,5 @@ If documentation cannot generate, the release does not exist. That is the Day 05
 | API looks at the wrong files | `export RAI_ROOT=/absolute/path/to/dummy-project` |
 | Port in use | `AUDIT_API_PORT=8081 python3 serve_audit.py` |
 | Recertification / review failures | Frozen “today” in tests is 2026-09-19; live runs use UTC today vs `recertification_due` |
+| `odrl-host run` → `E_MODEL_API` (exit 5) | Live conversion needs a key: `export LLAMA_API_KEY=… LLAMA_BASE_URL=…/v1` (see LLM API key section). Offline paths need no key |
+| `odrl-host optimize-prompts` refuses live probe | Same fix: it requires both `LLAMA_API_KEY` and `LLAMA_BASE_URL` |
