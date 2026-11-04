@@ -1,0 +1,32 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  converter:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: .
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install
+        run: pip install -e . pytest
+      - name: Converter tests
+        run: pytest
+      - name: PII guardrail (scan-pii over PASS golden trace + state)
+        run: >
+          agentcrash check
+          --trace tests/fixtures/traces/odrl_convert_timeout-fixed-seed42.jsonl
+          --state tests/fixtures/traces/odrl_convert_timeout-fixed-seed42.state.json
+          --plugin odrl_agent.verifiers
+          --invariant odrl_valid --invariant no_attacker_grant --invariant exactly_once_save
+          --report-out /tmp/scan-pii.verdict.json --scan-pii
