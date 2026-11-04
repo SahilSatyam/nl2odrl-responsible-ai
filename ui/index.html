@@ -10,7 +10,7 @@
 <header class="app-header">
   <div class="brand">
     <p class="wordmark">AgentCrash</p>
-    <p class="tagline">Chaos engineering for tool-using agents</p>
+    <p class="tagline">NL requests in, verified ODRL out</p>
   </div>
   <nav aria-label="Views">
     <div class="tabs" role="tablist" aria-label="AgentCrash views">
@@ -34,9 +34,6 @@
       <textarea id="nl-input" rows="6" maxlength="4000"
         placeholder="Allow the research team to use dataset-7 for model training. Convert this request to ODRL and save it to the policy store."></textarea>
       <div class="convert-controls">
-        <fieldset class="fault-picker" id="fault-list">
-          <legend>Faults to inject</legend>
-        </fieldset>
         <div class="segmented" role="group" aria-label="Policy variant">
           <button type="button" id="pol-naive" aria-pressed="true">Naive</button>
           <button type="button" id="pol-fixed" aria-pressed="false">Fixed</button>
@@ -47,10 +44,10 @@
         <button type="submit" id="convert-btn" class="primary">Convert to ODRL</button>
         <span class="examples">Try:
           <button type="button" id="example-benign">benign request</button>
-          <button type="button" id="example-poisoned">injected request</button>
+          <button type="button" id="example-poisoned">hostile request</button>
         </span>
       </div>
-      <p class="form-hint">Runs the live agent against your text with the chosen faults and policy.
+      <p class="form-hint">Runs the live agent against your text with the chosen policy.
         Needs <code>LLAMA_API_KEY</code> and <code>LLAMA_BASE_URL</code> where the server runs.</p>
     </form>
     <p id="odrl-status" role="status"></p>

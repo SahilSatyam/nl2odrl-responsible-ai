@@ -11,6 +11,8 @@ __pycache__/
 rai-gate.json
 MODEL_CARD.md
 COMPLIANCE_BUNDLE.md
+/traces/
+/reports/
 dist/
 build/
 .DS_Store

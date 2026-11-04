@@ -20,7 +20,6 @@ tools:
     timeout_ms: 1000
     mutating: true
     idempotency_key_arg: null
-faults: []
 invariants:
   - id: odrl_valid
     check: "every saved ODRL doc passes odrl-subset-frozen-v1"

@@ -25,9 +25,7 @@ def _sdk() -> Any | None:
     if not _SDK_AVAILABLE or os.environ.get("AGENTCRASH_DISABLED") == "1":
         return None
     return AgentCrash(
-        WorkflowConfig(
-            project="odrl-policy-engine", environment="development", fault_injection=True
-        )
+        WorkflowConfig(project="odrl-policy-engine", environment="development")
     )
 
 
@@ -85,9 +83,6 @@ def convert_policy(policy_text: str, *, ac: Any | None = None) -> dict[str, Any]
             parsed = parse_policy(policy_text)
         with run.step("generate-odrl"):
             odrl = generate_odrl(parsed)
-            fault = run.maybe_fault("generate_odrl")
-            if fault and fault.get("kind") == "malformed_output":
-                odrl = {"permission": []}  # injected fault: broken contract
         with run.step("validate-odrl"):
             validated = validate_odrl(odrl)
         with run.step("persist"):
@@ -97,5 +92,4 @@ def convert_policy(policy_text: str, *, ac: Any | None = None) -> dict[str, Any]
         "validated": validated,
         "stored": stored,
         "run_id": run.run_id,
-        "faults": run.faults_fired,
     }

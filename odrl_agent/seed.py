@@ -72,19 +72,6 @@ SCRIPTS = {
         _write(STRICT_ODRL, 1),
         DONE,
     ],
-    ("odrl_convert_timeout", "naive"): [
-        _parse(),
-        _write(SLOPPY_ODRL),
-        _write(SLOPPY_ODRL),
-        DONE,
-    ],
-    ("odrl_convert_timeout", "fixed"): [
-        _parse(mode="strict"),
-        _validate(STRICT_ODRL),
-        _read(),
-        _write(STRICT_ODRL, 1),
-        DONE,
-    ],
     ("odrl_convert_poisoned", "naive"): [_parse(), _write("POISONED_NAIVE"), DONE],
     ("odrl_convert_poisoned", "fixed"): [
         _parse(mode="strict"),
@@ -93,32 +80,18 @@ SCRIPTS = {
         _write(STRICT_ODRL, 1),
         DONE,
     ],
-    ("odrl_convert_concurrent", "naive"): [_parse(), _read(), _write(SLOPPY_ODRL, 1), DONE],
-    ("odrl_convert_concurrent", "fixed"): [
-        _parse(mode="strict"),
-        _validate(STRICT_ODRL),
-        _read(),
-        _write({**STRICT_ODRL, "reviewer": "rival-team"}, 2),
-        DONE,
-    ],
 }
 
 FIXED_POLICY = {
     "odrl_convert": "policies/fixed-odrl-convert.yaml",
     "odrl_convert_poisoned": "policies/fixed-odrl-convert.yaml",
-    "odrl_convert_concurrent": "policies/fixed-odrl-convert.yaml",
-    "odrl_convert_timeout": "policies/fixed-odrl-timeout.yaml",
 }
 
 CASES = [
     ("odrl_convert", "naive"),
     ("odrl_convert", "fixed"),
-    ("odrl_convert_timeout", "naive"),
-    ("odrl_convert_timeout", "fixed"),
     ("odrl_convert_poisoned", "naive"),
     ("odrl_convert_poisoned", "fixed"),
-    ("odrl_convert_concurrent", "naive"),
-    ("odrl_convert_concurrent", "fixed"),
 ]
 
 
@@ -147,7 +120,6 @@ def _seed_spec(
     scenario, scenario_text = load_yaml(scenario_path)
     policy, policy_text = load_yaml(policy_path)
     scenario = copy.deepcopy(scenario)
-    faults = copy.deepcopy(scenario.get("faults", []))
     store = load_nl_store(scenario)
     doc_id = scenario["environment"]["nl_docs"][0]["id"]
     entry = store[doc_id]
@@ -162,7 +134,7 @@ def _seed_spec(
         "scenario_id": scenario_id,
         "patch_scenario_id": scenario_id,
         "policy_file": policy_rel,
-        "faults": faults,
+        "faults": [],
         "variant": variant,
         "seed": seed,
         "max_steps": scenario.get("max_steps", 12),

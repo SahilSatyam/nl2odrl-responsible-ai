@@ -4,10 +4,10 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 
 A ReAct agent reads natural-language access rules, drafts **W3C ODRL
-2.2**, and saves it **exactly once** — under chaos. Timeout faults,
-poisoned reads, and concurrent writes are injected on purpose; SHACL
-shapes plus custom invariants judge every run against recorded
-evidence. 189 tests green, 1 skipped (live-model only).
+2.2**, and saves it **exactly once**. SHACL shapes plus custom
+invariants judge every run against recorded evidence — sloppy
+conversions and hostile inputs are caught before anything reaches a
+policy store. 182 tests green, 1 skipped (live-model only).
 
 The ethical red line is **over-permission**: the conversion grants a
 right the source sentence did not. Fluency is not a control.
@@ -16,9 +16,9 @@ right the source sentence did not. Fluency is not a control.
 pip install -e .
 export PYTHONPATH=.
 odrl-host seed                                        # offline fixtures, no key
-odrl-host run --scenario odrl_convert_timeout --seed 42   # live model, needs key
+odrl-host run --scenario odrl_convert --seed 42       # live model, needs key
 agentcrash check --trace traces/<run>.jsonl --plugin odrl_agent.verifiers \
-  --invariant exactly_once_save --scan-pii
+  --invariant odrl_valid --scan-pii
 ```
 
 ## How it works
@@ -28,7 +28,6 @@ flowchart LR
     NL[NL access request] --> A[ReAct agent<br/>live model]
     A --> T[parse_policy → validate_odrl → save_odrl]
     T --> O[ODRL 2.2 JSON-LD]
-    F[Fault schedule<br/>timeout poison concurrent] -.-> T
     T --> TR[trace JSONL + state]
     TR --> V[agentcrash check<br/>+ odrl_agent.verifiers]
     V --> VD[verdict PASS or FAIL]
@@ -36,34 +35,33 @@ flowchart LR
 ```
 
 Built on [`agentcrash-core`](https://pypi.org/project/agentcrash-core/)
-(SDK instrumentation, fault injection, deterministic verification,
-control plane). The framework never owns the loop — the agent,
-tools, and persistence are all here in `odrl_agent/`.
+(SDK instrumentation, hash-chained traces, deterministic verification).
+The framework never owns the loop — the agent, tools, and persistence
+are all here in `odrl_agent/`.
 
 ## The flagship failure it catches
 
-Ambiguous save timeout: the write commits server-side but reports
-`TIMEOUT`. The naive policy retries blindly and double-saves; the
-fixed policy re-reads the record version first and only rewrites when
-the save is actually missing.
+Sloppy conversion: the agent skips validation and saves structurally
+invalid ODRL — a permission with no target. The strict policy converts
+in a strict mode, gates the save on `validate_odrl`, and re-reads the
+record version first, so every save carries freshness proof.
 
 ```mermaid
 sequenceDiagram
     participant A as ReAct agent
     participant T as Tools
-    participant F as Fault injector
     participant L as Ledger + trace
     participant V as Verifiers
-    A->>T: save_odrl(doc)
-    F-->>T: timeout_after_commit: committed, reports TIMEOUT
-    T-->>A: TIMEOUT
+    A->>T: parse_policy(doc, mode)
+    T-->>A: parsed ODRL draft
     alt naive policy (default)
-        A->>T: save_odrl(doc) again, blind retry
-        T->>L: second commit
-        V-->>A: exactly_once_save FAIL
-    else fixed policy (reconcile-first)
-        A->>T: re-read version → already saved
-        A->>L: no rewrite
+        A->>T: save_odrl(doc) without validation
+        T->>L: single invalid commit
+        V-->>A: odrl_valid FAIL + fresh_write_only FAIL
+    else fixed policy (strict + reconcile-first)
+        A->>T: validate_odrl(doc) → PASS
+        A->>T: re-read version, save with fresh version
+        T->>L: single valid commit
         V-->>A: odrl_valid + no_attacker_grant + exactly_once_save PASS
     end
 ```
@@ -89,8 +87,7 @@ suite work **with no key**. Only live model calls need one:
 | Needs `LLAMA_API_KEY` + `LLAMA_BASE_URL` | Works offline, no key |
 |---|---|
 | `odrl-host run` (live ReAct conversion) | `odrl-host seed`, `check` via `agentcrash`, `diagnose`, `serve` |
-| `odrl-host optimize-prompts` (live DSPy probe; refuses without a key) | `agentcrash check --plugin odrl_agent.verifiers`, PII scan, full pytest |
-| Live metrics (`scripts/metrics.py`) | Frozen golden traces in `tests/fixtures/` |
+| `odrl-host optimize-prompts` (live DSPy probe; refuses without a key) | `agentcrash check --plugin odrl_agent.verifiers`, PII scan, full pytest, frozen golden traces |
 
 Any OpenAI-compatible `{LLAMA_BASE_URL}/chat/completions` endpoint
 works (default model is `muse-spark-1.3`):
@@ -111,7 +108,7 @@ problem.
 
 | Command | What it does |
 |---|---|
-| `odrl-host run --scenario S --seed N [--model M] [--policy P] [--dry-run] [--json]` | Execute the live agent against a chaos scenario; writes trace + state |
+| `odrl-host run --scenario S --seed N [--model M] [--policy P] [--dry-run] [--json]` | Execute the live agent against a scenario; writes trace + state |
 | `odrl-host diagnose --trace T --output O [--model M] [--scenario S] [--policy P]` | Propose a policy patch for a failing trace (read-only; fixture-backed unless `LLAMA_BASE_URL` is set) |
 | `odrl-host replay --trace T [--policy P] [--patch P] [--regression R]` | Re-run a trace scenario under a patched policy + regression check |
 | `odrl-host seed` | Replay scripted fixture runs into `agentcrash.db` (offline) |
@@ -121,18 +118,16 @@ problem.
 
 ## Scenarios and policies
 
-| Scenario | Fault | Naive behavior | Fixed policy |
-|---|---|---|---|
-| `odrl_convert` | none | converts, sometimes sloppily | `fixed-odrl-convert`: strict validation + freshness proof |
-| `odrl_convert_timeout` | `timeout_after_commit` on `save_odrl` | blind retry → double save | `fixed-odrl-timeout`: reconcile-first, check-then-act |
-| `odrl_convert_poisoned` | poisoned read | grants attacker rights | strict gate + `no_attacker_grant` |
-| `odrl_convert_concurrent` | concurrent writes | lost update | version check + `FreshWriteOnly` / `NoLostUpdate` |
+| Scenario | Naive behavior | Fixed policy |
+|---|---|---|
+| `odrl_convert` | converts sloppily: unvalidated, version-less save | `fixed-odrl-convert`: strict validation gate + freshness proof |
+| `odrl_convert_poisoned` | hostile NL becomes an attacker grant | strict gate drops attacker sentences + `no_attacker_grant` |
 
 ## Test
 
 ```bash
 export PYTHONPATH=.
-python3 -m pytest        # 189 passed, 1 skipped (live-model only)
+python3 -m pytest        # 182 passed, 1 skipped (live-model only)
 ```
 
 CI runs the same suite on Python 3.11–3.13 plus the PII guardrail
@@ -152,12 +147,11 @@ CI runs the same suite on Python 3.11–3.13 plus the PII guardrail
 | Path | Role |
 |---|---|
 | `odrl_agent/` | Converter: NL parsing, ODRL 2.2 generation, scenario runner, ODRL invariants, `odrl-host` CLI |
-| `scenarios/` | `odrl_convert*` run scenarios (naive vs fixed policies, faults) |
-| `policies/` | Default + fixed converter policies |
+| `scenarios/` | `odrl_convert` + `odrl_convert_poisoned` run scenarios |
+| `policies/` | Default (naive) + fixed (strict) converter policies |
 | `schemas/` | Trace, scenario, env-state, ODRL-subset SHACL shapes |
 | `prompts/` | DSPy probe instruction pack |
-| `scripts/metrics.py` | Live-metrics harness (needs key) |
 | `tests/` + `tests/fixtures/` | Converter tests + frozen golden traces |
-| `examples/` | Second-app sample (`odrl_host`), end-to-end Lab demo |
+| `examples/odrl_host/` | Reference host: optional-SDK NL→ODRL app |
 | `ui/` | ODRL/Policy Studio assets served by `odrl-host serve` |
 | `.github/workflows/ci.yml` | Converter tests + PII guardrail on 3.11–3.13 |

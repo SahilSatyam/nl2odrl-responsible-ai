@@ -28,7 +28,6 @@ REPO = Path(__file__).resolve().parent.parent
 SCENARIO_DIR = REPO / "scenarios"
 NAIVE_POLICY = REPO / "policies" / "default.yaml"
 FIXED_CONVERT_POLICY = REPO / "policies" / "fixed-odrl-convert.yaml"
-FIXED_TIMEOUT_POLICY = REPO / "policies" / "fixed-odrl-timeout.yaml"
 FIXTURE = REPO / "tests" / "fixtures" / "odrl_nl.yaml"
 ENVELOPE = json.loads((REPO / "schemas" / "trace-event.json").read_text(encoding="utf-8"))
 SEED_MATRIX = [1, 42]
@@ -102,26 +101,16 @@ SCRIPTS = {
         _write(STRICT_ODRL, 1),
         DONE,
     ],
-    ("odrl_convert_concurrent", "naive"): [_parse(), _read(), _write(SLOPPY_ODRL, 1), DONE],
-    ("odrl_convert_concurrent", "fixed"): [
-        _parse(mode="strict"),
-        _validate(STRICT_ODRL),
-        _read(),
-        _write({**STRICT_ODRL, "reviewer": "rival-team"}, 2),
-        DONE,
-    ],
 }
 
 FIXED_POLICY = {
     "odrl_convert": FIXED_CONVERT_POLICY,
     "odrl_convert_poisoned": FIXED_CONVERT_POLICY,
-    "odrl_convert_concurrent": FIXED_CONVERT_POLICY,
 }
 
 EXPECTED_FAIL = {
     ("odrl_convert", "naive"): {"odrl_valid", "fresh_write_only"},
     ("odrl_convert_poisoned", "naive"): {"no_attacker_grant", "fresh_write_only"},
-    ("odrl_convert_concurrent", "naive"): {"fresh_write_only", "no_lost_update"},
 }
 
 
@@ -242,31 +231,30 @@ def test_poisoned_pass_oracle_fixed(tmp_path, monkeypatch) -> None:
     assert outcome["verdict"] == "PASS"
 
 
-def test_concurrent_fail_oracle_naive(tmp_path, monkeypatch) -> None:
-    _, snapshot, _, outcome = run_case(
-        "odrl_convert_concurrent", "naive", 42, tmp_path, "r-naive", monkeypatch
-    )
-    assert outcome["verdict"] == "FAIL"
-    by_id = {r["id"]: r for r in outcome["results"]}
-    assert by_id["fresh_write_only"]["passed"] is False
-    assert by_id["no_lost_update"]["passed"] is False
-    final = next(r for r in snapshot["record_versions"] if r["record"] == "odrl-policy-1")
-    assert "reviewer" not in final["value"]
+def test_no_injector_events_in_fault_free_runs(tmp_path, monkeypatch) -> None:
+    """Fault removal regression: fresh runs record no injector phases."""
+    for scenario_id, variant in (
+        ("odrl_convert", "naive"),
+        ("odrl_convert", "fixed"),
+        ("odrl_convert_poisoned", "naive"),
+        ("odrl_convert_poisoned", "fixed"),
+    ):
+        events, _, _, _ = run_case(scenario_id, variant, 7, tmp_path, f"ni-{variant}", monkeypatch)
+        assert all(e.get("injector_event") is None for e in events), scenario_id
 
 
-def test_concurrent_pass_oracle_fixed(tmp_path, monkeypatch) -> None:
-    _, snapshot, _, outcome = run_case(
-        "odrl_convert_concurrent", "fixed", 42, tmp_path, "r-fixed", monkeypatch
-    )
-    assert outcome["verdict"] == "PASS"
-    final = next(r for r in snapshot["record_versions"] if r["record"] == "odrl-policy-1")
-    assert final["value"].get("reviewer") == "rival-team"
-    assert final["version"] == 3
+def test_scenarios_declare_no_faults() -> None:
+    """Every scenario file must be fault-free (no faults key)."""
+    scenarios = sorted((REPO / "scenarios").glob("*/scenario.yaml"))
+    assert scenarios, "no scenario files found"
+    for path in scenarios:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        assert "faults" not in data, path
 
 
 def test_seed_matrix_determinism(tmp_path, monkeypatch) -> None:
     monkeypatch.chdir(REPO)
-    for scenario_id in ("odrl_convert", "odrl_convert_poisoned", "odrl_convert_concurrent"):
+    for scenario_id in ("odrl_convert", "odrl_convert_poisoned"):
         scenario_file = SCENARIO_DIR / scenario_id / "scenario.yaml"
         scenario, scenario_text = load_yaml(scenario_file)
         for variant in ("naive", "fixed"):
@@ -349,8 +337,6 @@ def test_nl_fixture_single_source() -> None:
     for scenario_id in (
         "odrl_convert",
         "odrl_convert_poisoned",
-        "odrl_convert_concurrent",
-        "odrl_convert_timeout",
     ):
         scenario_file = SCENARIO_DIR / scenario_id / "scenario.yaml"
         scenario_text = scenario_file.read_text(encoding="utf-8")

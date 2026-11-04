@@ -25,8 +25,8 @@ jobs:
       - name: PII guardrail (scan-pii over PASS golden trace + state)
         run: >
           agentcrash check
-          --trace tests/fixtures/traces/odrl_convert_timeout-fixed-seed42.jsonl
-          --state tests/fixtures/traces/odrl_convert_timeout-fixed-seed42.state.json
+          --trace tests/fixtures/traces/odrl_convert-fixed-seed42.jsonl
+          --state tests/fixtures/traces/odrl_convert-fixed-seed42.state.json
           --plugin odrl_agent.verifiers
           --invariant odrl_valid --invariant no_attacker_grant --invariant exactly_once_save
           --report-out /tmp/scan-pii.verdict.json --scan-pii

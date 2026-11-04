@@ -30,7 +30,6 @@ from agentcrash.cli import (
     resolve_scenario,
     validate_run_inputs,
 )
-from agentcrash.injector import UnknownFaultError
 from agentcrash.policy import (
     PolicyError,
     PolicyRejectedError,
@@ -132,7 +131,6 @@ def cmd_run(argv: list[str]) -> int:
             "model": args.model,
             "adapter": "live (LLAMA_BASE_URL)",
             "tools": [t.get("name") for t in scenario.get("tools", [])],
-            "faults": scenario.get("faults", []),
             "policy": str(policy_path),
             "instruction_pack": args.instruction_pack,
             "trace_out": trace_out,
@@ -143,7 +141,6 @@ def cmd_run(argv: list[str]) -> int:
             print(f"run_id={run_id} scenario={plan['scenario']} seed={seed} steps={max_steps}")
             print(f"task: {plan['task']}")
             print(f"tools: {', '.join(str(t) for t in plan['tools'])}")
-            print(f"faults: {plan['faults']}")
             print(f"policy: {plan['policy']} model: {args.model} (live via LLAMA_BASE_URL)")
             print(f"trace: {trace_out} (dry-run: nothing written)")
         return EXIT_OK
@@ -163,8 +160,6 @@ def cmd_run(argv: list[str]) -> int:
             model=args.model,
             convert_instruction=pack_instruction,
         )
-    except UnknownFaultError as exc:
-        return fail("E_SCHEMA", str(exc), EXIT_USAGE)
     except ModelNotConfiguredError as exc:
         return fail("E_MODEL_API", str(exc), EXIT_RUNABORTED)
     except (ValueError, OSError) as exc:
@@ -535,12 +530,6 @@ def cmd_diagnose(argv: list[str]) -> int:
         print(
             f"proposed: {rule.get('rule')}/{rule.get('tool')} -> {rule.get('action')}"
             "(strict parse of untrusted NL, save gated on validate_odrl)"
-        )
-    elif scenario_id == "odrl_convert_concurrent":
-        print("diagnosis: blind save with a stale version overwrote the rival update")
-        print(
-            f"proposed: {rule.get('rule')}/{rule.get('tool')} -> {rule.get('action')}"
-            "(re-read save_odrl by version before mutating saves)"
         )
     else:
         print(

@@ -2,10 +2,8 @@
 
 The agent (``muse-spark-1.3`` by default) converts an NL access request
 to ODRL 2.2 and saves it once (``parse_policy`` → ``validate_odrl`` →
-``save_odrl``). Under the naive policy the agent converts sloppily and
-retries blindly after an ambiguous save timeout — the double-save bug
-the ODRL verifiers catch. Under a fixed policy it converts strictly,
-validates, and reconciles first (re-read, rewrite only when missing).
+``save_odrl``). Every tool call is recorded with a virtual timestamp;
+deterministic verifiers judge the finished trace afterwards.
 ``LlamaAdapter`` POSTs to an OpenAI-compatible
 ``{LLAMA_BASE_URL}/chat/completions`` with the key from
 ``LLAMA_API_KEY`` (header only, never logged or traced); transport or
@@ -25,7 +23,6 @@ from typing import Any
 
 import yaml
 from agentcrash.clock import VirtualClock
-from agentcrash.injector import FaultSchedule
 from agentcrash.ledger import Ledger
 from agentcrash.tracer import TraceWriter, compute_run_id
 
@@ -301,7 +298,7 @@ class LlamaAdapter:
         if not api_key or not base_url:
             raise ModelNotConfiguredError(
                 f"live model {self._model!r} requires {LLAMA_KEY_ENV} and "
-                f"{LLAMA_URL_ENV}; run the fixture-backed stub/fake offline instead"
+                f"{LLAMA_URL_ENV}; seed, check, diagnose and serve work offline"
             )
         offered = list(tools)
         body = json.dumps(
@@ -503,14 +500,12 @@ def run_react_loop(
     model: str = DEFAULT_MODEL,
     convert_instruction: str | None = None,
 ) -> dict[str, Any]:
-    """Run the configured agent against the injector; write trace + state snapshot.
+    """Run the configured agent; write trace + state snapshot.
 
     Returns a summary dict (run_id, scenario, steps, status, charges,
-    ledger_hash, trace_path, state_path). Raises UnknownFaultError before
-    creating any file when the fault program is unusable.
+    ledger_hash, trace_path, state_path).
     """
     rng = random.Random(seed)
-    schedule = FaultSchedule.from_scenario(scenario, rng)
     clock = VirtualClock()
     ledger = Ledger()
     env = scenario.get("environment", {}) or {}
@@ -569,7 +564,6 @@ def run_react_loop(
         model_calls = 0
         usage_total = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
         status = "completed"
-        call_counts: dict[tuple[str, str | None], int] = {}
         ok_counts: dict[str, int] = {}
         while True:
             step += 1
@@ -604,75 +598,13 @@ def run_react_loop(
                 ts_virtual=clock.now(),
                 detail=call_detail,
             )
-            op = args.get("op") if isinstance(args.get("op"), str) else None
-            occurrence = call_counts.get((tool, op), 0) + 1
-            call_counts[(tool, op)] = occurrence
-            fault = schedule.fault_for_call(tool, op, occurrence)
-            if fault is None:
-                fault = schedule.fault_for(step, tool)
-            injector_event: dict[str, Any] | None = None
-            rival = schedule.concurrent_for_call(tool, op, occurrence)
-            if rival is None:
-                rival = schedule.concurrent_for(step, tool)
-            if rival is not None:
-                params = rival.get("params", {}) or {}
-                updates = dict(params.get("updates", {}) or {})
-                applied = ledger.kv_apply_concurrent(str(params["key"]), updates)
-                injector_event = {
-                    "fault": "concurrent_update",
-                    "target_tool": tool,
-                    "target_step": step,
-                    "record": str(params["key"]),
-                    "updates": updates,
-                    "version_before": applied["version_before"],
-                    "version_after": applied["version_after"],
-                    "committed": True,
-                }
-            if fault is not None and fault["kind"] == "timeout_before_commit":
-                simulated = int((fault.get("params", {}) or {}).get("simulated_latency_ms", 0))
-                clock.sleep(simulated)
-                result = {
-                    "outcome": "timeout",
-                    "latency_ms": simulated,
-                    "error": None,
-                    "data": {},
-                }
-                injector_event = {
-                    "fault": fault["kind"],
-                    "target_tool": tool,
-                    "target_step": step,
-                    "simulated_latency_ms": simulated,
-                    "committed": False,
-                }
-            else:
-                result = registry.call(tool, args, clock)
-                if (
-                    fault is not None
-                    and result["outcome"] != "error"
-                    and fault["kind"] == "timeout_after_commit"
-                ):
-                    simulated = int((fault.get("params", {}) or {}).get("simulated_latency_ms", 0))
-                    clock.sleep(max(0, simulated - int(result["latency_ms"])))
-                    result = {
-                        "outcome": "timeout",
-                        "latency_ms": simulated,
-                        "error": None,
-                        "data": result["data"],
-                    }
-                    injector_event = {
-                        "fault": fault["kind"],
-                        "target_tool": tool,
-                        "target_step": step,
-                        "simulated_latency_ms": simulated,
-                        "committed": True,
-                    }
+            result = registry.call(tool, args, clock)
             writer.write(
                 step=step,
                 tool=tool,
                 args=args,
                 outcome=str(result["outcome"]),
                 latency=int(result["latency_ms"]),
-                injector_event=injector_event,
                 ts_virtual=clock.now(),
                 detail={
                     "phase": "tool_result",
@@ -685,14 +617,6 @@ def run_react_loop(
                 saves += 1
             if result["outcome"] != "error":
                 ok_counts[tool] = ok_counts.get(tool, 0) + 1
-            if injector_event is not None:
-                writer.write(
-                    step=step,
-                    outcome="info",
-                    injector_event=injector_event,
-                    ts_virtual=clock.now(),
-                    detail={"phase": "injector_event"},
-                )
             messages.append({"role": "assistant", "content": json.dumps(action)})
             messages.append(
                 {

@@ -2,8 +2,7 @@
 
 Endpoints (same server that serves ``ui/`` statically):
 
-- ``GET /api/faults`` lists the generalized fault catalog.
-- ``POST /api/convert`` with JSON ``{nl_text, faults|fault,
+- ``POST /api/convert`` with JSON ``{nl_text,
   policy_variant, seed, max_steps}`` starts a live agent run in a
   background thread and returns ``{run_key, run_id, status}``.
 - ``GET /api/runs`` lists recorded runs (filters: scenario, verdict,
@@ -30,12 +29,6 @@ from typing import Any
 
 import yaml
 from agentcrash import db as db_module
-from agentcrash.injector import (
-    FAULT_CATALOG,
-    UnknownFaultError,
-    catalog_entry,
-    validate_fault_entry,
-)
 from agentcrash.policy import (
     PolicyRejectedError,
     reference_patch_for,
@@ -69,20 +62,9 @@ INLINE_GUIDANCE = (
 )
 
 BASE_SCENARIO = "odrl_convert"
-CONCURRENT_SCENARIO = "odrl_convert_concurrent"
 
 NAIVE_POLICY = "policies/default.yaml"
-FIXED_POLICIES = {
-    "odrl_convert": "policies/fixed-odrl-convert.yaml",
-    "odrl_convert_timeout": "policies/fixed-odrl-timeout.yaml",
-    "odrl_convert_concurrent": "policies/fixed-odrl-convert.yaml",
-}
-
-PRESETS = {
-    "none": [],
-    "timeout": [{"kind": "timeout_after_commit"}],
-    "concurrent": [{"kind": "concurrent_update"}],
-}
+FIXED_POLICY = "policies/fixed-odrl-convert.yaml"
 
 MAX_NL_CHARS = 4000
 MAX_ACTIVE_RUNS = 2
@@ -107,46 +89,8 @@ def load_yaml(path: Path) -> tuple[dict[str, Any], str]:
     return yaml.safe_load(text) or {}, text
 
 
-def fault_catalog() -> list[dict[str, Any]]:
-    """Return the generalized fault catalog for the UI picker."""
-    return [
-        {
-            "kind": entry["kind"],
-            "description": entry["description"],
-            "effect": entry["effect"],
-            "inline_supported": entry["inline_supported"],
-            "params_schema": entry["params_schema"],
-            "default_params": entry["default_params"],
-        }
-        for entry in FAULT_CATALOG
-    ]
-
-
-def normalize_faults(raw: Any) -> list[dict[str, Any]]:
-    """Validate user-supplied faults against the catalog (generalized)."""
-    if raw is None:
-        raw = []
-    if not isinstance(raw, list):
-        raise ConvertError("faults must be a list of {kind, params}")
-    normalized = []
-    for item in raw:
-        if not isinstance(item, dict):
-            raise ConvertError("each fault must be an object with kind/params")
-        try:
-            entry = validate_fault_entry(item.get("kind"), item.get("params", {}))
-        except UnknownFaultError as exc:
-            raise ConvertError(str(exc)) from exc
-        catalog = catalog_entry(str(entry["kind"]))
-        if not catalog.get("inline_supported"):
-            raise ConvertError(
-                f"fault {entry['kind']!r} needs fixture bytes and cannot run on pasted text"
-            )
-        normalized.append(entry)
-    return normalized
-
-
-def validate_convert(body: Any) -> tuple[str, list[dict[str, Any]], str, int, int]:
-    """Return (nl_text, fault_entries, policy_variant, seed, max_steps)."""
+def validate_convert(body: Any) -> tuple[str, str, int, int]:
+    """Return (nl_text, policy_variant, seed, max_steps)."""
     if not isinstance(body, dict):
         raise ConvertError("request body must be a JSON object")
     nl_text = body.get("nl_text", "")
@@ -154,13 +98,6 @@ def validate_convert(body: Any) -> tuple[str, list[dict[str, Any]], str, int, in
         raise ConvertError("nl_text must be a non-empty string")
     if len(nl_text) > MAX_NL_CHARS:
         raise ConvertError(f"nl_text exceeds {MAX_NL_CHARS} characters")
-    if "faults" in body:
-        fault_entries = normalize_faults(body.get("faults"))
-    else:
-        preset = body.get("fault", "none")
-        if preset not in PRESETS:
-            raise ConvertError(f"fault must be one of {sorted(PRESETS)}")
-        fault_entries = normalize_faults(PRESETS[preset])
     variant = body.get("policy_variant", "naive")
     if variant not in ("naive", "fixed"):
         raise ConvertError('policy_variant must be "naive" or "fixed"')
@@ -170,38 +107,11 @@ def validate_convert(body: Any) -> tuple[str, list[dict[str, Any]], str, int, in
     max_steps = body.get("max_steps", 12)
     if isinstance(max_steps, bool) or not isinstance(max_steps, int) or not 1 <= max_steps <= 24:
         raise ConvertError("max_steps must be an integer in 1..24")
-    return nl_text.strip(), fault_entries, variant, seed, max_steps
-
-
-def _patch_key_for(kinds: set[str]) -> str:
-    """Pick the reference-patch scenario for a fault set (primary first)."""
-    if "timeout_after_commit" in kinds or "timeout_before_commit" in kinds:
-        return "odrl_convert_timeout"
-    if "concurrent_update" in kinds:
-        return "odrl_convert_concurrent"
-    return "odrl_convert"
-
-
-def _fixed_policy_for(kinds: set[str]) -> str:
-    if "timeout_after_commit" in kinds or "timeout_before_commit" in kinds:
-        return FIXED_POLICIES["odrl_convert_timeout"]
-    if "concurrent_update" in kinds:
-        return FIXED_POLICIES["odrl_convert_concurrent"]
-    return FIXED_POLICIES["odrl_convert"]
-
-
-def _lost_update_invariant(root: Path) -> dict[str, Any] | None:
-    path = root / "scenarios" / CONCURRENT_SCENARIO / "scenario.yaml"
-    data, _ = load_yaml(path)
-    for invariant in data.get("invariants", []):
-        if isinstance(invariant, dict) and invariant.get("id") == "no_lost_update":
-            return copy.deepcopy(invariant)
-    return None
+    return nl_text.strip(), variant, seed, max_steps
 
 
 def build_inline_run(
     nl_text: str,
-    fault_entries: list[dict[str, Any]],
     variant: str,
     seed: int,
     max_steps: int,
@@ -210,9 +120,8 @@ def build_inline_run(
     out_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Build the scenario/policy/paths for one pasted-NL run."""
-    kinds = {str(f["kind"]) for f in fault_entries}
     scenario_path = root / "scenarios" / BASE_SCENARIO / "scenario.yaml"
-    policy_rel = NAIVE_POLICY if variant == "naive" else _fixed_policy_for(kinds)
+    policy_rel = NAIVE_POLICY if variant == "naive" else FIXED_POLICY
     policy_path = root / policy_rel
     scenario, scenario_text = load_yaml(scenario_path)
     policy, policy_text = load_yaml(policy_path)
@@ -220,30 +129,17 @@ def build_inline_run(
     scenario["task"] = str(scenario.get("task", "")) + INLINE_GUIDANCE
     env = scenario.setdefault("environment", {})
     env["nl_docs"] = [{"id": INLINE_DOC_ID, "text": nl_text, "label": "user_supplied"}]
-    scenario["faults"] = [
-        {"at_step": f.get("at_step"), "kind": f["kind"], "params": dict(f.get("params", {}))}
-        for f in fault_entries
-    ]
-    if "concurrent_update" in kinds and not any(
-        i.get("id") == "no_lost_update" for i in scenario.get("invariants", [])
-    ):
-        invariant = _lost_update_invariant(root)
-        if invariant is not None:
-            scenario.setdefault("invariants", []).append(invariant)
     out = out_dir or root
-    faults_hash = json.dumps(fault_entries, sort_keys=True)
-    run_id = compute_run_id(
-        f"{scenario_text}\nui_attempt: {attempt}\nfaults: {faults_hash}", policy_text, seed
-    )
+    run_id = compute_run_id(f"{scenario_text}\nui_attempt: {attempt}", policy_text, seed)
     return {
         "scenario": scenario,
         "scenario_text": scenario_text,
         "policy": policy,
         "policy_text": policy_text,
         "scenario_id": BASE_SCENARIO,
-        "patch_scenario_id": _patch_key_for(kinds),
+        "patch_scenario_id": BASE_SCENARIO,
         "policy_file": policy_rel,
-        "faults": fault_entries,
+        "faults": [],
         "variant": variant,
         "seed": seed,
         "max_steps": max_steps,
@@ -335,12 +231,10 @@ def _snapshot_from_parts(
         "status": status,
         "spec": {
             "scenario_id": spec["scenario_id"],
-            "faults": spec["faults"],
             "policy_variant": spec["variant"],
             "seed": spec["seed"],
             "run_id": spec["run_id"],
         },
-        "fault_summary": [str(f.get("kind")) for f in spec["faults"]],
         "nl_text": spec["nl_text"],
         "nl_label": spec.get("nl_label", "user_supplied"),
         "events": events,
@@ -475,7 +369,7 @@ def run_and_store(
         snap["ledger_hash"] = None
         _record_snapshot(spec["db_path"], run_key, snap, spec)
         return _public_snapshot(snap)
-    except (UnknownFaultError, VerifierError, TraceCorruptError, UnknownVerifierError) as exc:
+    except (VerifierError, TraceCorruptError, UnknownVerifierError) as exc:
         events = read_events(spec["trace_path"])
         snap = _snapshot_from_parts(
             run_key,
@@ -556,7 +450,7 @@ class RunRegistry:
         self._active = 0
 
     def start(
-        self, nl_text: str, faults: list[dict[str, Any]], variant: str, seed: int, max_steps: int
+        self, nl_text: str, variant: str, seed: int, max_steps: int
     ) -> dict[str, Any]:
         """Launch a run in a background thread; return its public record."""
         with self._lock:
@@ -566,7 +460,7 @@ class RunRegistry:
             attempt = self._seq
             self._active += 1
         spec = build_inline_run(
-            nl_text, faults, variant, seed, max_steps, self._root, attempt, self._out_dir
+            nl_text, variant, seed, max_steps, self._root, attempt, self._out_dir
         )
         run_key = f"{spec['run_id']}-{attempt}"
         record: dict[str, Any] = {
@@ -618,12 +512,10 @@ class RunRegistry:
                 "status": "running",
                 "spec": {
                     "scenario_id": spec["scenario_id"],
-                    "faults": spec["faults"],
                     "policy_variant": spec["variant"],
                     "seed": spec["seed"],
                     "run_id": spec["run_id"],
                 },
-                "fault_summary": [str(f.get("kind")) for f in spec["faults"]],
                 "nl_text": spec["nl_text"],
                 "nl_label": spec.get("nl_label", "user_supplied"),
                 "events": events,
@@ -682,7 +574,7 @@ def _query_flags(query: dict[str, list[str]]) -> dict[str, Any]:
 
 
 class ConvertHandler(http.server.SimpleHTTPRequestHandler):
-    """Serve ui/ statically plus the convert/runs/odrl/faults API."""
+    """Serve ui/ statically plus the convert/runs/odrl API."""
 
     registry: RunRegistry | None = None
 
@@ -720,12 +612,12 @@ class ConvertHandler(http.server.SimpleHTTPRequestHandler):
             self._send_json({"error": "E_CONFIG", "hint": "body must be JSON"}, 400)
             return
         try:
-            nl_text, faults, variant, seed, max_steps = validate_convert(body)
+            nl_text, variant, seed, max_steps = validate_convert(body)
         except ConvertError as exc:
             self._send_json({"error": "E_CONFIG", "hint": str(exc)}, 400)
             return
         try:
-            record = ConvertHandler.registry.start(nl_text, faults, variant, seed, max_steps)
+            record = ConvertHandler.registry.start(nl_text, variant, seed, max_steps)
         except ConvertError as exc:
             self._send_json({"error": "E_BUSY", "hint": str(exc)}, 429)
             return
@@ -733,9 +625,6 @@ class ConvertHandler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
-        if parsed.path == "/api/faults":
-            self._send_json({"faults": fault_catalog()})
-            return
         if parsed.path == "/api/runs":
             flags = _query_flags(urllib.parse.parse_qs(parsed.query))
             conn = self._db()

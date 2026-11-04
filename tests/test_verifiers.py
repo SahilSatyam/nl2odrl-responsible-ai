@@ -27,14 +27,14 @@ import odrl_agent.verifiers  # noqa: F401  (registers ODRL invariants)
 from odrl_agent.strict import strict_validate
 
 REPO = Path(__file__).resolve().parent.parent
-SCENARIO_FILE = REPO / "scenarios" / "odrl_convert_timeout" / "scenario.yaml"
+SCENARIO_FILE = REPO / "scenarios" / "odrl_convert" / "scenario.yaml"
 POLICY_FILE = REPO / "policies" / "default.yaml"
-FIXED_POLICY_FILE = REPO / "policies" / "fixed-odrl-timeout.yaml"
+FIXED_POLICY_FILE = REPO / "policies" / "fixed-odrl-convert.yaml"
 TRACE_DIR = REPO / "tests" / "fixtures" / "traces"
-NAIVE_TRACE = TRACE_DIR / "odrl_convert_timeout-naive-seed42.jsonl"
-NAIVE_STATE = TRACE_DIR / "odrl_convert_timeout-naive-seed42.state.json"
-FIXED_TRACE = TRACE_DIR / "odrl_convert_timeout-fixed-seed42.jsonl"
-FIXED_STATE = TRACE_DIR / "odrl_convert_timeout-fixed-seed42.state.json"
+NAIVE_TRACE = TRACE_DIR / "odrl_convert-naive-seed42.jsonl"
+NAIVE_STATE = TRACE_DIR / "odrl_convert-naive-seed42.state.json"
+FIXED_TRACE = TRACE_DIR / "odrl_convert-fixed-seed42.jsonl"
+FIXED_STATE = TRACE_DIR / "odrl_convert-fixed-seed42.state.json"
 
 VALID_ODRL = {
     "@context": "http://www.w3.org/ns/odrl.jsonld",
@@ -357,7 +357,7 @@ def test_committed_saves_counts_success_and_after_commit_timeout() -> None:
     assert get_verifier("exactly_once_save").check(trace, odrl_state()).passed is False
 
 
-def test_run_id_formula_matches_recorded_naive() -> None:
+def test_run_id_formula_matches_scenario_and_policy() -> None:
     scenario_text = SCENARIO_FILE.read_text(encoding="utf-8")
     policy_text = POLICY_FILE.read_text(encoding="utf-8")
-    assert compute_run_id(scenario_text, policy_text, 42) == "ea7d6c8084456233"
+    assert compute_run_id(scenario_text, policy_text, 42) == "d15e139bd5e3e42e"

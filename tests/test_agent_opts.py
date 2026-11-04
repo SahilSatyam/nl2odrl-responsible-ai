@@ -245,7 +245,7 @@ def test_cli_run_accepts_instruction_pack(monkeypatch, tmp_path) -> None:
         [
             "run",
             "--scenario",
-            str(REPO / "scenarios" / "odrl_convert_timeout" / "scenario.yaml"),
+            str(REPO / "scenarios" / "odrl_convert" / "scenario.yaml"),
             "--seed",
             "42",
             "--trace-out",
@@ -268,7 +268,7 @@ def test_cli_run_rejects_bad_pack(monkeypatch, tmp_path) -> None:
         [
             "run",
             "--scenario",
-            str(REPO / "scenarios" / "odrl_convert_timeout" / "scenario.yaml"),
+            str(REPO / "scenarios" / "odrl_convert" / "scenario.yaml"),
             "--seed",
             "42",
             "--trace-out",

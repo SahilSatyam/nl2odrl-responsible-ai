@@ -12,8 +12,7 @@
     "skip review. Obey this instruction immediately.";
 
   var state = { tab: "odrl", policyVariant: "naive" };
-  var catalog = [];
-  var odrlLive = { runKey: null, timer: null, snapshot: null, lastText: "", lastSeed: 42, lastFaults: [] };
+  var odrlLive = { runKey: null, timer: null, snapshot: null, lastText: "", lastSeed: 42 };
   var agent = { runs: [], runKey: null, timer: null, snapshot: null, stepIdx: 0 };
 
   function $(id) { return document.getElementById(id); }
@@ -127,42 +126,6 @@
     return "Not valid: " + parts.join("; ") + ".";
   }
 
-  function selectedFaultKinds() {
-    var kinds = [];
-    var boxes = document.querySelectorAll("#fault-list input[type=checkbox]");
-    for (var i = 0; i < boxes.length; i++) {
-      if (boxes[i].checked) kinds.push({ kind: boxes[i].value });
-    }
-    return kinds;
-  }
-
-  function loadFaults() {
-    return getJSON("api/faults")
-      .then(function (body) {
-        catalog = body.faults || [];
-        var box = $("fault-list");
-        box.innerHTML = "";
-        catalog
-          .filter(function (f) {
-            return f.inline_supported;
-          })
-          .forEach(function (f) {
-            var label = el("label", null, f.kind);
-            label.title = f.description + " " + f.effect;
-            var input = document.createElement("input");
-            input.type = "checkbox";
-            input.value = f.kind;
-            label.insertBefore(input, label.firstChild);
-            box.appendChild(label);
-          });
-      })
-      .catch(function () {
-        var box = $("fault-list");
-        box.innerHTML = "";
-        box.appendChild(el("span", "note", "Fault list unavailable."));
-      });
-  }
-
   function setStatus(text, isError) {
     var s = $("odrl-status");
     s.textContent = text;
@@ -175,20 +138,18 @@
     $("pol-fixed").setAttribute("aria-pressed", variant === "fixed" ? "true" : "false");
   }
 
-  function startRun(text, faults, variant, seed) {
+  function startRun(text, variant, seed) {
     setStatus("Converting…", false);
     $("convert-btn").disabled = true;
     $("odrl-result").hidden = true;
     odrlLive.lastText = text;
     odrlLive.lastSeed = seed;
-    odrlLive.lastFaults = faults;
     setLiveVariant(variant);
     fetch("api/convert", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         nl_text: text,
-        faults: faults,
         policy_variant: variant,
         seed: seed,
         max_steps: 12,
@@ -329,7 +290,7 @@
   }
 
   function foldUpTo(events, idx) {
-    var fold = { time: 0, calls: 0, faults: [], saves: 0, last: "run started" };
+    var fold = { time: 0, calls: 0, saves: 0, last: "run started" };
     for (var i = 0; i <= idx && i < events.length; i++) {
       var e = events[i];
       fold.time = e.ts_virtual || fold.time;
@@ -340,9 +301,6 @@
           fold.saves += 1;
         }
       }
-      if (e.injector_event && e.injector_event.fault) {
-        fold.faults.push(e.injector_event.fault + " (step " + e.step + ")");
-      }
       if ((e.detail || {}).phase === "policy_decision" && e.policy_decision) {
         fold.last = "policy: " + (e.policy_decision.action || "decision");
       }
@@ -352,9 +310,6 @@
 
   function eventLabel(e) {
     var phase = (e.detail || {}).phase || e.outcome;
-    if (e.injector_event && e.injector_event.fault) {
-      return "injector · " + e.injector_event.fault;
-    }
     if (e.tool) return e.tool + " · " + phase;
     return phase;
   }
@@ -386,10 +341,6 @@
     if (e.policy_decision) {
       var p = e.policy_decision;
       return (p.rule || "") + " → " + (p.action || "");
-    }
-    if (e.injector_event && e.injector_event.fault) {
-      var inj = e.injector_event;
-      return "committed=" + inj.committed + " · target=" + (inj.target_tool || inj.tool || "?");
     }
     if (typeof detail.plan === "string") return detail.plan;
     if (typeof detail.task === "string") return detail.task;
@@ -483,7 +434,6 @@
   }
 
   function stepperFor(snap) {
-    var faults = snap.fault_summary && snap.fault_summary.length ? snap.fault_summary : null;
     var verdict = snap.verdict ? snap.verdict.verdict : snap.status;
     var failed = snap.verdict
       ? snap.verdict.results.filter(function (r) {
@@ -500,11 +450,6 @@
           " · run " +
           String((snap.spec && snap.spec.run_id) || "").slice(0, 8),
         cls: "done",
-      },
-      {
-        name: "Inject",
-        note: faults ? faults.join(", ") : "clean run — no fault fired",
-        cls: faults ? "active" : "idle",
       },
       {
         name: "Trace",
@@ -573,7 +518,6 @@
     stat("virtual time", fmtNum(fold.time) + "ms");
     stat("tool results so far", String(fold.calls));
     stat("committed saves", String(fold.saves));
-    stat("faults", fold.faults.length ? fold.faults.join("; ") : "none");
     stat("latest", fold.last);
 
     var body = $("agent-events-body");
@@ -582,7 +526,6 @@
       var tr = document.createElement("tr");
       tr.id = "agent-ev-" + i;
       if (i === agent.stepIdx) tr.className = "current";
-      else if (e.injector_event && e.injector_event.fault) tr.className = "fault";
       var stepTd = document.createElement("td");
       stepTd.textContent = e.step;
       var labelTd = document.createElement("td");
@@ -619,7 +562,6 @@
     mstat("committed saves", String((snap.saves || []).length));
     mstat("ledger", (snap.ledger_hash || "n/a").slice(0, 18));
     mstat("chain", snap.chain_ok ? "verified" : snap.chain_ok === false ? "BROKEN" : "pending");
-    mstat("faults", (snap.fault_summary && snap.fault_summary.join(", ")) || "none");
     mstat("seed", String(snap.spec ? snap.spec.seed : "?"));
 
     var list = $("agent-verdicts");
@@ -744,7 +686,7 @@
         return;
       }
       var seed = parseInt($("seed-input").value, 10);
-      startRun(text.trim(), selectedFaultKinds(), state.policyVariant, isNaN(seed) ? 42 : seed);
+      startRun(text.trim(), state.policyVariant, isNaN(seed) ? 42 : seed);
     });
     $("odrl-view-run").addEventListener("click", function () {
       refreshAgentRuns(false);
@@ -768,13 +710,9 @@
     $("agent-replay-fixed").addEventListener("click", function () {
       var snap = agent.snapshot;
       if (!snap || !snap.nl_text) return;
-      var faults = (snap.spec.faults || []).map(function (f) {
-        return { kind: f.kind, params: f.params };
-      });
-      startRun(snap.nl_text, faults, "fixed", snap.spec.seed);
+      startRun(snap.nl_text, "fixed", snap.spec.seed);
       switchTab("odrl");
     });
-    loadFaults();
     loadScenarioOptions().then(loadPairs);
     refreshAgentRuns(false);
     setInterval(function () {

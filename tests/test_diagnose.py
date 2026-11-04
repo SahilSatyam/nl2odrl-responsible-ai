@@ -19,14 +19,14 @@ import odrl_agent.verifiers  # noqa: F401 -- registers ODRL invariants
 from odrl_agent.cli import main
 
 REPO = Path(__file__).resolve().parent.parent
-SCENARIO_FILE = REPO / "scenarios" / "odrl_convert_timeout" / "scenario.yaml"
+SCENARIO_FILE = REPO / "scenarios" / "odrl_convert" / "scenario.yaml"
 POLICY_FILE = REPO / "policies" / "default.yaml"
-FIXED_POLICY_FILE = REPO / "policies" / "fixed-odrl-timeout.yaml"
+FIXED_POLICY_FILE = REPO / "policies" / "fixed-odrl-convert.yaml"
 TRACE_DIR = REPO / "tests" / "fixtures" / "traces"
-FAILING_TRACE = TRACE_DIR / "odrl_convert_timeout-naive-seed42.jsonl"
-FAILING_STATE = TRACE_DIR / "odrl_convert_timeout-naive-seed42.state.json"
-PASSING_TRACE = TRACE_DIR / "odrl_convert_timeout-fixed-seed42.jsonl"
-PASSING_STATE = TRACE_DIR / "odrl_convert_timeout-fixed-seed42.state.json"
+FAILING_TRACE = TRACE_DIR / "odrl_convert-naive-seed42.jsonl"
+FAILING_STATE = TRACE_DIR / "odrl_convert-naive-seed42.state.json"
+PASSING_TRACE = TRACE_DIR / "odrl_convert-fixed-seed42.jsonl"
+PASSING_STATE = TRACE_DIR / "odrl_convert-fixed-seed42.state.json"
 
 
 def diagnose(trace, output, *extra, state=None, env=None):
@@ -72,7 +72,7 @@ def test_recorded_naive_trace_fails_check(tmp_path) -> None:
     verdict = json.loads(report.read_text(encoding="utf-8"))
     assert verdict["verdict"] == "FAIL"
     failed = {row["id"] for row in verdict["results"] if not row["passed"]}
-    assert {"odrl_valid", "exactly_once_save", "fresh_write_only"} <= failed
+    assert {"odrl_valid", "fresh_write_only"} <= failed
 
 
 def test_recorded_fixed_trace_passes_check(tmp_path) -> None:
@@ -89,9 +89,8 @@ def test_diagnose_failing_trace_writes_reference_patch(tmp_path, capsys) -> None
     patch = json.loads(out.read_text(encoding="utf-8"))
     validate_patch_data(patch)
     rule = patch["patch"]["rules"][0]
-    assert (rule["rule"], rule["tool"]) == ("on_tool_timeout", "save_odrl")
-    assert rule["action"] == "check_then_act"
-    assert rule["check"] == {"tool": "save_odrl", "by": "version"}
+    assert (rule["rule"], rule["tool"]) == ("on_untrusted_content", "parse_policy")
+    assert rule["action"] == "require_confirmation"
     stdout = capsys.readouterr().out
     assert "patch=" in stdout and "policy_patch/v1" in stdout
     assert "read-only" in stdout
@@ -190,11 +189,9 @@ def test_diagnose_patch_applies_onto_base_policy(tmp_path) -> None:
     base, _ = load_policy(POLICY_FILE)
     patch = json.loads(out.read_text(encoding="utf-8"))
     new_policy, _ = apply_patch(base, patch)
-    assert new_policy["rules"][0]["check"] == {"tool": "save_odrl", "by": "version"}
     fixed_rules = yaml.safe_load(FIXED_POLICY_FILE.read_text(encoding="utf-8"))["rules"]
-    timeout_rule = next(r for r in fixed_rules if r["rule"] == "on_tool_timeout")
-    assert timeout_rule["check"] == new_policy["rules"][0]["check"]
-    assert timeout_rule["retry"] == new_policy["rules"][0]["retry"]
+    convert_rule = next(r for r in fixed_rules if r["rule"] == "on_untrusted_content")
+    assert convert_rule == new_policy["rules"][0]
 
 
 def test_diagnose_verdict_flag_drives_refusal_and_patch(tmp_path, capsys) -> None:

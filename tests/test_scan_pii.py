@@ -11,9 +11,9 @@ from agentcrash.scan_pii import scan_files, scan_text
 import odrl_agent.verifiers  # noqa: F401 -- registers host invariants
 
 REPO = Path(__file__).resolve().parent.parent
-GOLDEN = REPO / "tests" / "fixtures" / "traces" / "odrl_convert_timeout-naive-seed42.jsonl"
+GOLDEN = REPO / "tests" / "fixtures" / "traces" / "odrl_convert-naive-seed42.jsonl"
 GOLDEN_STATE = (
-    REPO / "tests" / "fixtures" / "traces" / "odrl_convert_timeout-naive-seed42.state.json"
+    REPO / "tests" / "fixtures" / "traces" / "odrl_convert-naive-seed42.state.json"
 )
 
 
@@ -54,7 +54,7 @@ def test_check_scan_pii_passes_on_golden(tmp_path: Path, capsys) -> None:
             "--state",
             str(GOLDEN_STATE),
             "--invariant",
-            "exactly_once_save",
+            "odrl_valid",
             "--report-out",
             str(report),
             "--scan-pii",

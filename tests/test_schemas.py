@@ -13,7 +13,7 @@ TRACE_EVENT = {
     "prev_hash": "GENESIS",
     "ts_virtual": 140,
     "run_id": "ea7d6c8084456233",
-    "scenario": "odrl_convert_timeout",
+    "scenario": "odrl_convert",
     "step": 4,
     "tool": "save_odrl",
     "args": {"op": "write", "record": "odrl-policy-1", "expected_version": 1},
@@ -35,7 +35,7 @@ TRACE_EVENT = {
 
 SCENARIO = {
     "schema_version": "scenario/v1",
-    "scenario": "odrl_convert_timeout",
+    "scenario": "odrl_convert",
     "task": "Convert the access request to ODRL 2.2 JSON-LD and save it once",
     "seed": 42,
     "tools": [
@@ -53,13 +53,6 @@ SCENARIO = {
             "mutating": True,
             "idempotency_key_arg": None,
         },
-    ],
-    "faults": [
-        {
-            "at_step": None,
-            "kind": "timeout_after_commit",
-            "params": {"tool": "save_odrl", "op": "write", "occurrence": 1},
-        }
     ],
     "invariants": [
         {

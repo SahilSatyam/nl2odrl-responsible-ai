@@ -23,10 +23,8 @@ from odrl_agent.cli import main
 from odrl_agent.tools import ToolRegistry
 
 REPO = Path(__file__).resolve().parent.parent
-SCENARIO_FILE = REPO / "scenarios" / "odrl_convert_timeout" / "scenario.yaml"
+SCENARIO_FILE = REPO / "scenarios" / "odrl_convert" / "scenario.yaml"
 POLICY_FILE = REPO / "policies" / "default.yaml"
-FIXED_POLICY_FILE = REPO / "policies" / "fixed-odrl-timeout.yaml"
-NAIVE_TRACE = REPO / "tests" / "fixtures" / "traces" / "odrl_convert_timeout-naive-seed42.jsonl"
 SEED_MATRIX = [1, 7, 42, 123, 2026]
 
 SLOPPY_ODRL = {
@@ -36,15 +34,14 @@ SLOPPY_ODRL = {
     "permission": [{"action": "use", "assignee": "research-team"}],
 }
 
-#: Action sequence of the recorded naive live run: sloppy parse, read,
-#: blind write (ambiguous timeout), blind rewrite, done.
+#: Action sequence of a naive sloppy run: sloppy parse, blind single
+#: save of structurally invalid ODRL, done.
 NAIVE_ACTIONS = [
     {
         "type": "call",
         "tool": "parse_policy",
         "args": {"doc_id": "access-request-1", "mode": "sloppy"},
     },
-    {"type": "call", "tool": "save_odrl", "args": {"op": "read", "record": "odrl-policy-1"}},
     {
         "type": "call",
         "tool": "save_odrl",
@@ -52,17 +49,6 @@ NAIVE_ACTIONS = [
             "op": "write",
             "record": "odrl-policy-1",
             "value": SLOPPY_ODRL,
-            "expected_version": 1,
-        },
-    },
-    {
-        "type": "call",
-        "tool": "save_odrl",
-        "args": {
-            "op": "write",
-            "record": "odrl-policy-1",
-            "value": SLOPPY_ODRL,
-            "expected_version": 1,
         },
     },
     {"type": "done", "reason": "saved"},
@@ -155,7 +141,7 @@ def test_fr01_run_emits_schema_valid_trace_and_state(tmp_path, monkeypatch, caps
     assert ts == sorted(ts) and ts[0] == 0
     assert Ledger.ledger_hash(snapshot) == snapshot["ledger_hash"]
     out = capsys.readouterr().out
-    assert f"run_id={snapshot['run_id']}" in out and "saves=2" in out
+    assert f"run_id={snapshot['run_id']}" in out and "saves=1" in out
 
 
 def test_fr02_same_seed_is_byte_identical(tmp_path, monkeypatch) -> None:
@@ -177,12 +163,15 @@ def test_fr03_seed_matrix_reruns_match_after_normalization(tmp_path, monkeypatch
     assert normalize(first) == normalize(second)
 
 
-def test_scripted_run_reproduces_recorded_naive_trace(tmp_path, monkeypatch) -> None:
+def test_fault_free_run_records_no_injector_phases(tmp_path, monkeypatch) -> None:
     scripted_transport(monkeypatch, NAIVE_ACTIONS)
-    fresh = tmp_path / "fresh.jsonl"
-    assert run_cli(fresh, tmp_path / "s.json", seed=42) == 0
-    assert fresh.read_bytes() == NAIVE_TRACE.read_bytes()
-    assert verify_chain(str(NAIVE_TRACE))["ok"] is True
+    trace = tmp_path / "t.jsonl"
+    assert run_cli(trace, tmp_path / "s.json", seed=42) == 0
+    events = read_events(trace)
+    assert events, "expected a non-empty trace"
+    assert all(e.get("injector_event") is None for e in events)
+    assert all(e.get("outcome") != "timeout" for e in events)
+    assert verify_chain(str(trace))["ok"] is True
 
 
 def test_run_id_formula_and_default_trace_path(tmp_path, monkeypatch) -> None:
@@ -193,86 +182,11 @@ def test_run_id_formula_and_default_trace_path(tmp_path, monkeypatch) -> None:
     Path("tests").symlink_to(REPO / "tests", target_is_directory=True)
     scenario_text = SCENARIO_FILE.read_text(encoding="utf-8")
     policy_text = POLICY_FILE.read_text(encoding="utf-8")
-    assert main(["run", "--scenario", "odrl_convert_timeout", "--seed", "42"]) == 0
+    assert main(["run", "--scenario", "odrl_convert", "--seed", "42"]) == 0
     expected = compute_run_id(scenario_text, policy_text, 42)
-    assert expected == "ea7d6c8084456233"
+    assert expected == "d15e139bd5e3e42e"
     assert (tmp_path / "traces" / f"{expected}.jsonl").is_file()
     assert (tmp_path / "reports" / f"{expected}.state.json").is_file()
-
-
-def test_alien_fault_refused_fast_with_no_trace(tmp_path, monkeypatch) -> None:
-    scripted_transport(monkeypatch, NAIVE_ACTIONS)
-    scenario = yaml.safe_load(SCENARIO_FILE.read_text(encoding="utf-8"))
-    scenario["faults"] = [{"at_step": 1, "kind": "alien_fault", "params": {}}]
-    bad = tmp_path / "alien.yaml"
-    bad.write_text(yaml.safe_dump(scenario), encoding="utf-8")
-    trace = tmp_path / "alien.jsonl"
-    start = time.monotonic()
-    code = main(
-        [
-            "run",
-            "--scenario",
-            str(bad),
-            "--policy",
-            str(POLICY_FILE),
-            "--trace-out",
-            str(trace),
-            "--state-out",
-            str(tmp_path / "alien.json"),
-        ]
-    )
-    assert time.monotonic() - start < 2
-    assert code != 0
-    assert not trace.exists()
-
-
-def test_wiring_timeout_row_in_order(tmp_path, monkeypatch) -> None:
-    scripted_transport(monkeypatch, NAIVE_ACTIONS)
-    assert run_cli(tmp_path / "t.jsonl", tmp_path / "s.json") == 0
-    events = read_events(tmp_path / "t.jsonl")
-    call = next(
-        i
-        for i, e in enumerate(events)
-        if e.get("tool") == "save_odrl"
-        and e.get("detail", {}).get("phase") == "tool_call"
-        and (e.get("args") or {}).get("op") == "write"
-    )
-    result = next(i for i, e in enumerate(events) if e.get("outcome") == "timeout")
-    injected = next(
-        i
-        for i, e in enumerate(events)
-        if e.get("injector_event") is not None and e.get("tool") is None
-    )
-    assert call < result < injected
-    faulted = events[result]
-    assert faulted["step"] == 4
-    assert faulted["latency"] == 2000
-    assert faulted["injector_event"]["fault"] == "timeout_after_commit"
-    assert events[call]["step"] == events[injected]["step"] == 4
-
-
-def test_timeout_continues_and_double_saves(tmp_path, monkeypatch) -> None:
-    scripted_transport(monkeypatch, NAIVE_ACTIONS)
-    start = time.monotonic()
-    assert run_cli(tmp_path / "t.jsonl", tmp_path / "s.json") == 0
-    assert time.monotonic() - start < 5
-    events = read_events(tmp_path / "t.jsonl")
-    snapshot = json.loads((tmp_path / "s.json").read_text(encoding="utf-8"))
-    record = snapshot["record_versions"][0]
-    assert record["record"] == "odrl-policy-1" and record["version"] == 3
-    end = [e for e in events if e.get("detail", {}).get("phase") == "run_end"]
-    assert len(end) == 1 and end[0]["detail"]["status"] == "completed"
-    assert end[0]["detail"]["saves"] == 2
-
-
-def test_step4_timeout_links_to_first_committed_save(tmp_path, monkeypatch) -> None:
-    scripted_transport(monkeypatch, NAIVE_ACTIONS)
-    assert run_cli(tmp_path / "t.jsonl", tmp_path / "s.json") == 0
-    events = read_events(tmp_path / "t.jsonl")
-    faulted = next(e for e in events if e.get("outcome") == "timeout")
-    assert faulted["injector_event"]["committed"] is True
-    snapshot = json.loads((tmp_path / "s.json").read_text(encoding="utf-8"))
-    assert snapshot["record_versions"][0]["value"] == faulted["detail"]["data"]["value"]
 
 
 def test_unknown_tool_and_bad_args_rejected_without_effect() -> None:
@@ -336,4 +250,4 @@ def test_dry_run_writes_nothing(tmp_path, monkeypatch, capsys) -> None:
     assert code == 0
     assert not trace.exists()
     out = capsys.readouterr().out
-    assert "odrl_convert_timeout" in out and "nothing written" in out
+    assert "odrl_convert" in out and "nothing written" in out

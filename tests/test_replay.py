@@ -16,11 +16,11 @@ from agentcrash.policy import reference_patch_for
 from odrl_agent.cli import main
 
 REPO = Path(__file__).resolve().parent.parent
-SCENARIO_FILE = REPO / "scenarios" / "odrl_convert_timeout" / "scenario.yaml"
-FIXED_POLICY = REPO / "policies" / "fixed-odrl-timeout.yaml"
+SCENARIO_FILE = REPO / "scenarios" / "odrl_convert" / "scenario.yaml"
+FIXED_POLICY = REPO / "policies" / "fixed-odrl-convert.yaml"
 TRACE_DIR = REPO / "tests" / "fixtures" / "traces"
-FAILING_TRACE = TRACE_DIR / "odrl_convert_timeout-naive-seed42.jsonl"
-FAILING_STATE = TRACE_DIR / "odrl_convert_timeout-naive-seed42.state.json"
+FAILING_TRACE = TRACE_DIR / "odrl_convert-naive-seed42.jsonl"
+FAILING_STATE = TRACE_DIR / "odrl_convert-naive-seed42.state.json"
 
 STRICT_ODRL = {
     "@context": "http://www.w3.org/ns/odrl.jsonld",
@@ -46,7 +46,7 @@ SLOPPY_ODRL = {
 DONE = {"type": "done", "reason": "saved"}
 
 #: Reconcile-first behavior under the diagnosed patch: sloppy parse,
-#: blind write (ambiguous timeout), re-read, stop. Exactly one save.
+#: re-read, versioned write, stop. Exactly one save with freshness proof.
 RECONCILE_ACTIONS = [
     {
         "type": "call",
@@ -155,7 +155,7 @@ def replay(trace, output_args, *extra, state=None):
 
 def write_patch(tmp_path, mutate=None):
     """Diagnose-equivalent patch file (offline reference patch)."""
-    patch = reference_patch_for("odrl_convert_timeout", "ea7d6c8084456233")
+    patch = reference_patch_for("odrl_convert", "d15e139bd5e3e42e")
     if mutate:
         mutate(patch)
     path = tmp_path / "patch.json"
@@ -163,7 +163,7 @@ def write_patch(tmp_path, mutate=None):
     return path
 
 
-def test_replay_patch_fixes_exactly_once_but_not_validity(tmp_path, monkeypatch, capsys) -> None:
+def test_replay_patch_fixes_freshness_but_not_validity(tmp_path, monkeypatch, capsys) -> None:
     scripted_transport(monkeypatch, RECONCILE_ACTIONS)
     monkeypatch.chdir(REPO)
     patch = write_patch(tmp_path)
@@ -185,7 +185,7 @@ def test_replay_patch_fixes_exactly_once_but_not_validity(tmp_path, monkeypatch,
     assert "fix: NOT_FIXED" in out and "verdict FAIL" in out
     report = json.loads(report_out.read_text(encoding="utf-8"))
     assert report["verdict"] == "FAIL"
-    assert sorted(report["fixed"]) == ["exactly_once_save", "fresh_write_only"]
+    assert sorted(report["fixed"]) == ["fresh_write_only"]
     assert report["broken"] == []
     assert report["api_version"] == "v1"
 
@@ -210,7 +210,6 @@ def test_replay_fixed_policy_verifies(tmp_path, monkeypatch, capsys) -> None:
     report = json.loads((tmp_path / "r.report.json").read_text(encoding="utf-8"))
     assert report["verdict"] == "PASS"
     assert sorted(report["fixed"]) == [
-        "exactly_once_save",
         "fresh_write_only",
         "odrl_valid",
     ]

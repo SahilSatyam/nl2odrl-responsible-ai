@@ -77,7 +77,6 @@ def test_http_convert_roundtrip(monkeypatch, tmp_path) -> None:
         payload = json.dumps(
             {
                 "nl_text": "Allow the research team to use dataset-7.",
-                "faults": [],
                 "policy_variant": "naive",
                 "seed": 42,
             }
@@ -115,14 +114,7 @@ def test_http_convert_roundtrip(monkeypatch, tmp_path) -> None:
         with real_urlopen(f"http://127.0.0.1:{port}/api/odrl?valid=false", timeout=10) as response:
             pairs = json.loads(response.read().decode("utf-8"))
         assert any(p["run_key"] == started["run_key"] for p in pairs["pairs"])
-
-        with real_urlopen(f"http://127.0.0.1:{port}/api/faults", timeout=10) as response:
-            catalog = json.loads(response.read().decode("utf-8"))
-        assert {f["kind"] for f in catalog["faults"]} >= {
-            "timeout_after_commit",
-            "timeout_before_commit",
-            "concurrent_update",
-        }
+        assert all(e.get("injector_event") is None for e in final["events"])
     finally:
         from odrl_agent import web
 

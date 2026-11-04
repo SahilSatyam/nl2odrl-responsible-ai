@@ -12,11 +12,11 @@ from odrl_agent.seed import CASES, seed_database
 def test_seed_records_oracle_runs(monkeypatch, tmp_path) -> None:
     monkeypatch.chdir(Path(__file__).resolve().parent.parent)
     keys = seed_database(Path(__file__).resolve().parent.parent, out_dir=tmp_path)
-    assert len(keys) == len(CASES) == 8
+    assert len(keys) == len(CASES) == 4
     conn = db_module.connect(tmp_path / "agentcrash.db")
     try:
         runs = db_module.list_runs(conn)
-        assert len(runs) == 8
+        assert len(runs) == 4
         by_id = {}
         for run in runs:
             snap = db_module.get_run(conn, run["run_key"])
@@ -27,15 +27,15 @@ def test_seed_records_oracle_runs(monkeypatch, tmp_path) -> None:
             by_id[(snap["spec"]["scenario_id"], snap["spec"]["policy_variant"])] = snap
         for scenario_id, _ in CASES:
             assert any(s == scenario_id for s, _ in by_id), scenario_id
-        naive = by_id[("odrl_convert_timeout", "naive")]
+        naive = by_id[("odrl_convert", "naive")]
         assert naive["verdict"]["verdict"] == "FAIL"
-        assert naive["fault_summary"] == ["timeout_after_commit"]
+        assert all(e.get("injector_event") is None for e in naive["events"])
         assert naive["patch"] is not None
         assert naive["patch"]["patch"]["rules"]
-        fixed = by_id[("odrl_convert_timeout", "fixed")]
+        fixed = by_id[("odrl_convert", "fixed")]
         assert fixed["verdict"]["verdict"] == "PASS"
         pairs = db_module.list_odrl_docs(conn)
-        assert len(pairs) >= 8
+        assert len(pairs) >= 4
         assert all(p["doc"].get("uid") for p in pairs)
     finally:
         conn.close()
@@ -49,6 +49,6 @@ def test_seed_is_idempotent(monkeypatch, tmp_path) -> None:
     assert first == second
     conn = db_module.connect(tmp_path / "agentcrash.db")
     try:
-        assert len(db_module.list_runs(conn)) == 8
+        assert len(db_module.list_runs(conn)) == 4
     finally:
         conn.close()

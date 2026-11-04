@@ -17,12 +17,12 @@ from agentcrash.cli import main
 import odrl_agent.verifiers  # noqa: F401 -- registers odrl_valid et al.
 
 REPO = Path(__file__).resolve().parent.parent
-SCENARIO_FILE = REPO / "scenarios" / "odrl_convert_timeout" / "scenario.yaml"
+SCENARIO_FILE = REPO / "scenarios" / "odrl_convert" / "scenario.yaml"
 TRACE_DIR = REPO / "tests" / "fixtures" / "traces"
-NAIVE_TRACE = TRACE_DIR / "odrl_convert_timeout-naive-seed42.jsonl"
-NAIVE_STATE = TRACE_DIR / "odrl_convert_timeout-naive-seed42.state.json"
-FIXED_TRACE = TRACE_DIR / "odrl_convert_timeout-fixed-seed42.jsonl"
-FIXED_STATE = TRACE_DIR / "odrl_convert_timeout-fixed-seed42.state.json"
+NAIVE_TRACE = TRACE_DIR / "odrl_convert-naive-seed42.jsonl"
+NAIVE_STATE = TRACE_DIR / "odrl_convert-naive-seed42.state.json"
+FIXED_TRACE = TRACE_DIR / "odrl_convert-fixed-seed42.jsonl"
+FIXED_STATE = TRACE_DIR / "odrl_convert-fixed-seed42.state.json"
 
 
 def scenario_invariants() -> list[str]:
@@ -40,14 +40,15 @@ def check(trace, state, report, *extra):
     return main(args)
 
 
-def test_naive_live_trace_fails_exactly_once_and_validity(tmp_path, capsys) -> None:
+def test_naive_trace_fails_validity_and_freshness(tmp_path, capsys) -> None:
     code = check(NAIVE_TRACE, NAIVE_STATE, tmp_path / "v.json")
     assert code == 1
     out = capsys.readouterr().out
-    assert "[FAIL]" in out and "exactly_once_save" in out
-    fail_line = next(line for line in out.splitlines() if "exactly_once_save" in line)
-    assert "4" in fail_line and "5" in fail_line
     assert "[FAIL]" in out and "odrl_valid" in out
+    fail_line = next(line for line in out.splitlines() if "odrl_valid" in line)
+    assert "target" in fail_line
+    assert "[FAIL]" in out and "fresh_write_only" in out
+    assert "[PASS]" in out and "exactly_once_save" in out
     assert "[PASS]" in out and "no_attacker_grant" in out
     assert "verdict=FAIL" in out
 
@@ -58,7 +59,9 @@ def test_naive_report_carries_required_fields(tmp_path) -> None:
     verdict = json.loads(report.read_text(encoding="utf-8"))
     assert set(verdict) >= {"api_version", "run_id", "verdict", "results"}
     rows = {row["id"]: row for row in verdict["results"]}
-    assert rows["exactly_once_save"]["passed"] is False
+    assert rows["odrl_valid"]["passed"] is False
+    assert rows["fresh_write_only"]["passed"] is False
+    assert rows["exactly_once_save"]["passed"] is True
     assert rows["no_attacker_grant"]["passed"] is True
 
 
