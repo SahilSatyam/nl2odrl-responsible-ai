@@ -9,7 +9,24 @@ This repository is **not** a policy converter. It is the Responsible / Ethical A
 
 **Coded here:** model card, compliance bundle, eval-evidence schema, CI governance gate, auditor JSON API.
 
-**Not coded here:** NL parsing, ODRL generation, Cedar/Rego compilation, live authorization.
+**Also coded here:** the NL-to-ODRL converter itself (`odrl_agent/`:
+NL parsing, ODRL 2.2 generation, scenario runner, ODRL invariants,
+`odrl-host` CLI). Cedar/Rego compilation and live authorization remain
+out of scope.
+
+The converter is built on the
+[`agentcrash-core`](https://pypi.org/project/agentcrash-core/) PyPI
+package (reliability framework: SDK instrumentation, fault injection,
+deterministic verification, control plane). Install it with the
+converter extras:
+
+```bash
+pip install -e ".[converter]"
+odrl-host run --scenario odrl_convert_timeout --seed 42
+```
+
+Python 3.11+ is required for the converter (`odrl_agent`); the envelope
+(`rai_card`, auditor API, gates) still supports Python 3.9+.
 
 The ethical red line is **over-permission**: the conversion grants a right the source sentence did not. Fluency is not a control.
 

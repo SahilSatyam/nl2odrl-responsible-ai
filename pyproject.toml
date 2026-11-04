@@ -19,12 +19,20 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+converter = [
+  "agentcrash-core>=0.2.0",
+  "pyshacl",
+  "dspy",
+  "numpy>=1.26",
+  "jsonschema",
+]
 
 [project.scripts]
 rai-card = "rai_card.cli:main"
+odrl-host = "odrl_agent.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["rai_card*"]
+include = ["rai_card*", "odrl_agent*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
