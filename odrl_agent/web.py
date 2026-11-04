@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import copy
 import functools
+import hmac
 import http.server
 import json
 import os
@@ -44,6 +45,11 @@ from agentcrash.verifiers import (
 )
 
 from odrl_agent.adapter import (
+    DEFAULT_MODEL,
+    LLAMA_KEY_ENV,
+    LLAMA_MAX_TOKENS_ENV,
+    LLAMA_TIMEOUT_ENV,
+    LLAMA_URL_ENV,
     ModelNotConfiguredError,
     run_react_loop,
 )
@@ -68,6 +74,73 @@ FIXED_POLICY = "policies/fixed-odrl-convert.yaml"
 
 MAX_NL_CHARS = 4000
 MAX_ACTIVE_RUNS = 2
+
+#: Comma-separated product API keys. The gate is off only while no keys
+#: exist anywhere (local single-user mode). Env keys or `odrl-host keys
+#: issue` turn it on: every /api/* call then needs a Bearer key, and the
+#: gate fails closed — revoking all keys denies everyone instead of opening.
+API_KEYS_ENV = "NL2ODRL_API_KEYS"
+
+
+def _api_keys() -> list[str]:
+    """Configured product keys (empty means the gate is off)."""
+    return [
+        k.strip() for k in os.environ.get(API_KEYS_ENV, "").split(",") if k.strip()
+    ]
+
+
+def _key_state(conn: Any) -> tuple[list[str], set[str], bool]:
+    """(env keys, valid fingerprints, gate-on). The gate fails closed:
+
+    once keys have ever been issued it stays on even if all are revoked.
+    """
+    _ensure_saas_tables(conn)
+    rows = [
+        {k: r[k] for k in r.keys()}
+        for r in conn.execute("SELECT key_fp, revoked FROM nl2odrl_api_keys")
+    ]
+    valid = {r["key_fp"] for r in rows if not r["revoked"]}
+    env_keys = _api_keys()
+    return env_keys, valid, bool(env_keys) or bool(rows)
+
+
+def _request_state(
+    handler: http.server.BaseHTTPRequestHandler,
+) -> tuple[list[str], set[str], bool]:
+    conn = handler._db()  # type: ignore[attr-defined]
+    try:
+        return _key_state(conn)
+    finally:
+        conn.close()
+
+
+def _presented(handler: http.server.BaseHTTPRequestHandler) -> str:
+    auth = handler.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        return ""
+    return auth[len("Bearer ") :].strip()
+
+
+def _key_fingerprint(handler: http.server.BaseHTTPRequestHandler) -> str:
+    """Attribution id: sha256 prefix of the presented key, or 'local'."""
+    _env_keys, _valid, gate_on = _request_state(handler)
+    if not gate_on:
+        return "local"
+    presented = _presented(handler)
+    return _fp(presented) if presented else "unknown"
+
+
+def _authorized(handler: http.server.BaseHTTPRequestHandler) -> bool:
+    """True when the gate is off or a valid Bearer key was presented."""
+    env_keys, valid, gate_on = _request_state(handler)
+    if not gate_on:
+        return True
+    presented = _presented(handler)
+    if not presented:
+        return False
+    if any(hmac.compare_digest(presented, k) for k in env_keys):
+        return True
+    return _fp(presented) in valid
 
 
 class ConvertError(ValueError):
@@ -118,6 +191,7 @@ def build_inline_run(
     root: Path,
     attempt: int,
     out_dir: Path | None = None,
+    tenant: str = "local",
 ) -> dict[str, Any]:
     """Build the scenario/policy/paths for one pasted-NL run."""
     scenario_path = root / "scenarios" / BASE_SCENARIO / "scenario.yaml"
@@ -146,6 +220,7 @@ def build_inline_run(
         "run_id": run_id,
         "nl_text": nl_text,
         "nl_label": "user_supplied",
+        "tenant": tenant,
         "trace_path": str(out / "traces" / f"{run_id}.jsonl"),
         "state_path": str(out / "reports" / f"{run_id}.state.json"),
         "db_path": str(out / "agentcrash.db"),
@@ -229,6 +304,7 @@ def _snapshot_from_parts(
     return {
         "run_key": run_key,
         "status": status,
+        "tenant": spec.get("tenant", "local"),
         "spec": {
             "scenario_id": spec["scenario_id"],
             "policy_variant": spec["variant"],
@@ -256,6 +332,13 @@ def _record_snapshot(
     conn = db_module.connect(Path(db_path))
     try:
         db_module.migrate(conn)
+        _ensure_tenant_table(conn)
+        conn.execute(
+            "INSERT OR REPLACE INTO nl2odrl_run_tenants (run_key, key_fp, created_at)"
+            " VALUES (?, ?, ?)",
+            (run_key, spec.get("tenant", "local"), spec.get("created_at")),
+        )
+        conn.commit()
         results = (snap["verdict"] or {}).get("results", [])
         db_module.insert_run(
             conn,
@@ -435,7 +518,247 @@ def _db_conn(root: Path, out_dir: Path | None = None) -> Any:
     out = out_dir or root
     conn = db_module.connect(out / "agentcrash.db")
     db_module.migrate(conn)
+    _ensure_tenant_table(conn)
     return conn
+
+
+def keys_db(root: Path, out_dir: Path | None = None) -> Any:
+    """Connection with SaaS tables ensured, for CLI key management."""
+    return _db_conn(root, out_dir)
+
+
+TENANT_TABLE_SQL = (
+    "CREATE TABLE IF NOT EXISTS nl2odrl_run_tenants ("
+    "run_key TEXT PRIMARY KEY, key_fp TEXT NOT NULL, created_at TEXT NOT NULL)"
+)
+
+KEYS_TABLE_SQL = (
+    "CREATE TABLE IF NOT EXISTS nl2odrl_api_keys ("
+    "key_fp TEXT PRIMARY KEY, label TEXT NOT NULL,"
+    " created_at TEXT NOT NULL, revoked INTEGER NOT NULL DEFAULT 0)"
+)
+
+
+def _ensure_saas_tables(conn: Any) -> None:
+    """SaaS sidecars (tenant attribution, issued keys); framework-safe."""
+    conn.execute(TENANT_TABLE_SQL)
+    conn.execute(KEYS_TABLE_SQL)
+
+
+def _ensure_tenant_table(conn: Any) -> None:
+    _ensure_saas_tables(conn)
+
+
+def _fp(raw: str) -> str:
+    """Attribution id: sha256 prefix. Raw keys are never stored."""
+    import hashlib
+
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def _stored_key_fps(conn: Any) -> set[str]:
+    _ensure_saas_tables(conn)
+    return {
+        r["key_fp"]
+        for r in conn.execute(
+            "SELECT key_fp FROM nl2odrl_api_keys WHERE revoked = 0"
+        )
+    }
+
+
+def issue_api_key(conn: Any, label: str) -> str:
+    """Create a key, store only its fingerprint, return the raw key once."""
+    import secrets
+
+    _ensure_saas_tables(conn)
+    raw = "nl2odrl_" + secrets.token_urlsafe(32)
+    conn.execute(
+        "INSERT INTO nl2odrl_api_keys (key_fp, label, created_at, revoked)"
+        " VALUES (?, ?, ?, 0)",
+        (_fp(raw), label.strip() or "unlabeled", db_module.utcnow()),
+    )
+    conn.commit()
+    return raw
+
+
+def revoke_api_key(conn: Any, fp_prefix: str) -> int:
+    """Revoke keys by fingerprint prefix; returns rows revoked."""
+    _ensure_saas_tables(conn)
+    cursor = conn.execute(
+        "UPDATE nl2odrl_api_keys SET revoked = 1"
+        " WHERE key_fp LIKE ? AND revoked = 0",
+        (fp_prefix.strip() + "%",),
+    )
+    conn.commit()
+    return cursor.rowcount
+
+
+def list_api_keys(conn: Any) -> list[dict[str, Any]]:
+    """Issued keys, newest first; fingerprints only, never raw keys."""
+    _ensure_saas_tables(conn)
+    return [
+        {k: r[k] for k in r.keys()}
+        for r in conn.execute(
+            "SELECT key_fp, label, created_at, revoked FROM nl2odrl_api_keys"
+            " ORDER BY created_at DESC"
+        )
+    ]
+
+
+def _tenant_for(conn: Any, run_key: str) -> str:
+    _ensure_tenant_table(conn)
+    row = conn.execute(
+        "SELECT key_fp FROM nl2odrl_run_tenants WHERE run_key = ?", (run_key,)
+    ).fetchone()
+    return row["key_fp"] if row is not None else "local"
+
+
+def _list_runs(conn: Any, flags: dict[str, Any], key_fp: str | None) -> list[dict[str, Any]]:
+    """Run summaries, newest first; scoped to one key when the gate is on."""
+    import json as _json
+
+    if key_fp is None:
+        return db_module.list_runs(
+            conn,
+            scenario=flags["scenario"],
+            verdict=flags["verdict"],
+            status=flags["status"],
+            limit=flags["limit"],
+        )
+    query = (
+        "SELECT r.run_key, r.run_id, r.scenario_id, r.faults_json, r.policy_variant,"
+        " r.seed, r.status, r.verdict, r.model_calls, r.total_tokens, r.wall_seconds,"
+        " r.created_at, substr(r.nl_text, 1, 160) AS nl_preview FROM runs r"
+        " JOIN nl2odrl_run_tenants t ON t.run_key = r.run_key"
+    )
+    clauses = ["t.key_fp = ?"]
+    args: list[Any] = [key_fp]
+    if flags["scenario"]:
+        clauses.append("r.scenario_id = ?")
+        args.append(flags["scenario"])
+    if flags["verdict"]:
+        clauses.append("r.verdict = ?")
+        args.append(flags["verdict"])
+    if flags["status"]:
+        clauses.append("r.status = ?")
+        args.append(flags["status"])
+    query += " WHERE " + " AND ".join(clauses)
+    query += " ORDER BY r.created_at DESC, r.rowid DESC LIMIT ?"
+    args.append(flags["limit"])
+    rows = []
+    for row in conn.execute(query, args):
+        item = {k: row[k] for k in row.keys()}
+        item["faults"] = _json.loads(item.pop("faults_json") or "[]")
+        rows.append(item)
+    return rows
+
+
+def _list_pairs(conn: Any, flags: dict[str, Any], key_fp: str | None) -> list[dict[str, Any]]:
+    """NL-to-ODRL pairs, newest first; scoped to one key when the gate is on."""
+    import json as _json
+
+    if key_fp is None:
+        return db_module.list_odrl_docs(
+            conn,
+            scenario=flags["scenario"],
+            valid=flags["valid"],
+            attacker=flags["attacker"],
+            limit=flags["limit"],
+        )
+    query = (
+        "SELECT o.run_key, o.step, o.outcome, o.doc_json, o.valid, o.errors_json,"
+        " o.attacker, r.scenario_id, r.policy_variant, r.verdict, r.nl_text,"
+        " r.nl_label, r.created_at FROM odrl_docs o"
+        " JOIN runs r ON r.run_key = o.run_key"
+        " JOIN nl2odrl_run_tenants t ON t.run_key = o.run_key"
+    )
+    clauses = ["t.key_fp = ?"]
+    args: list[Any] = [key_fp]
+    if flags["scenario"]:
+        clauses.append("r.scenario_id = ?")
+        args.append(flags["scenario"])
+    if flags["valid"] is not None:
+        clauses.append("o.valid = ?")
+        args.append(1 if flags["valid"] else 0)
+    if flags["attacker"] is not None:
+        clauses.append("o.attacker = ?")
+        args.append(1 if flags["attacker"] else 0)
+    query += " WHERE " + " AND ".join(clauses)
+    query += " ORDER BY r.created_at DESC, o.id DESC LIMIT ?"
+    args.append(flags["limit"])
+    pairs = []
+    for row in conn.execute(query, args):
+        item = {k: row[k] for k in row.keys()}
+        item["doc"] = _json.loads(item.pop("doc_json"))
+        item["errors"] = _json.loads(item.pop("errors_json") or "[]")
+        item["valid"] = bool(item["valid"])
+        item["attacker"] = bool(item["attacker"])
+        pairs.append(item)
+    return pairs
+
+
+def billing_lines(
+    conn: Any, key_fp: str | None = None, since: str | None = None
+) -> list[dict[str, Any]]:
+    """Per-run line items for billing export; optionally scoped and dated."""
+    _ensure_saas_tables(conn)
+    query = (
+        "SELECT r.run_key, COALESCE(t.key_fp, 'local') AS key_fp, r.created_at,"
+        " r.status, r.verdict, r.model_calls, r.prompt_tokens,"
+        " r.completion_tokens, r.total_tokens FROM runs r"
+        " LEFT JOIN nl2odrl_run_tenants t ON t.run_key = r.run_key"
+    )
+    clauses: list[str] = []
+    args: list[Any] = []
+    if key_fp:
+        clauses.append("COALESCE(t.key_fp, 'local') = ?")
+        args.append(key_fp)
+    if since:
+        clauses.append("r.created_at >= ?")
+        args.append(since)
+    if clauses:
+        query += " WHERE " + " AND ".join(clauses)
+    query += " ORDER BY r.created_at, r.rowid"
+    return [{k: r[k] for k in r.keys()} for r in conn.execute(query, args)]
+
+
+def _usage_rows(conn: Any, key_fp: str | None) -> list[dict[str, Any]]:
+    """Per-key run/token totals; None means all keys (local mode)."""
+    _ensure_tenant_table(conn)
+    if key_fp is None:
+        cursor = conn.execute(
+            "SELECT COALESCE(t.key_fp, 'local') AS fp, COUNT(*) AS runs,"
+            " COALESCE(SUM(r.model_calls), 0) AS model_calls,"
+            " COALESCE(SUM(r.prompt_tokens), 0) AS prompt_tokens,"
+            " COALESCE(SUM(r.completion_tokens), 0) AS completion_tokens,"
+            " COALESCE(SUM(r.total_tokens), 0) AS total_tokens"
+            " FROM runs r LEFT JOIN nl2odrl_run_tenants t ON t.run_key = r.run_key"
+            " GROUP BY fp ORDER BY fp"
+        )
+    else:
+        cursor = conn.execute(
+            "SELECT COALESCE(t.key_fp, 'local') AS fp, COUNT(*) AS runs,"
+            " COALESCE(SUM(r.model_calls), 0) AS model_calls,"
+            " COALESCE(SUM(r.prompt_tokens), 0) AS prompt_tokens,"
+            " COALESCE(SUM(r.completion_tokens), 0) AS completion_tokens,"
+            " COALESCE(SUM(r.total_tokens), 0) AS total_tokens"
+            " FROM runs r LEFT JOIN nl2odrl_run_tenants t ON t.run_key = r.run_key"
+            " WHERE t.key_fp = ? GROUP BY fp",
+            (key_fp,),
+        )
+    rows = [{k: r[k] for k in r.keys()} for r in cursor.fetchall()]
+    if key_fp is not None and not rows:
+        rows = [
+            {
+                "fp": key_fp,
+                "runs": 0,
+                "model_calls": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+            }
+        ]
+    return [{"key_fp": r.pop("fp"), **r} for r in rows]
 
 
 class RunRegistry:
@@ -450,7 +773,7 @@ class RunRegistry:
         self._active = 0
 
     def start(
-        self, nl_text: str, variant: str, seed: int, max_steps: int
+        self, nl_text: str, variant: str, seed: int, max_steps: int, tenant: str = "local"
     ) -> dict[str, Any]:
         """Launch a run in a background thread; return its public record."""
         with self._lock:
@@ -460,7 +783,8 @@ class RunRegistry:
             attempt = self._seq
             self._active += 1
         spec = build_inline_run(
-            nl_text, variant, seed, max_steps, self._root, attempt, self._out_dir
+            nl_text, variant, seed, max_steps, self._root, attempt, self._out_dir,
+            tenant=tenant,
         )
         run_key = f"{spec['run_id']}-{attempt}"
         record: dict[str, Any] = {
@@ -510,6 +834,7 @@ class RunRegistry:
             return {
                 "run_key": run_key,
                 "status": "running",
+                "tenant": spec.get("tenant", "local"),
                 "spec": {
                     "scenario_id": spec["scenario_id"],
                     "policy_variant": spec["variant"],
@@ -532,7 +857,10 @@ class RunRegistry:
             return record["snapshot"]
         conn = _db_conn(self._root, self._out_dir)
         try:
-            return db_module.get_run(conn, run_key)
+            snap = db_module.get_run(conn, run_key)
+            if snap is not None:
+                snap["tenant"] = _tenant_for(conn, run_key)
+            return snap
         finally:
             conn.close()
 
@@ -573,8 +901,52 @@ def _query_flags(query: dict[str, list[str]]) -> dict[str, Any]:
     }
 
 
+def model_status() -> dict[str, Any]:
+    """Report live-model wiring without ever revealing the key."""
+    base_url = os.environ.get(LLAMA_URL_ENV, "").strip()
+    key_set = bool(os.environ.get(LLAMA_KEY_ENV, "").strip())
+    return {
+        "model": DEFAULT_MODEL,
+        "base_url": base_url,
+        "api_key_set": key_set,
+        "configured": bool(base_url and key_set),
+        "timeout_s": os.environ.get(LLAMA_TIMEOUT_ENV, "").strip(),
+        "max_tokens": os.environ.get(LLAMA_MAX_TOKENS_ENV, "").strip(),
+    }
+
+
+def apply_model_settings(body: Any) -> dict[str, Any]:
+    """Store live-model settings in process env (local server only)."""
+    if not isinstance(body, dict):
+        raise ConvertError("request body must be a JSON object")
+    if "base_url" in body:
+        base_url = body["base_url"]
+        if not isinstance(base_url, str) or not base_url.strip():
+            raise ConvertError("base_url must be a non-empty string")
+        if not base_url.strip().startswith(("http://", "https://")):
+            raise ConvertError("base_url must start with http:// or https://")
+        os.environ[LLAMA_URL_ENV] = base_url.strip().rstrip("/")
+    if "api_key" in body:
+        api_key = body["api_key"]
+        if not isinstance(api_key, str) or not api_key.strip():
+            raise ConvertError("api_key must be a non-empty string")
+        os.environ[LLAMA_KEY_ENV] = api_key.strip()
+    for field, env, lo, hi in (
+        ("timeout_s", LLAMA_TIMEOUT_ENV, 1, 600),
+        ("max_tokens", LLAMA_MAX_TOKENS_ENV, 1, 128000),
+    ):
+        if field in body:
+            value = body[field]
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ConvertError(f"{field} must be a number in {lo}..{hi}")
+            if not lo <= float(value) <= hi:
+                raise ConvertError(f"{field} must be a number in {lo}..{hi}")
+            os.environ[env] = str(value)
+    return model_status()
+
+
 class ConvertHandler(http.server.SimpleHTTPRequestHandler):
-    """Serve ui/ statically plus the convert/runs/odrl API."""
+    """Serve ui/ statically plus the convert/runs/odrl/settings API."""
 
     registry: RunRegistry | None = None
 
@@ -593,23 +965,43 @@ class ConvertHandler(http.server.SimpleHTTPRequestHandler):
         assert ConvertHandler.registry is not None
         return _db_conn(ConvertHandler.registry._root, ConvertHandler.registry._out_dir)
 
-    def do_POST(self) -> None:
-        parsed = urllib.parse.urlparse(self.path)
-        if parsed.path != "/api/convert":
-            self._send_json({"error": "E_CONFIG", "hint": "unknown endpoint"}, 404)
-            return
-        assert ConvertHandler.registry is not None
+    def _read_json_body(self) -> tuple[dict[str, Any] | None, Any]:
+        """Return (body, None) or (None, error payload) for a JSON POST."""
         try:
             length = int(self.headers.get("Content-Length", "0"))
         except ValueError:
             length = 0
         if length <= 0 or length > 65536:
-            self._send_json({"error": "E_CONFIG", "hint": "body must be 1..65536 bytes"}, 400)
-            return
+            return None, {"error": "E_CONFIG", "hint": "body must be 1..65536 bytes"}
         try:
-            body = json.loads(self.rfile.read(length).decode("utf-8"))
+            return json.loads(self.rfile.read(length).decode("utf-8")), None
         except (json.JSONDecodeError, UnicodeDecodeError):
-            self._send_json({"error": "E_CONFIG", "hint": "body must be JSON"}, 400)
+            return None, {"error": "E_CONFIG", "hint": "body must be JSON"}
+
+    def do_POST(self) -> None:
+        parsed = urllib.parse.urlparse(self.path)
+        if not _authorized(self):
+            self._send_json(
+                {"error": "E_AUTH", "hint": "valid Bearer API key required"}, 401
+            )
+            return
+        if parsed.path == "/api/settings":
+            body, error = self._read_json_body()
+            if error is not None:
+                self._send_json(error, 400)
+                return
+            try:
+                self._send_json(apply_model_settings(body))
+            except ConvertError as exc:
+                self._send_json({"error": "E_CONFIG", "hint": str(exc)}, 400)
+            return
+        if parsed.path != "/api/convert":
+            self._send_json({"error": "E_CONFIG", "hint": "unknown endpoint"}, 404)
+            return
+        assert ConvertHandler.registry is not None
+        body, error = self._read_json_body()
+        if error is not None:
+            self._send_json(error, 400)
             return
         try:
             nl_text, variant, seed, max_steps = validate_convert(body)
@@ -617,7 +1009,9 @@ class ConvertHandler(http.server.SimpleHTTPRequestHandler):
             self._send_json({"error": "E_CONFIG", "hint": str(exc)}, 400)
             return
         try:
-            record = ConvertHandler.registry.start(nl_text, variant, seed, max_steps)
+            record = ConvertHandler.registry.start(
+                nl_text, variant, seed, max_steps, tenant=_key_fingerprint(self)
+            )
         except ConvertError as exc:
             self._send_json({"error": "E_BUSY", "hint": str(exc)}, 429)
             return
@@ -625,17 +1019,32 @@ class ConvertHandler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
+        if parsed.path.startswith("/api/") and not _authorized(self):
+            self._send_json(
+                {"error": "E_AUTH", "hint": "valid Bearer API key required"}, 401
+            )
+            return
+        if parsed.path == "/api/settings":
+            self._send_json(model_status())
+            return
+        if parsed.path == "/api/usage":
+            conn = self._db()
+            try:
+                caller_fp = _key_fingerprint(self)
+                rows = _usage_rows(
+                    conn, None if caller_fp == "local" else caller_fp
+                )
+            finally:
+                conn.close()
+            self._send_json({"usage": rows})
+            return
+        caller_fp = _key_fingerprint(self)
+        caller = None if caller_fp == "local" else caller_fp
         if parsed.path == "/api/runs":
             flags = _query_flags(urllib.parse.parse_qs(parsed.query))
             conn = self._db()
             try:
-                runs = db_module.list_runs(
-                    conn,
-                    scenario=flags["scenario"],
-                    verdict=flags["verdict"],
-                    status=flags["status"],
-                    limit=flags["limit"],
-                )
+                runs = _list_runs(conn, flags, caller)
             finally:
                 conn.close()
             self._send_json({"runs": runs})
@@ -644,7 +1053,9 @@ class ConvertHandler(http.server.SimpleHTTPRequestHandler):
             assert ConvertHandler.registry is not None
             run_key = parsed.path[len("/api/runs/") :]
             snapshot = ConvertHandler.registry.snapshot(run_key)
-            if snapshot is None:
+            if snapshot is None or (
+                caller is not None and snapshot.get("tenant") != caller
+            ):
                 self._send_json({"error": "E_CONFIG", "hint": "unknown run_key"}, 404)
                 return
             self._send_json(snapshot)
@@ -653,13 +1064,7 @@ class ConvertHandler(http.server.SimpleHTTPRequestHandler):
             flags = _query_flags(urllib.parse.parse_qs(parsed.query))
             conn = self._db()
             try:
-                pairs = db_module.list_odrl_docs(
-                    conn,
-                    scenario=flags["scenario"],
-                    valid=flags["valid"],
-                    attacker=flags["attacker"],
-                    limit=flags["limit"],
-                )
+                pairs = _list_pairs(conn, flags, caller)
             finally:
                 conn.close()
             self._send_json({"pairs": pairs})

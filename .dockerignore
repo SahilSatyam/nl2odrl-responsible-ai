@@ -1,0 +1,15 @@
+.venv/
+venv/
+node_modules/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+agentcrash.db
+traces/
+reports/
+.DS_Store
+.env
+.env.*

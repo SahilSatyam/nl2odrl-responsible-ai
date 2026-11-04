@@ -16,3 +16,6 @@ COMPLIANCE_BUNDLE.md
 dist/
 build/
 .DS_Store
+*.db
+/ui/assets/
+node_modules/

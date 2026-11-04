@@ -1,0 +1,21 @@
+services:
+  studio:
+    build: .
+    ports:
+      - "8901:8901"
+    environment:
+      # Live model endpoint (required for Convert; seed/check/serve work offline).
+      - LLAMA_API_KEY=${LLAMA_API_KEY:-}
+      - LLAMA_BASE_URL=${LLAMA_BASE_URL:-}
+      # Product API keys, comma-separated. Empty = open local mode.
+      - NL2ODRL_API_KEYS=${NL2ODRL_API_KEYS:-}
+    volumes:
+      # Persist runs, evidence, and issued keys across restarts.
+      # The db bind needs a pre-created file: touch agentcrash-data/agentcrash.db
+      - ./agentcrash-data/agentcrash.db:/app/agentcrash.db
+      - agentcrash-traces:/app/traces
+      - agentcrash-reports:/app/reports
+
+volumes:
+  agentcrash-traces:
+  agentcrash-reports:
