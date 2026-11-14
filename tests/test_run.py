@@ -8,6 +8,7 @@ key-gated live tests elsewhere.
 """
 
 import json
+import shutil
 import time
 import urllib.request
 from pathlib import Path
@@ -174,12 +175,20 @@ def test_fault_free_run_records_no_injector_phases(tmp_path, monkeypatch) -> Non
     assert verify_chain(str(trace))["ok"] is True
 
 
+def _link_or_copy(link: Path, target: Path) -> None:
+    """Symlink a repo dir into the tmp cwd, copying when Windows blocks symlinks."""
+    try:
+        link.symlink_to(target, target_is_directory=True)
+    except OSError:  # WinError 1314 without symlink privilege / Developer Mode
+        shutil.copytree(target, link)
+
+
 def test_run_id_formula_and_default_trace_path(tmp_path, monkeypatch) -> None:
     scripted_transport(monkeypatch, NAIVE_ACTIONS)
     monkeypatch.chdir(tmp_path)
-    Path("scenarios").symlink_to(REPO / "scenarios", target_is_directory=True)
-    Path("policies").symlink_to(REPO / "policies", target_is_directory=True)
-    Path("tests").symlink_to(REPO / "tests", target_is_directory=True)
+    _link_or_copy(Path("scenarios"), REPO / "scenarios")
+    _link_or_copy(Path("policies"), REPO / "policies")
+    _link_or_copy(Path("tests"), REPO / "tests")
     scenario_text = SCENARIO_FILE.read_text(encoding="utf-8")
     policy_text = POLICY_FILE.read_text(encoding="utf-8")
     assert main(["run", "--scenario", "odrl_convert", "--seed", "42"]) == 0
