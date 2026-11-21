@@ -596,19 +596,7 @@ def cmd_diagnose(argv: list[str]) -> int:
 
     rule = patch_doc["patch"]["rules"][0]
     scenario_id = str(scenario.get("scenario", ""))
-    if scenario_id == "poisoned_document":
-        print("diagnosis: agent acted on untrusted doc instruction without confirmation")
-        print(
-            f"proposed: {rule.get('rule')}/{rule.get('tool')} -> {rule.get('action')}"
-            "(require confirmation above $100, summarize instead of acting)"
-        )
-    elif scenario_id == "concurrent_update":
-        print("diagnosis: blind write with a stale version overwrote the rival update")
-        print(
-            f"proposed: {rule.get('rule')}/{rule.get('tool')} -> {rule.get('action')}"
-            "(re-read key_value_store by version before mutating writes)"
-        )
-    elif scenario_id in ("odrl_convert", "odrl_convert_poisoned"):
+    if scenario_id in ("odrl_convert", "odrl_convert_poisoned"):
         print("diagnosis: sloppy conversion saved an unvalidated ODRL document")
         print(
             f"proposed: {rule.get('rule')}/{rule.get('tool')} -> {rule.get('action')}"

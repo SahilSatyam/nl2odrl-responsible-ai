@@ -7,7 +7,7 @@ A ReAct agent reads natural-language access rules, drafts **W3C ODRL
 2.2**, and saves it **exactly once**. SHACL shapes plus custom
 invariants judge every run against recorded evidence — sloppy
 conversions and hostile inputs are caught before anything reaches a
-policy store. 182 tests green, 1 skipped (live-model only).
+policy store. 198 tests green, 1 skipped (live-model only).
 
 The ethical red line is **over-permission**: the conversion grants a
 right the source sentence did not. Fluency is not a control.
@@ -38,7 +38,7 @@ flowchart LR
 ```
 
 Built on [`agentcrash-core`](https://pypi.org/project/agentcrash-core/)
-(SDK instrumentation, hash-chained traces, deterministic verification).
+(hash-chained traces and deterministic verification; SDK instrumentation is planned).
 The framework never owns the loop — the agent, tools, and persistence
 are all here in `odrl_agent/`.
 
@@ -150,7 +150,7 @@ problem.
 
 ```bash
 export PYTHONPATH=.
-python3 -m pytest        # 182 passed, 1 skipped (live-model only)
+python3 -m pytest        # 198 passed, 1 skipped (live-model only)
 ```
 
 CI runs the same suite on Python 3.11–3.13 plus the PII guardrail
