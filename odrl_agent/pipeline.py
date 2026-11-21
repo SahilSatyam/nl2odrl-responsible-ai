@@ -43,7 +43,7 @@ from odrl_agent.instrument import (
     default_sdk,
     finish,
 )
-from odrl_agent.ir import PolicyIR, RuleIR
+from odrl_agent.ir import AmbiguityFlag, PolicyIR, RuleIR
 from odrl_agent.llm import LlmError, StructuredLlm
 from odrl_agent.odrl import ODRL_SHAPES_ID, validate_odrl
 from odrl_agent.reasoning import analyze
@@ -509,15 +509,32 @@ def convert(
     injected = {i.rule_index for i in gate.issues if i.code == INJECTED_GRANT}
     injected_rules = {id(r) for n, r in enumerate(final.rules) if n in injected}
 
+    def _unassigned(rule: RuleIR) -> bool:
+        # A grant with no assignee grants to anyone: never auto-publishable.
+        return rule.modality == "permission" and not (rule.assignee or final.assignee)
+
     def _droppable(rule: RuleIR) -> bool:
         if rule.modality != "permission":
             return False
-        return id(rule) in injected_rules or not _is_grounded(rule) or not rule.target
+        return (id(rule) in injected_rules or not _is_grounded(rule) or not rule.target
+                or _unassigned(rule))
 
     dropped = [r.model_dump(mode="json") for r in final.rules if _droppable(r)]
     if dropped:
+        flagged = {a.kind for a in final.ambiguities}
+        extra = [
+            AmbiguityFlag(
+                kind="missing_assignee",
+                description="permission names no party; dropped instead of granting to anyone",
+                span=r.source_spans[0] if r.source_spans else None,
+            )
+            for r in final.rules
+            if _unassigned(r) and "missing_assignee" not in flagged
+        ][:1]
         kept = [r for r in final.rules if not _droppable(r)]
-        final = final.model_copy(update={"rules": kept})
+        final = final.model_copy(
+            update={"rules": kept, "ambiguities": [*final.ambiguities, *extra]}
+        )
         stage("ground", dropped_ungrounded_permissions=len(dropped))
         final, gate = grounder.ground(final, source)
     stage("ground", gate=gate.codes())

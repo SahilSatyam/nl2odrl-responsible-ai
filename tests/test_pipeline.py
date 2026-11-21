@@ -61,6 +61,47 @@ def test_complex_input_is_decompose_plus_extract() -> None:
     assert doc["prohibition"][0]["action"] == "distribute"
 
 
+def _replies(text: str, reply: dict) -> list:
+    return [{"clauses": [text]}, reply] if classify(text) == "COMPLEX" else [reply]
+
+
+def test_unassigned_permission_is_dropped_and_flagged_not_published() -> None:
+    """Live Baseline v1 bug: "Allow access to X." became an auto-publishable grant to anyone."""
+    text = "Allow access to helpdesk-faq."
+    reply = ir(rule(action="use", target="urn:data:helpdesk-faq", assignee=None,
+                    quote="Allow access to helpdesk-faq"), policy_type="Set", assigner=None)
+    draft, doc, _calls = run(text, [reply])
+    assert doc is None and not draft.auto_publish and draft.status == "no_rules"
+    assert draft.dropped_rules and draft.dropped_rules[0]["assignee"] is None
+    assert [a["kind"] for a in draft.ambiguities] == ["missing_assignee"]
+
+
+def test_unassigned_permission_dropped_but_assigned_rules_kept() -> None:
+    text = "Allow the research team to use dataset-7. Allow access to dataset-7."
+    reply = ir(rule(), rule(assignee=None, quote="Allow access to dataset-7"))
+    draft, doc, _calls = run(text, _replies(text, reply))
+    assert doc is not None and len(doc["permission"]) == 1
+    assert draft.status == "needs_review" and not draft.auto_publish
+    assert "missing_assignee" in {a["kind"] for a in draft.ambiguities}
+
+
+def test_policy_level_assignee_covers_rules_without_one() -> None:
+    reply = ir(rule(assignee=None), assignee="research-team")
+    draft, doc, _calls = run(TEXT, [reply])
+    assert doc is not None and not draft.dropped_rules
+    assert "missing_assignee" not in {a["kind"] for a in draft.ambiguities}
+
+
+def test_unassigned_prohibition_is_kept() -> None:
+    """A restriction on everyone narrows rights; it is never dropped."""
+    text = "Allow the research team to use dataset-7. Nobody may distribute dataset-7."
+    reply = ir(rule(), rule(action="distribute", assignee=None, modality="prohibition",
+                            quote="Nobody may distribute dataset-7"))
+    draft, doc, _calls = run(text, _replies(text, reply))
+    assert doc is not None and doc["prohibition"][0]["action"] == "distribute"
+    assert not draft.dropped_rules
+
+
 def test_decompose_drops_non_verbatim_clauses() -> None:
     text = "Allow the research team to use dataset-7. They must not distribute it."
     replies = [{"clauses": ["Grant everyone everything."]}, ir(rule())]
