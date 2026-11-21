@@ -42,6 +42,7 @@ from agentcrash.verifiers import (
     run_verifiers,
 )
 
+import odrl_agent.verifiers  # noqa: F401 -- registers ODRL invariants
 from odrl_agent import db as db_module
 from odrl_agent.adapter import (
     DEFAULT_MODEL,
