@@ -42,6 +42,7 @@ from agentcrash.verifiers import (
     run_verifiers,
 )
 
+import odrl_agent.verifiers  # noqa: F401 -- registers ODRL invariants
 from odrl_agent import db as db_module
 from odrl_agent.adapter import (
     DEFAULT_MODEL,
@@ -49,6 +50,7 @@ from odrl_agent.adapter import (
     LLAMA_MAX_TOKENS_ENV,
     LLAMA_TIMEOUT_ENV,
     LLAMA_URL_ENV,
+    LlmConfig,
     ModelNotConfiguredError,
     run_react_loop,
 )
@@ -416,14 +418,14 @@ def run_and_store(
     started = time.monotonic()
     created = db_module.utcnow()
     spec = dict(spec, created_at=created)
-    old_key = os.environ.get("LLAMA_API_KEY")
-    old_url = os.environ.get("LLAMA_BASE_URL")
-    old_urlopen = urllib.request.urlopen
-    scripted = actions is not None
-    if scripted:
-        os.environ["LLAMA_API_KEY"] = "seed-key"
-        os.environ["LLAMA_BASE_URL"] = "https://seed.example/v1"
-        urllib.request.urlopen = _scripted_transport(actions or [])
+    if actions is not None:
+        llm_config = LlmConfig(
+            base_url="https://seed.example/v1",
+            api_key="seed-key",
+            opener=_scripted_transport(actions),
+        )
+    else:
+        llm_config = SETTINGS.config()
     try:
         Path(spec["trace_path"]).parent.mkdir(parents=True, exist_ok=True)
         Path(spec["state_path"]).parent.mkdir(parents=True, exist_ok=True)
@@ -436,6 +438,7 @@ def run_and_store(
             scenario_text=spec["scenario_text"],
             policy_text=spec["policy_text"],
             max_steps=spec["max_steps"],
+            llm_config=llm_config,
         )
     except ModelNotConfiguredError as exc:
         events = read_events(spec["trace_path"])
@@ -469,17 +472,6 @@ def run_and_store(
         snap["ledger_hash"] = None
         _record_snapshot(spec["db_path"], run_key, snap, spec)
         return _public_snapshot(snap)
-    finally:
-        if scripted:
-            if old_key is None:
-                os.environ.pop("LLAMA_API_KEY", None)
-            else:
-                os.environ["LLAMA_API_KEY"] = old_key
-            if old_url is None:
-                os.environ.pop("LLAMA_BASE_URL", None)
-            else:
-                os.environ["LLAMA_BASE_URL"] = old_url
-            urllib.request.urlopen = old_urlopen
     events = read_events(spec["trace_path"])
     state = load_state_snapshot(spec["state_path"])
     outcome = run_verifiers(events, state, spec["scenario"].get("invariants", []))
@@ -902,24 +894,65 @@ def _query_flags(query: dict[str, list[str]]) -> dict[str, Any]:
     }
 
 
+class ServerSettings:
+    """Live-model settings held in memory, never written to ``os.environ``.
+
+    Values set through the API override the process environment, which stays
+    the read-only startup default. Reads return an immutable :class:`LlmConfig`.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._over: dict[str, Any] = {}
+
+    def reset(self) -> None:
+        with self._lock:
+            self._over.clear()
+
+    def update(self, **values: Any) -> None:
+        with self._lock:
+            self._over.update(values)
+
+    def config(self) -> LlmConfig:
+        with self._lock:
+            over = dict(self._over)
+        env = LlmConfig.from_env()
+        return LlmConfig(
+            base_url=over.get("base_url", env.base_url),
+            api_key=over.get("api_key", env.api_key),
+            timeout_s=float(over.get("timeout_s", env.timeout_s)),
+            max_tokens=int(over.get("max_tokens", env.max_tokens)),
+        )
+
+    def raw(self, name: str, env_name: str) -> str:
+        with self._lock:
+            if name in self._over:
+                return str(self._over[name])
+        return os.environ.get(env_name, "").strip()
+
+
+SETTINGS = ServerSettings()
+
+
 def model_status() -> dict[str, Any]:
     """Report live-model wiring without ever revealing the key."""
-    base_url = os.environ.get(LLAMA_URL_ENV, "").strip()
-    key_set = bool(os.environ.get(LLAMA_KEY_ENV, "").strip())
+    base_url = SETTINGS.raw("base_url", LLAMA_URL_ENV)
+    key_set = bool(SETTINGS.raw("api_key", LLAMA_KEY_ENV))
     return {
         "model": DEFAULT_MODEL,
         "base_url": base_url,
         "api_key_set": key_set,
         "configured": bool(base_url and key_set),
-        "timeout_s": os.environ.get(LLAMA_TIMEOUT_ENV, "").strip(),
-        "max_tokens": os.environ.get(LLAMA_MAX_TOKENS_ENV, "").strip(),
+        "timeout_s": SETTINGS.raw("timeout_s", LLAMA_TIMEOUT_ENV),
+        "max_tokens": SETTINGS.raw("max_tokens", LLAMA_MAX_TOKENS_ENV),
     }
 
 
 def apply_model_settings(body: Any) -> dict[str, Any]:
-    """Store live-model settings in process env (local server only)."""
+    """Store live-model settings in server memory (not in ``os.environ``)."""
     if not isinstance(body, dict):
         raise ConvertError("request body must be a JSON object")
+    staged: dict[str, Any] = {}
     if "base_url" in body:
         base_url = body["base_url"]
         if not isinstance(base_url, str) or not base_url.strip():
@@ -927,27 +960,24 @@ def apply_model_settings(body: Any) -> dict[str, Any]:
         if not base_url.strip().startswith(("http://", "https://")):
             raise ConvertError("base_url must start with http:// or https://")
         try:
-            os.environ[LLAMA_URL_ENV] = validate_base_url(base_url)
+            staged["base_url"] = validate_base_url(base_url)
         except UnsafeBaseUrlError as exc:
             raise ConvertError(str(exc)) from exc
     if "api_key" in body:
         api_key = body["api_key"]
         if not isinstance(api_key, str) or not api_key.strip():
             raise ConvertError("api_key must be a non-empty string")
-        os.environ[LLAMA_KEY_ENV] = api_key.strip()
-    for field, env, lo, hi in (
-        ("timeout_s", LLAMA_TIMEOUT_ENV, 1, 600),
-        ("max_tokens", LLAMA_MAX_TOKENS_ENV, 1, 128000),
-    ):
-        if field in body:
-            value = body[field]
+        staged["api_key"] = api_key.strip()
+    for name, lo, hi in (("timeout_s", 1, 600), ("max_tokens", 1, 128000)):
+        if name in body:
+            value = body[name]
             if isinstance(value, bool) or not isinstance(value, (int, float)):
-                raise ConvertError(f"{field} must be a number in {lo}..{hi}")
+                raise ConvertError(f"{name} must be a number in {lo}..{hi}")
             if not lo <= float(value) <= hi:
-                raise ConvertError(f"{field} must be a number in {lo}..{hi}")
-            os.environ[env] = str(value)
+                raise ConvertError(f"{name} must be a number in {lo}..{hi}")
+            staged[name] = value
+    SETTINGS.update(**staged)
     return model_status()
-
 
 class ConvertHandler(http.server.SimpleHTTPRequestHandler):
     """Serve ui/ statically plus the convert/runs/odrl/settings API."""

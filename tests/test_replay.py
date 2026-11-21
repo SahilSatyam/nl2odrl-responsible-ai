@@ -11,9 +11,9 @@ import urllib.request
 from pathlib import Path
 
 import pytest
-from odrl_agent.remediation import reference_patch_for
 
 from odrl_agent.cli import main
+from odrl_agent.remediation import reference_patch_for
 
 REPO = Path(__file__).resolve().parent.parent
 SCENARIO_FILE = REPO / "scenarios" / "odrl_convert" / "scenario.yaml"
