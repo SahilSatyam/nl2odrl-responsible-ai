@@ -1,0 +1,626 @@
+{
+  "name": "nl2odrl",
+  "description": "NL-to-ODRL agentic converter: a fixed-stage pipeline that turns natural-language access rules into W3C ODRL 2.2 policies, with a typed IR, a deterministic compiler and SHACL validation.",
+  "languages": [
+    "css",
+    "dockerfile",
+    "html",
+    "json",
+    "jsonld",
+    "markdown",
+    "python",
+    "toml",
+    "ttl",
+    "typescript",
+    "yaml"
+  ],
+  "frameworks": [
+    "FastAPI",
+    "Pydantic",
+    "Pytest",
+    "React",
+    "Vite",
+    "TypeScript",
+    "Docker",
+    "Docker Compose",
+    "GitHub Actions"
+  ],
+  "files": [
+    {
+      "path": ".dockerignore",
+      "language": "unknown",
+      "sizeLines": 15,
+      "fileCategory": "infra"
+    },
+    {
+      "path": ".github/workflows/bench-live.yml",
+      "language": "yaml",
+      "sizeLines": 65,
+      "fileCategory": "infra"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "language": "yaml",
+      "sizeLines": 61,
+      "fileCategory": "infra"
+    },
+    {
+      "path": "Dockerfile",
+      "language": "dockerfile",
+      "sizeLines": 30,
+      "fileCategory": "infra"
+    },
+    {
+      "path": "README.md",
+      "language": "markdown",
+      "sizeLines": 269,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docker-compose.yml",
+      "language": "yaml",
+      "sizeLines": 40,
+      "fileCategory": "infra"
+    },
+    {
+      "path": "docs/NL2ODRL-SOTA-Implementation-Plan.md",
+      "language": "markdown",
+      "sizeLines": 276,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "odrl_agent/__init__.py",
+      "language": "python",
+      "sizeLines": 16,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/adapter.py",
+      "language": "python",
+      "sizeLines": 191,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/app.py",
+      "language": "python",
+      "sizeLines": 389,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/auth.py",
+      "language": "python",
+      "sizeLines": 158,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/bench/__init__.py",
+      "language": "python",
+      "sizeLines": 1,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/bench/__main__.py",
+      "language": "python",
+      "sizeLines": 105,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/bench/evaluator.py",
+      "language": "python",
+      "sizeLines": 165,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/bench/gates.py",
+      "language": "python",
+      "sizeLines": 69,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/bench/generate.py",
+      "language": "python",
+      "sizeLines": 364,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/bench/metrics.py",
+      "language": "python",
+      "sizeLines": 217,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/bench/oracle.py",
+      "language": "python",
+      "sizeLines": 76,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/bench/pins.py",
+      "language": "python",
+      "sizeLines": 50,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/bench/runner.py",
+      "language": "python",
+      "sizeLines": 114,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/chaos.py",
+      "language": "python",
+      "sizeLines": 159,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/cli.py",
+      "language": "python",
+      "sizeLines": 936,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/compiler.py",
+      "language": "python",
+      "sizeLines": 180,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/db.py",
+      "language": "python",
+      "sizeLines": 411,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/dspy_opt.py",
+      "language": "python",
+      "sizeLines": 497,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/extractor.py",
+      "language": "python",
+      "sizeLines": 194,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/grounder.py",
+      "language": "python",
+      "sizeLines": 403,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/instrument.py",
+      "language": "python",
+      "sizeLines": 117,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/ir.py",
+      "language": "python",
+      "sizeLines": 393,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/llm.py",
+      "language": "python",
+      "sizeLines": 171,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/netguard.py",
+      "language": "python",
+      "sizeLines": 58,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/observability.py",
+      "language": "python",
+      "sizeLines": 163,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/odrl.py",
+      "language": "python",
+      "sizeLines": 170,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/pipeline.py",
+      "language": "python",
+      "sizeLines": 732,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/publish.py",
+      "language": "python",
+      "sizeLines": 300,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/reasoning.py",
+      "language": "python",
+      "sizeLines": 317,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/remediation.py",
+      "language": "python",
+      "sizeLines": 108,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/strict.py",
+      "language": "python",
+      "sizeLines": 156,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/tools.py",
+      "language": "python",
+      "sizeLines": 254,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/verifiers.py",
+      "language": "python",
+      "sizeLines": 351,
+      "fileCategory": "code"
+    },
+    {
+      "path": "odrl_agent/web.py",
+      "language": "python",
+      "sizeLines": 1142,
+      "fileCategory": "code"
+    },
+    {
+      "path": "policies/default.yaml",
+      "language": "yaml",
+      "sizeLines": 5,
+      "fileCategory": "config"
+    },
+    {
+      "path": "policies/fixed-odrl-convert.yaml",
+      "language": "yaml",
+      "sizeLines": 21,
+      "fileCategory": "config"
+    },
+    {
+      "path": "prompts/pack-probe-v1.json",
+      "language": "json",
+      "sizeLines": 28,
+      "fileCategory": "config"
+    },
+    {
+      "path": "pyproject.toml",
+      "language": "toml",
+      "sizeLines": 41,
+      "fileCategory": "config"
+    },
+    {
+      "path": "scenarios/odrl_convert/scenario.yaml",
+      "language": "yaml",
+      "sizeLines": 45,
+      "fileCategory": "config"
+    },
+    {
+      "path": "scenarios/odrl_convert_poisoned/scenario.yaml",
+      "language": "yaml",
+      "sizeLines": 46,
+      "fileCategory": "config"
+    },
+    {
+      "path": "schemas/env-state.json",
+      "language": "json",
+      "sizeLines": 20,
+      "fileCategory": "config"
+    },
+    {
+      "path": "schemas/odrl-2.2-shapes.ttl",
+      "language": "ttl",
+      "sizeLines": 236,
+      "fileCategory": "code"
+    },
+    {
+      "path": "schemas/odrl-2.2.jsonld",
+      "language": "jsonld",
+      "sizeLines": 200,
+      "fileCategory": "code"
+    },
+    {
+      "path": "schemas/odrl-2.2.ttl",
+      "language": "ttl",
+      "sizeLines": 2274,
+      "fileCategory": "code"
+    },
+    {
+      "path": "schemas/policy-patch.json",
+      "language": "json",
+      "sizeLines": 13,
+      "fileCategory": "config"
+    },
+    {
+      "path": "schemas/policy.json",
+      "language": "json",
+      "sizeLines": 42,
+      "fileCategory": "config"
+    },
+    {
+      "path": "schemas/scenario.json",
+      "language": "json",
+      "sizeLines": 49,
+      "fileCategory": "config"
+    },
+    {
+      "path": "schemas/trace-event.json",
+      "language": "json",
+      "sizeLines": 35,
+      "fileCategory": "config"
+    },
+    {
+      "path": "scripts/baseline_v0.py",
+      "language": "python",
+      "sizeLines": 101,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/make_baseline_cases.py",
+      "language": "python",
+      "sizeLines": 67,
+      "fileCategory": "code"
+    },
+    {
+      "path": "ui-react/.oxlintrc.json",
+      "language": "json",
+      "sizeLines": 8,
+      "fileCategory": "config"
+    },
+    {
+      "path": "ui-react/README.md",
+      "language": "markdown",
+      "sizeLines": 32,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "ui-react/index.html",
+      "language": "html",
+      "sizeLines": 15,
+      "fileCategory": "markup"
+    },
+    {
+      "path": "ui-react/package.json",
+      "language": "json",
+      "sizeLines": 25,
+      "fileCategory": "config"
+    },
+    {
+      "path": "ui-react/src/App.tsx",
+      "language": "typescript",
+      "sizeLines": 431,
+      "fileCategory": "code"
+    },
+    {
+      "path": "ui-react/src/api.ts",
+      "language": "typescript",
+      "sizeLines": 118,
+      "fileCategory": "code"
+    },
+    {
+      "path": "ui-react/src/index.css",
+      "language": "css",
+      "sizeLines": 131,
+      "fileCategory": "markup"
+    },
+    {
+      "path": "ui-react/src/main.tsx",
+      "language": "typescript",
+      "sizeLines": 10,
+      "fileCategory": "code"
+    },
+    {
+      "path": "ui-react/tsconfig.app.json",
+      "language": "json",
+      "sizeLines": 26,
+      "fileCategory": "config"
+    },
+    {
+      "path": "ui-react/tsconfig.json",
+      "language": "json",
+      "sizeLines": 7,
+      "fileCategory": "config"
+    },
+    {
+      "path": "ui-react/tsconfig.node.json",
+      "language": "json",
+      "sizeLines": 23,
+      "fileCategory": "config"
+    },
+    {
+      "path": "ui-react/vite.config.ts",
+      "language": "typescript",
+      "sizeLines": 10,
+      "fileCategory": "code"
+    },
+    {
+      "path": "ui/index.html",
+      "language": "html",
+      "sizeLines": 16,
+      "fileCategory": "markup"
+    }
+  ],
+  "totalFiles": 70,
+  "filteredByIgnore": 61,
+  "estimatedComplexity": "moderate",
+  "importMap": {
+    ".dockerignore": [],
+    ".github/workflows/bench-live.yml": [],
+    ".github/workflows/ci.yml": [],
+    "Dockerfile": [],
+    "README.md": [],
+    "docker-compose.yml": [],
+    "docs/NL2ODRL-SOTA-Implementation-Plan.md": [],
+    "odrl_agent/__init__.py": [],
+    "odrl_agent/adapter.py": [
+      "odrl_agent/extractor.py",
+      "odrl_agent/llm.py"
+    ],
+    "odrl_agent/app.py": [
+      "odrl_agent/__init__.py",
+      "odrl_agent/auth.py",
+      "odrl_agent/observability.py",
+      "odrl_agent/web.py"
+    ],
+    "odrl_agent/auth.py": [],
+    "odrl_agent/bench/__init__.py": [],
+    "odrl_agent/bench/__main__.py": [
+      "odrl_agent/bench/__init__.py",
+      "odrl_agent/bench/generate.py",
+      "odrl_agent/bench/oracle.py",
+      "odrl_agent/bench/pins.py",
+      "odrl_agent/bench/runner.py"
+    ],
+    "odrl_agent/bench/evaluator.py": [
+      "odrl_agent/grounder.py",
+      "odrl_agent/reasoning.py"
+    ],
+    "odrl_agent/bench/gates.py": [],
+    "odrl_agent/bench/generate.py": [],
+    "odrl_agent/bench/metrics.py": [
+      "odrl_agent/bench/evaluator.py",
+      "odrl_agent/grounder.py",
+      "odrl_agent/reasoning.py"
+    ],
+    "odrl_agent/bench/oracle.py": [
+      "odrl_agent/extractor.py",
+      "odrl_agent/llm.py"
+    ],
+    "odrl_agent/bench/pins.py": [
+      "odrl_agent/__init__.py",
+      "odrl_agent/extractor.py",
+      "odrl_agent/ir.py"
+    ],
+    "odrl_agent/bench/runner.py": [
+      "odrl_agent/bench/__init__.py",
+      "odrl_agent/bench/gates.py",
+      "odrl_agent/bench/generate.py",
+      "odrl_agent/bench/metrics.py",
+      "odrl_agent/bench/pins.py",
+      "odrl_agent/extractor.py",
+      "odrl_agent/grounder.py",
+      "odrl_agent/llm.py",
+      "odrl_agent/pipeline.py"
+    ],
+    "odrl_agent/chaos.py": [
+      "odrl_agent/instrument.py",
+      "odrl_agent/llm.py"
+    ],
+    "odrl_agent/cli.py": [
+      "odrl_agent/__init__.py",
+      "odrl_agent/adapter.py",
+      "odrl_agent/dspy_opt.py",
+      "odrl_agent/pipeline.py",
+      "odrl_agent/remediation.py",
+      "odrl_agent/tools.py",
+      "odrl_agent/verifiers.py"
+    ],
+    "odrl_agent/compiler.py": [
+      "odrl_agent/ir.py",
+      "odrl_agent/odrl.py"
+    ],
+    "odrl_agent/db.py": [],
+    "odrl_agent/dspy_opt.py": [
+      "odrl_agent/odrl.py"
+    ],
+    "odrl_agent/extractor.py": [
+      "odrl_agent/ir.py",
+      "odrl_agent/llm.py"
+    ],
+    "odrl_agent/grounder.py": [
+      "odrl_agent/ir.py"
+    ],
+    "odrl_agent/instrument.py": [],
+    "odrl_agent/ir.py": [],
+    "odrl_agent/llm.py": [],
+    "odrl_agent/netguard.py": [],
+    "odrl_agent/observability.py": [],
+    "odrl_agent/odrl.py": [],
+    "odrl_agent/pipeline.py": [
+      "odrl_agent/compiler.py",
+      "odrl_agent/extractor.py",
+      "odrl_agent/grounder.py",
+      "odrl_agent/instrument.py",
+      "odrl_agent/ir.py",
+      "odrl_agent/llm.py",
+      "odrl_agent/odrl.py",
+      "odrl_agent/reasoning.py",
+      "odrl_agent/strict.py",
+      "odrl_agent/tools.py"
+    ],
+    "odrl_agent/publish.py": [
+      "odrl_agent/__init__.py",
+      "odrl_agent/compiler.py",
+      "odrl_agent/ir.py",
+      "odrl_agent/odrl.py",
+      "odrl_agent/reasoning.py"
+    ],
+    "odrl_agent/reasoning.py": [
+      "odrl_agent/ir.py"
+    ],
+    "odrl_agent/remediation.py": [],
+    "odrl_agent/strict.py": [],
+    "odrl_agent/tools.py": [
+      "odrl_agent/odrl.py"
+    ],
+    "odrl_agent/verifiers.py": [
+      "odrl_agent/odrl.py"
+    ],
+    "odrl_agent/web.py": [
+      "odrl_agent/__init__.py",
+      "odrl_agent/adapter.py",
+      "odrl_agent/netguard.py",
+      "odrl_agent/observability.py",
+      "odrl_agent/odrl.py",
+      "odrl_agent/pipeline.py",
+      "odrl_agent/remediation.py",
+      "odrl_agent/verifiers.py"
+    ],
+    "policies/default.yaml": [],
+    "policies/fixed-odrl-convert.yaml": [],
+    "prompts/pack-probe-v1.json": [],
+    "pyproject.toml": [],
+    "scenarios/odrl_convert/scenario.yaml": [],
+    "scenarios/odrl_convert_poisoned/scenario.yaml": [],
+    "schemas/env-state.json": [],
+    "schemas/odrl-2.2-shapes.ttl": [],
+    "schemas/odrl-2.2.jsonld": [],
+    "schemas/odrl-2.2.ttl": [],
+    "schemas/policy-patch.json": [],
+    "schemas/policy.json": [],
+    "schemas/scenario.json": [],
+    "schemas/trace-event.json": [],
+    "scripts/baseline_v0.py": [
+      "odrl_agent/adapter.py",
+      "odrl_agent/web.py"
+    ],
+    "scripts/make_baseline_cases.py": [
+      "odrl_agent/dspy_opt.py"
+    ],
+    "ui-react/.oxlintrc.json": [],
+    "ui-react/README.md": [],
+    "ui-react/index.html": [],
+    "ui-react/package.json": [],
+    "ui-react/src/App.tsx": [
+      "ui-react/src/api.ts"
+    ],
+    "ui-react/src/api.ts": [],
+    "ui-react/src/index.css": [],
+    "ui-react/src/main.tsx": [
+      "ui-react/src/App.tsx",
+      "ui-react/src/index.css"
+    ],
+    "ui-react/tsconfig.app.json": [],
+    "ui-react/tsconfig.json": [],
+    "ui-react/tsconfig.node.json": [],
+    "ui-react/vite.config.ts": [],
+    "ui/index.html": []
+  }
+}
