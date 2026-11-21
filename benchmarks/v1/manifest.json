@@ -1,0 +1,661 @@
+{
+ "benchmark": "nl2odrl-bench",
+ "version": "1.0.0",
+ "cases_sha": "38accbc53232b9cc",
+ "total": 240,
+ "tiers": {
+  "1": {
+   "cases": 60,
+   "share": 0.25
+  },
+  "2": {
+   "cases": 72,
+   "share": 0.3
+  },
+  "3": {
+   "cases": 48,
+   "share": 0.2
+  },
+  "4": {
+   "cases": 36,
+   "share": 0.15
+  },
+  "5": {
+   "cases": 24,
+   "share": 0.1
+  }
+ },
+ "split_rule": "sha256(group) % 10 < 3 -> dev else test; a group never spans splits",
+ "groups": {
+  "t1/grant/annotate": {
+   "split": "test",
+   "tier": 1,
+   "cases": 5
+  },
+  "t1/grant/archive": {
+   "split": "test",
+   "tier": 1,
+   "cases": 5
+  },
+  "t1/grant/derive": {
+   "split": "dev",
+   "tier": 1,
+   "cases": 5
+  },
+  "t1/grant/display": {
+   "split": "dev",
+   "tier": 1,
+   "cases": 5
+  },
+  "t1/grant/distribute": {
+   "split": "dev",
+   "tier": 1,
+   "cases": 5
+  },
+  "t1/grant/modify": {
+   "split": "test",
+   "tier": 1,
+   "cases": 5
+  },
+  "t1/grant/print": {
+   "split": "test",
+   "tier": 1,
+   "cases": 5
+  },
+  "t1/grant/read": {
+   "split": "dev",
+   "tier": 1,
+   "cases": 5
+  },
+  "t1/grant/reproduce": {
+   "split": "test",
+   "tier": 1,
+   "cases": 5
+  },
+  "t1/grant/stream": {
+   "split": "test",
+   "tier": 1,
+   "cases": 5
+  },
+  "t1/grant/translate": {
+   "split": "test",
+   "tier": 1,
+   "cases": 5
+  },
+  "t1/grant/use": {
+   "split": "test",
+   "tier": 1,
+   "cases": 5
+  },
+  "t2/count/annotate": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/count/archive": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/count/derive": {
+   "split": "dev",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/count/distribute": {
+   "split": "dev",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/count/modify": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/count/read": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/count/reproduce": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/count/stream": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/count/translate": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/count/use": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/duty/annotate": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/duty/archive": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/duty/display": {
+   "split": "dev",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/duty/modify": {
+   "split": "dev",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/duty/print": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/duty/read": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/duty/reproduce": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/duty/stream": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/duty/translate": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/duty/use": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/elapsed/annotate": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/elapsed/derive": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/elapsed/display": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/elapsed/distribute": {
+   "split": "dev",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/elapsed/modify": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/elapsed/print": {
+   "split": "dev",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/elapsed/read": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/elapsed/reproduce": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/elapsed/translate": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/elapsed/use": {
+   "split": "dev",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/prohibit/archive": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/prohibit/derive": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/prohibit/display": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/prohibit/distribute": {
+   "split": "dev",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/prohibit/modify": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/prohibit/print": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/prohibit/read": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/prohibit/reproduce": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/prohibit/stream": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/prohibit/use": {
+   "split": "dev",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/purpose/annotate": {
+   "split": "dev",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/purpose/archive": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/purpose/derive": {
+   "split": "dev",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/purpose/display": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/purpose/distribute": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/purpose/modify": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/purpose/print": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/purpose/reproduce": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/purpose/stream": {
+   "split": "dev",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/purpose/translate": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/region/annotate": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/region/archive": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/region/derive": {
+   "split": "dev",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/region/display": {
+   "split": "dev",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/region/distribute": {
+   "split": "dev",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/region/print": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/region/read": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/region/reproduce": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/region/stream": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/region/translate": {
+   "split": "dev",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/region/use": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/until/annotate": {
+   "split": "dev",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/until/archive": {
+   "split": "dev",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/until/derive": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/until/display": {
+   "split": "dev",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/until/distribute": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/until/modify": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/until/print": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/until/read": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/until/stream": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/until/translate": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t2/until/use": {
+   "split": "test",
+   "tier": 2,
+   "cases": 1
+  },
+  "t3/conflict/read": {
+   "split": "test",
+   "tier": 3,
+   "cases": 6
+  },
+  "t3/either/annotate": {
+   "split": "dev",
+   "tier": 3,
+   "cases": 1
+  },
+  "t3/either/derive": {
+   "split": "dev",
+   "tier": 3,
+   "cases": 1
+  },
+  "t3/either/display": {
+   "split": "dev",
+   "tier": 3,
+   "cases": 1
+  },
+  "t3/either/modify": {
+   "split": "test",
+   "tier": 3,
+   "cases": 1
+  },
+  "t3/either/read": {
+   "split": "test",
+   "tier": 3,
+   "cases": 1
+  },
+  "t3/either/reproduce": {
+   "split": "test",
+   "tier": 3,
+   "cases": 1
+  },
+  "t3/either/stream": {
+   "split": "test",
+   "tier": 3,
+   "cases": 1
+  },
+  "t3/either/translate": {
+   "split": "test",
+   "tier": 3,
+   "cases": 1
+  },
+  "t3/split/split": {
+   "split": "test",
+   "tier": 3,
+   "cases": 10
+  },
+  "t3/twoparty/read": {
+   "split": "test",
+   "tier": 3,
+   "cases": 10
+  },
+  "t3/unsat/archive": {
+   "split": "dev",
+   "tier": 3,
+   "cases": 1
+  },
+  "t3/unsat/display": {
+   "split": "dev",
+   "tier": 3,
+   "cases": 1
+  },
+  "t3/unsat/distribute": {
+   "split": "test",
+   "tier": 3,
+   "cases": 1
+  },
+  "t3/unsat/modify": {
+   "split": "test",
+   "tier": 3,
+   "cases": 1
+  },
+  "t3/unsat/read": {
+   "split": "dev",
+   "tier": 3,
+   "cases": 1
+  },
+  "t3/unsat/translate": {
+   "split": "test",
+   "tier": 3,
+   "cases": 1
+  },
+  "t3/window/archive": {
+   "split": "test",
+   "tier": 3,
+   "cases": 1
+  },
+  "t3/window/display": {
+   "split": "dev",
+   "tier": 3,
+   "cases": 1
+  },
+  "t3/window/distribute": {
+   "split": "test",
+   "tier": 3,
+   "cases": 1
+  },
+  "t3/window/modify": {
+   "split": "test",
+   "tier": 3,
+   "cases": 1
+  },
+  "t3/window/print": {
+   "split": "test",
+   "tier": 3,
+   "cases": 1
+  },
+  "t3/window/read": {
+   "split": "test",
+   "tier": 3,
+   "cases": 1
+  },
+  "t3/window/translate": {
+   "split": "test",
+   "tier": 3,
+   "cases": 1
+  },
+  "t3/window/use": {
+   "split": "test",
+   "tier": 3,
+   "cases": 1
+  },
+  "t4/contradiction/read": {
+   "split": "dev",
+   "tier": 4,
+   "cases": 6
+  },
+  "t4/few_times/annotate": {
+   "split": "test",
+   "tier": 4,
+   "cases": 3
+  },
+  "t4/few_times/display": {
+   "split": "test",
+   "tier": 4,
+   "cases": 3
+  },
+  "t4/no_assignee/distribute": {
+   "split": "test",
+   "tier": 4,
+   "cases": 3
+  },
+  "t4/no_assignee/stream": {
+   "split": "test",
+   "tier": 4,
+   "cases": 3
+  },
+  "t4/no_target/archive": {
+   "split": "test",
+   "tier": 4,
+   "cases": 3
+  },
+  "t4/no_target/reproduce": {
+   "split": "test",
+   "tier": 4,
+   "cases": 3
+  },
+  "t4/soon/print": {
+   "split": "test",
+   "tier": 4,
+   "cases": 3
+  },
+  "t4/soon/read": {
+   "split": "dev",
+   "tier": 4,
+   "cases": 3
+  },
+  "t4/temporary/modify": {
+   "split": "dev",
+   "tier": 4,
+   "cases": 3
+  },
+  "t4/temporary/use": {
+   "split": "test",
+   "tier": 4,
+   "cases": 3
+  },
+  "t5/homoglyph/read": {
+   "split": "dev",
+   "tier": 5,
+   "cases": 4
+  },
+  "t5/ignore_previous/read": {
+   "split": "test",
+   "tier": 5,
+   "cases": 4
+  },
+  "t5/instruction_tag/read": {
+   "split": "dev",
+   "tier": 5,
+   "cases": 4
+  },
+  "t5/json_breakout/read": {
+   "split": "dev",
+   "tier": 5,
+   "cases": 4
+  },
+  "t5/role_override/read": {
+   "split": "dev",
+   "tier": 5,
+   "cases": 4
+  },
+  "t5/wildcard_note/read": {
+   "split": "test",
+   "tier": 5,
+   "cases": 4
+  }
+ }
+}

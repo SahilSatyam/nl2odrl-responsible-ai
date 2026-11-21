@@ -1,0 +1,65 @@
+name: bench-live
+
+# Live-model benchmark gate. Runs nightly and on any change that can move the
+# numbers (extractor prompts, model routing, LLM client, IR schema, pins).
+# Pull requests are blocked only by regressions against Baseline v1
+# (false-permission rate +0.5pp, checkpoint-F1 drop); the nightly/manual run
+# enforces every absolute target from the plan.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "odrl_agent/extractor.py"
+      - "odrl_agent/llm.py"
+      - "odrl_agent/ir.py"
+      - "odrl_agent/grounder.py"
+      - "odrl_agent/pipeline.py"
+      - "prompts/**"
+      - "benchmarks/v1/pins.json"
+
+concurrency:
+  group: bench-live-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      PYTHONPATH: .
+      LLAMA_API_KEY: ${{ secrets.LLAMA_API_KEY }}
+      LLAMA_BASE_URL: ${{ secrets.LLAMA_BASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e .
+      - name: Require model credentials
+        run: |
+          if [ -z "$LLAMA_API_KEY" ] || [ -z "$LLAMA_BASE_URL" ]; then
+            echo "::error::LLAMA_API_KEY / LLAMA_BASE_URL secrets are not available; a prompt or model change cannot merge without a live run"
+            exit 1
+          fi
+      - name: Live benchmark
+        run: |
+          args="--mode live --workers 4 --out reports/bench-live.json"
+          if [ -f benchmarks/v1/baseline_v1.json ]; then
+            args="$args --baseline benchmarks/v1/baseline_v1.json"
+          fi
+          # Per PR: block only on regressions against Baseline v1 (plan 4.3). The
+          # absolute section 4.2 targets are listed as info. Nightly/manual runs
+          # enforce all of them and stay red until the model and pipeline meet them.
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            args="$args --enforce regression"
+          fi
+          python -m odrl_agent.bench run $args
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-live-report
+          path: reports/bench-live.json

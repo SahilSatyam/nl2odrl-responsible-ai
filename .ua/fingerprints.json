@@ -1,0 +1,6097 @@
+{
+  "version": "1.0.0",
+  "gitCommitHash": "ecdf1fe27b66c834b37dcb81e773f89bdae10ba3",
+  "generatedAt": "2026-11-21T15:51:19.603Z",
+  "files": {
+    ".dockerignore": {
+      "filePath": ".dockerignore",
+      "contentHash": "4a0dab7d98b83eb0bb91ceeb0d923a225877da85f3f34f3960a846431dc69ef1",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 16,
+      "hasStructuralAnalysis": false
+    },
+    ".github/workflows/bench-live.yml": {
+      "filePath": ".github/workflows/bench-live.yml",
+      "contentHash": "ce509d67f9ec0a8ec48408817a1fa2ac7448832dad0bb554671a2c1965264eb2",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 66,
+      "hasStructuralAnalysis": false
+    },
+    ".github/workflows/ci.yml": {
+      "filePath": ".github/workflows/ci.yml",
+      "contentHash": "67f74687ab0ce7d8431b56478abc4d6cd800cfc05b616fc951d9a31c2e51903b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 62,
+      "hasStructuralAnalysis": false
+    },
+    "Dockerfile": {
+      "filePath": "Dockerfile",
+      "contentHash": "28703c159a1d574cc846db35380350a18b137e4cd33ae424caab346cbb3ffccf",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 31,
+      "hasStructuralAnalysis": false
+    },
+    "README.md": {
+      "filePath": "README.md",
+      "contentHash": "dd587cc4674ebf838c237ade8adc361c2e44a42e043c2f4d4a0f9dc74b01d2ee",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 270,
+      "hasStructuralAnalysis": false
+    },
+    "docker-compose.yml": {
+      "filePath": "docker-compose.yml",
+      "contentHash": "4c3dec99b127cbd802fdd03fa1767dac0f99ab6bd3c5a656539d8637470b4f60",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 41,
+      "hasStructuralAnalysis": false
+    },
+    "docs/NL2ODRL-SOTA-Implementation-Plan.md": {
+      "filePath": "docs/NL2ODRL-SOTA-Implementation-Plan.md",
+      "contentHash": "6d7d766bc4e157a434fc10cc5db1fef375f831280bc578904af61632423a57c7",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 277,
+      "hasStructuralAnalysis": false
+    },
+    "odrl_agent/__init__.py": {
+      "filePath": "odrl_agent/__init__.py",
+      "contentHash": "8b6cb32cebf29667c51c97b5d5ec8755a2e29fc8603fe9d6d590817aa457cef8",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 17,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/adapter.py": {
+      "filePath": "odrl_agent/adapter.py",
+      "contentHash": "ffc8ea01605f8e4edaa92b46e14cfab832d62678e89f1d5f95a1c5c348ea3ef9",
+      "functions": [
+        {
+          "name": "live_timeout_s",
+          "params": [],
+          "returnType": "float",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "max_completion_tokens",
+          "params": [],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "load_doc_store",
+          "params": [
+            "scenario"
+          ],
+          "returnType": "dict[str, dict[str, Any]]",
+          "exported": true,
+          "lineCount": 33
+        },
+        {
+          "name": "load_nl_store",
+          "params": [
+            "scenario"
+          ],
+          "returnType": "dict[str, dict[str, Any]]",
+          "exported": true,
+          "lineCount": 64
+        }
+      ],
+      "classes": [
+        {
+          "name": "LlmConfig",
+          "methods": [
+            "from_env"
+          ],
+          "properties": [
+            "base_url",
+            "api_key",
+            "timeout_s",
+            "max_tokens",
+            "transport"
+          ],
+          "exported": true,
+          "lineCount": 21
+        }
+      ],
+      "imports": [
+        {
+          "source": "os",
+          "specifiers": [
+            "os"
+          ]
+        },
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "dataclass",
+            "field"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "yaml",
+          "specifiers": [
+            "yaml"
+          ]
+        },
+        {
+          "source": "odrl_agent.extractor",
+          "specifiers": [
+            "DEFAULT_MODEL"
+          ]
+        },
+        {
+          "source": "odrl_agent.llm",
+          "specifiers": [
+            "LlmError"
+          ]
+        }
+      ],
+      "exports": [
+        "live_timeout_s",
+        "max_completion_tokens",
+        "LlmConfig",
+        "load_doc_store",
+        "load_nl_store"
+      ],
+      "totalLines": 192,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/app.py": {
+      "filePath": "odrl_agent/app.py",
+      "contentHash": "ca2abe15421907f1ff3cca2f23caa2d29f4f86a3b6b004b09873c51176812a16",
+      "functions": [
+        {
+          "name": "create_app",
+          "params": [
+            "root",
+            "ui_dir",
+            "out_dir",
+            "registry",
+            "sessions"
+          ],
+          "returnType": "FastAPI",
+          "exported": true,
+          "lineCount": 309
+        },
+        {
+          "name": "_query",
+          "params": [
+            "request"
+          ],
+          "returnType": "dict[str, list[str]]",
+          "exported": true,
+          "lineCount": 5
+        }
+      ],
+      "classes": [
+        {
+          "name": "ApiError",
+          "methods": [
+            "__init__"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 11
+        }
+      ],
+      "imports": [
+        {
+          "source": "asyncio",
+          "specifiers": [
+            "asyncio"
+          ]
+        },
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "os",
+          "specifiers": [
+            "os"
+          ]
+        },
+        {
+          "source": "time",
+          "specifiers": [
+            "time"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "fastapi",
+          "specifiers": [
+            "Depends",
+            "FastAPI",
+            "Request"
+          ]
+        },
+        {
+          "source": "fastapi.concurrency",
+          "specifiers": [
+            "run_in_threadpool"
+          ]
+        },
+        {
+          "source": "fastapi.responses",
+          "specifiers": [
+            "JSONResponse",
+            "PlainTextResponse",
+            "Response",
+            "StreamingResponse"
+          ]
+        },
+        {
+          "source": "fastapi.staticfiles",
+          "specifiers": [
+            "StaticFiles"
+          ]
+        },
+        {
+          "source": "odrl_agent",
+          "specifiers": [
+            "publish_module"
+          ]
+        },
+        {
+          "source": "odrl_agent",
+          "specifiers": [
+            "web"
+          ]
+        },
+        {
+          "source": "odrl_agent.auth",
+          "specifiers": [
+            "SESSION_COOKIE",
+            "SESSIONS",
+            "Principal",
+            "SessionStore",
+            "authenticate",
+            "csrf_ok",
+            "fingerprint",
+            "key_is_valid"
+          ]
+        },
+        {
+          "source": "odrl_agent.observability",
+          "specifiers": [
+            "METRICS",
+            "REQUEST_ID_HEADER",
+            "log_event",
+            "route_template"
+          ]
+        },
+        {
+          "source": "odrl_agent.observability",
+          "specifiers": [
+            "make_request_id"
+          ]
+        }
+      ],
+      "exports": [
+        "ApiError",
+        "create_app",
+        "_query"
+      ],
+      "totalLines": 390,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/auth.py": {
+      "filePath": "odrl_agent/auth.py",
+      "contentHash": "38176de1eb92c3e167dc88994cb8ac9ae7e897c67d2c97ae367c6f39472887ba",
+      "functions": [
+        {
+          "name": "fingerprint",
+          "params": [
+            "raw"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "bearer",
+          "params": [
+            "headers"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "key_is_valid",
+          "params": [
+            "presented",
+            "env_keys",
+            "valid_fps"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "live_fingerprints",
+          "params": [
+            "env_keys",
+            "valid_fps"
+          ],
+          "returnType": "set[str]",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "authenticate",
+          "params": [
+            "headers",
+            "cookies",
+            "key_state",
+            "sessions"
+          ],
+          "returnType": "Principal | None",
+          "exported": true,
+          "lineCount": 19
+        },
+        {
+          "name": "csrf_ok",
+          "params": [
+            "method",
+            "principal",
+            "headers"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 6
+        }
+      ],
+      "classes": [
+        {
+          "name": "Principal",
+          "methods": [
+            "tenant",
+            "scope"
+          ],
+          "properties": [
+            "fp",
+            "via"
+          ],
+          "exported": true,
+          "lineCount": 14
+        },
+        {
+          "name": "SessionStore",
+          "methods": [
+            "__init__",
+            "_prune",
+            "create",
+            "lookup",
+            "revoke",
+            "clear",
+            "__len__"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 49
+        }
+      ],
+      "imports": [
+        {
+          "source": "hashlib",
+          "specifiers": [
+            "hashlib"
+          ]
+        },
+        {
+          "source": "hmac",
+          "specifiers": [
+            "hmac"
+          ]
+        },
+        {
+          "source": "os",
+          "specifiers": [
+            "os"
+          ]
+        },
+        {
+          "source": "secrets",
+          "specifiers": [
+            "secrets"
+          ]
+        },
+        {
+          "source": "threading",
+          "specifiers": [
+            "threading"
+          ]
+        },
+        {
+          "source": "time",
+          "specifiers": [
+            "time"
+          ]
+        },
+        {
+          "source": "collections.abc",
+          "specifiers": [
+            "Mapping"
+          ]
+        },
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "dataclass"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        }
+      ],
+      "exports": [
+        "fingerprint",
+        "bearer",
+        "key_is_valid",
+        "live_fingerprints",
+        "Principal",
+        "SessionStore",
+        "authenticate",
+        "csrf_ok"
+      ],
+      "totalLines": 159,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/bench/__init__.py": {
+      "filePath": "odrl_agent/bench/__init__.py",
+      "contentHash": "f6fc627df4aea88f5d8a3717f9f5d687e279ceebdbc319ca7361a3717ac9b2c3",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 2,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/bench/__main__.py": {
+      "filePath": "odrl_agent/bench/__main__.py",
+      "contentHash": "a47970ab6e5629cb863efd1d3511063c02960f7c1df3742b036d9e926d1d31dc",
+      "functions": [
+        {
+          "name": "_print_gates",
+          "params": [
+            "rep"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "main",
+          "params": [
+            "argv"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 80
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "argparse",
+          "specifiers": [
+            "argparse"
+          ]
+        },
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "sys",
+          "specifiers": [
+            "sys"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "odrl_agent.bench",
+          "specifiers": [
+            "generate",
+            "oracle",
+            "pins",
+            "runner"
+          ]
+        }
+      ],
+      "exports": [
+        "_print_gates",
+        "main"
+      ],
+      "totalLines": 106,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/bench/evaluator.py": {
+      "filePath": "odrl_agent/bench/evaluator.py",
+      "contentHash": "e5d8f789819eedef483f74fcf647daacf0ec05287b464bd5fbb8bdd0b06be248",
+      "functions": [
+        {
+          "name": "name_key",
+          "params": [
+            "name"
+          ],
+          "returnType": "str | None",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "_holds",
+          "params": [
+            "node",
+            "context"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 29
+        },
+        {
+          "name": "_applies",
+          "params": [
+            "rule",
+            "policy",
+            "request"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "decide",
+          "params": [
+            "policy",
+            "request"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "_shift",
+          "params": [
+            "vtype",
+            "text",
+            "k"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "_atoms",
+          "params": [
+            "nodes"
+          ],
+          "returnType": "list[dict[str, Any]]",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "_contexts",
+          "params": [
+            "rule"
+          ],
+          "returnType": "list[dict[str, list[str]]]",
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "requests_for",
+          "params": [
+            "policy"
+          ],
+          "returnType": "list[dict[str, Any]]",
+          "exported": true,
+          "lineCount": 28
+        },
+        {
+          "name": "agreement",
+          "params": [
+            "gold",
+            "predicted"
+          ],
+          "returnType": "tuple[int, int]",
+          "exported": true,
+          "lineCount": 5
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "datetime",
+          "specifiers": [
+            "date",
+            "datetime",
+            "timedelta"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "odrl_agent.grounder",
+          "specifiers": [
+            "normalize_name"
+          ]
+        },
+        {
+          "source": "odrl_agent.reasoning",
+          "specifiers": [
+            "_numeric",
+            "includes"
+          ]
+        }
+      ],
+      "exports": [
+        "name_key",
+        "_holds",
+        "_applies",
+        "decide",
+        "_shift",
+        "_atoms",
+        "_contexts",
+        "requests_for",
+        "agreement"
+      ],
+      "totalLines": 166,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/bench/gates.py": {
+      "filePath": "odrl_agent/bench/gates.py",
+      "contentHash": "ca9630bdb813b66cb96a2327ffe808d49fde75888143e6f374be8fe5f8058cf7",
+      "functions": [
+        {
+          "name": "evaluate",
+          "params": [
+            "metrics",
+            "live"
+          ],
+          "returnType": "list[dict[str, Any]]",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "regressions",
+          "params": [
+            "metrics",
+            "baseline"
+          ],
+          "returnType": "list[dict[str, Any]]",
+          "exported": true,
+          "lineCount": 14
+        },
+        {
+          "name": "failed",
+          "params": [
+            "rows"
+          ],
+          "returnType": "list[dict[str, Any]]",
+          "exported": true,
+          "lineCount": 2
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        }
+      ],
+      "exports": [
+        "evaluate",
+        "regressions",
+        "failed"
+      ],
+      "totalLines": 70,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/bench/generate.py": {
+      "filePath": "odrl_agent/bench/generate.py",
+      "contentHash": "e6a45a710a63f7f3843ef12974f842e8227bff3390e930ad35efc2d70f2cd15e",
+      "functions": [
+        {
+          "name": "_name",
+          "params": [
+            "tier",
+            "i",
+            "pool",
+            "stride"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "_span",
+          "params": [
+            "quote"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "_rule",
+          "params": [
+            "modality",
+            "action",
+            "target",
+            "assignee",
+            "quote"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "_atom",
+          "params": [
+            "left",
+            "op",
+            "value",
+            "vtype",
+            "quote"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "_ir",
+          "params": [
+            "ambiguities"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "_case",
+          "params": [
+            "tier",
+            "family",
+            "action",
+            "n",
+            "nl",
+            "gold"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "_tier1",
+          "params": [],
+          "returnType": "list[dict[str, Any]]",
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "_tier2",
+          "params": [],
+          "returnType": "list[dict[str, Any]]",
+          "exported": true,
+          "lineCount": 49
+        },
+        {
+          "name": "_tier3",
+          "params": [],
+          "returnType": "list[dict[str, Any]]",
+          "exported": true,
+          "lineCount": 61
+        },
+        {
+          "name": "_tier4",
+          "params": [],
+          "returnType": "list[dict[str, Any]]",
+          "exported": true,
+          "lineCount": 41
+        },
+        {
+          "name": "_tier5",
+          "params": [],
+          "returnType": "list[dict[str, Any]]",
+          "exported": true,
+          "lineCount": 29
+        },
+        {
+          "name": "build_cases",
+          "params": [],
+          "returnType": "list[dict[str, Any]]",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "split_of",
+          "params": [
+            "group"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "canonical",
+          "params": [
+            "obj"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "cases_sha",
+          "params": [
+            "cases"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "build_manifest",
+          "params": [
+            "cases"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 19
+        },
+        {
+          "name": "write",
+          "params": [
+            "directory"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 10
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "hashlib",
+          "specifiers": [
+            "hashlib"
+          ]
+        },
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        }
+      ],
+      "exports": [
+        "_name",
+        "_span",
+        "_rule",
+        "_atom",
+        "_ir",
+        "_case",
+        "_tier1",
+        "_tier2",
+        "_tier3",
+        "_tier4",
+        "_tier5",
+        "build_cases",
+        "split_of",
+        "canonical",
+        "cases_sha",
+        "build_manifest",
+        "write"
+      ],
+      "totalLines": 365,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/bench/metrics.py": {
+      "filePath": "odrl_agent/bench/metrics.py",
+      "contentHash": "2236dde85f5afa70d2805ae8db39c70447063a7ace6b414a4b54634c3e934f80",
+      "functions": [
+        {
+          "name": "_norm",
+          "params": [
+            "text"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "_constraint_key",
+          "params": [
+            "node"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "_party",
+          "params": [
+            "rule",
+            "ir",
+            "role"
+          ],
+          "returnType": "str | None",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "checkpoints",
+          "params": [
+            "ir"
+          ],
+          "returnType": "dict[str, set[tuple]]",
+          "exported": true,
+          "lineCount": 23
+        },
+        {
+          "name": "_f1",
+          "params": [
+            "tp",
+            "fp",
+            "fn"
+          ],
+          "returnType": "float | None",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "checkpoint_scores",
+          "params": [
+            "results"
+          ],
+          "returnType": "dict[str, float | None]",
+          "exported": true,
+          "lineCount": 14
+        },
+        {
+          "name": "_perm_keys",
+          "params": [
+            "ir",
+            "modality"
+          ],
+          "returnType": "list[tuple[str, str | None, str | None]]",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "false_permissions",
+          "params": [
+            "result"
+          ],
+          "returnType": "list[tuple]",
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "missed_prohibitions",
+          "params": [
+            "result"
+          ],
+          "returnType": "tuple[int, int]",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "attribution",
+          "params": [
+            "draft",
+            "source"
+          ],
+          "returnType": "tuple[int, int]",
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "_ratio",
+          "params": [
+            "num",
+            "den"
+          ],
+          "returnType": "float | None",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "_percentile",
+          "params": [
+            "values",
+            "q"
+          ],
+          "returnType": "float | None",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "compute",
+          "params": [
+            "results"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 63
+        },
+        {
+          "name": "by_tier",
+          "params": [
+            "results"
+          ],
+          "returnType": "dict[str, dict[str, Any]]",
+          "exported": true,
+          "lineCount": 12
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "re",
+          "specifiers": [
+            "re"
+          ]
+        },
+        {
+          "source": "statistics",
+          "specifiers": [
+            "statistics"
+          ]
+        },
+        {
+          "source": "collections",
+          "specifiers": [
+            "defaultdict"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "odrl_agent.bench.evaluator",
+          "specifiers": [
+            "agreement",
+            "name_key"
+          ]
+        },
+        {
+          "source": "odrl_agent.grounder",
+          "specifiers": [
+            "normalize_name"
+          ]
+        },
+        {
+          "source": "odrl_agent.reasoning",
+          "specifiers": [
+            "includes"
+          ]
+        }
+      ],
+      "exports": [
+        "_norm",
+        "_constraint_key",
+        "_party",
+        "checkpoints",
+        "_f1",
+        "checkpoint_scores",
+        "_perm_keys",
+        "false_permissions",
+        "missed_prohibitions",
+        "attribution",
+        "_ratio",
+        "_percentile",
+        "compute",
+        "by_tier"
+      ],
+      "totalLines": 218,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/bench/oracle.py": {
+      "filePath": "odrl_agent/bench/oracle.py",
+      "contentHash": "a621ef1ed92e7c44fc62bca32f4006ed21196f577701ca7cacd651dc7e2aa6ac",
+      "functions": [
+        {
+          "name": "mutate",
+          "params": [
+            "case",
+            "mutant"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 25
+        },
+        {
+          "name": "oracle_llm",
+          "params": [
+            "cases",
+            "mutant"
+          ],
+          "returnType": "StructuredLlm",
+          "exported": true,
+          "lineCount": 24
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "copy",
+          "specifiers": [
+            "copy"
+          ]
+        },
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "re",
+          "specifiers": [
+            "re"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "httpx",
+          "specifiers": [
+            "httpx"
+          ]
+        },
+        {
+          "source": "odrl_agent.extractor",
+          "specifiers": [
+            "DECOMPOSE_PROMPT",
+            "split_sentences"
+          ]
+        },
+        {
+          "source": "odrl_agent.llm",
+          "specifiers": [
+            "StructuredLlm"
+          ]
+        }
+      ],
+      "exports": [
+        "mutate",
+        "oracle_llm"
+      ],
+      "totalLines": 77,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/bench/pins.py": {
+      "filePath": "odrl_agent/bench/pins.py",
+      "contentHash": "b48b3715d7feadea21ed825a9683fce5fee9bdb12866477d1f9187ac25628211",
+      "functions": [
+        {
+          "name": "_sha",
+          "params": [
+            "text"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "current",
+          "params": [],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "load",
+          "params": [
+            "path"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "write",
+          "params": [
+            "path"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "drift",
+          "params": [
+            "path"
+          ],
+          "returnType": "dict[str, tuple[Any, Any]]",
+          "exported": true,
+          "lineCount": 4
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "hashlib",
+          "specifiers": [
+            "hashlib"
+          ]
+        },
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "odrl_agent",
+          "specifiers": [
+            "extractor"
+          ]
+        },
+        {
+          "source": "odrl_agent.ir",
+          "specifiers": [
+            "IR_VERSION",
+            "ir_json_schema",
+            "wire_schema"
+          ]
+        }
+      ],
+      "exports": [
+        "_sha",
+        "current",
+        "load",
+        "write",
+        "drift"
+      ],
+      "totalLines": 51,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/bench/runner.py": {
+      "filePath": "odrl_agent/bench/runner.py",
+      "contentHash": "391430849e7fe9b793e289ffbfe1ed93f4e5b0b5fb18d82ae1eef79c638a589a",
+      "functions": [
+        {
+          "name": "load_cases",
+          "params": [
+            "directory"
+          ],
+          "returnType": "list[dict[str, Any]]",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "run_case",
+          "params": [
+            "case",
+            "factory",
+            "model"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "run_all",
+          "params": [
+            "cases",
+            "factory",
+            "model",
+            "workers"
+          ],
+          "returnType": "list[dict[str, Any]]",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "_git_sha",
+          "params": [],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "report",
+          "params": [
+            "results",
+            "mode",
+            "model",
+            "baseline",
+            "enforce"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 44
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "subprocess",
+          "specifiers": [
+            "subprocess"
+          ]
+        },
+        {
+          "source": "time",
+          "specifiers": [
+            "time"
+          ]
+        },
+        {
+          "source": "collections.abc",
+          "specifiers": [
+            "Callable"
+          ]
+        },
+        {
+          "source": "concurrent.futures",
+          "specifiers": [
+            "ThreadPoolExecutor"
+          ]
+        },
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "asdict"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "odrl_agent.bench",
+          "specifiers": [
+            "gates",
+            "generate",
+            "metrics",
+            "pins"
+          ]
+        },
+        {
+          "source": "odrl_agent.extractor",
+          "specifiers": [
+            "Extractor",
+            "ModelRoute"
+          ]
+        },
+        {
+          "source": "odrl_agent.grounder",
+          "specifiers": [
+            "Grounder"
+          ]
+        },
+        {
+          "source": "odrl_agent.llm",
+          "specifiers": [
+            "LlmError",
+            "StructuredLlm"
+          ]
+        },
+        {
+          "source": "odrl_agent.pipeline",
+          "specifiers": [
+            "PolicyDraft",
+            "convert"
+          ]
+        }
+      ],
+      "exports": [
+        "load_cases",
+        "run_case",
+        "run_all",
+        "_git_sha",
+        "report"
+      ],
+      "totalLines": 115,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/chaos.py": {
+      "filePath": "odrl_agent/chaos.py",
+      "contentHash": "9a69d727f29f4f7e2a28fe8b54af03bc14dff86e4382c2db651ba4ad7d1685bd",
+      "functions": [
+        {
+          "name": "mock_llm",
+          "params": [
+            "reply"
+          ],
+          "returnType": "StructuredLlm",
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "make_runner",
+          "params": [
+            "root",
+            "scenario_id",
+            "work_dir",
+            "llm_factory",
+            "policy_file",
+            "seed",
+            "log"
+          ],
+          "returnType": "Callable[[dict[str, dict[str, Any]]], tuple[list[dict[str, Any]], dict[str, Any]]]",
+          "exported": true,
+          "lineCount": 42
+        },
+        {
+          "name": "run_chaos",
+          "params": [
+            "root",
+            "scenario_ids",
+            "seed",
+            "max_cases",
+            "work_dir",
+            "llm_factory"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 47
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "tempfile",
+          "specifiers": [
+            "tempfile"
+          ]
+        },
+        {
+          "source": "collections.abc",
+          "specifiers": [
+            "Callable"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "httpx",
+          "specifiers": [
+            "httpx"
+          ]
+        },
+        {
+          "source": "odrl_agent.instrument",
+          "specifiers": [
+            "BOUNDARIES",
+            "chaos_sdk"
+          ]
+        },
+        {
+          "source": "odrl_agent.llm",
+          "specifiers": [
+            "StructuredLlm"
+          ]
+        }
+      ],
+      "exports": [
+        "mock_llm",
+        "make_runner",
+        "run_chaos"
+      ],
+      "totalLines": 160,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/cli.py": {
+      "filePath": "odrl_agent/cli.py",
+      "contentHash": "fc2c2e73915e32411e94c2359bbebce0bcb325a982bed3340a41fe1d256f20ad",
+      "functions": [
+        {
+          "name": "cmd_run",
+          "params": [
+            "argv"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 134
+        },
+        {
+          "name": "_retrieved_doc_spans",
+          "params": [
+            "trace_path"
+          ],
+          "returnType": "list[dict[str, Any]]",
+          "exported": true,
+          "lineCount": 36
+        },
+        {
+          "name": "cmd_keys",
+          "params": [
+            "argv"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 53
+        },
+        {
+          "name": "cmd_billing",
+          "params": [
+            "argv"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 45
+        },
+        {
+          "name": "cmd_optimize_prompts",
+          "params": [
+            "argv"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 77
+        },
+        {
+          "name": "cmd_serve",
+          "params": [
+            "argv"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 19
+        },
+        {
+          "name": "cmd_chaos",
+          "params": [
+            "argv"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 36
+        },
+        {
+          "name": "_infer_scenario",
+          "params": [
+            "trace_scenario"
+          ],
+          "returnType": "Path",
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "_trace_seed",
+          "params": [
+            "events",
+            "fallback"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "cmd_diagnose",
+          "params": [
+            "argv"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 167
+        },
+        {
+          "name": "cmd_replay",
+          "params": [
+            "argv"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 186
+        },
+        {
+          "name": "_regress_golden",
+          "params": [
+            "golden",
+            "policy",
+            "policy_text",
+            "model",
+            "max_steps"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 32
+        },
+        {
+          "name": "main",
+          "params": [
+            "argv"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 39
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "argparse",
+          "specifiers": [
+            "argparse"
+          ]
+        },
+        {
+          "source": "csv",
+          "specifiers": [
+            "csv"
+          ]
+        },
+        {
+          "source": "hashlib",
+          "specifiers": [
+            "hashlib"
+          ]
+        },
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "os",
+          "specifiers": [
+            "os"
+          ]
+        },
+        {
+          "source": "sys",
+          "specifiers": [
+            "sys"
+          ]
+        },
+        {
+          "source": "tempfile",
+          "specifiers": [
+            "tempfile"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "agentcrash.cli",
+          "specifiers": [
+            "EXIT_CORRUPT",
+            "EXIT_OK",
+            "EXIT_POLICY_REJECTED",
+            "EXIT_RUNABORTED",
+            "EXIT_USAGE",
+            "EXIT_VERDICT_FAIL",
+            "ConfigError",
+            "load_yaml",
+            "resolve_policy",
+            "resolve_scenario",
+            "validate_run_inputs"
+          ]
+        },
+        {
+          "source": "agentcrash.policy",
+          "specifiers": [
+            "PolicyError",
+            "PolicyRejectedError",
+            "apply_patch",
+            "diff_policies",
+            "fetch_live_patch",
+            "load_patch_doc",
+            "load_policy",
+            "validate_patch_data"
+          ]
+        },
+        {
+          "source": "agentcrash.tracer",
+          "specifiers": [
+            "compute_run_id"
+          ]
+        },
+        {
+          "source": "agentcrash.verifiers",
+          "specifiers": [
+            "TraceCorruptError",
+            "UnknownVerifierError",
+            "VerifierError",
+            "load_state_snapshot",
+            "load_trace_events",
+            "run_verifiers"
+          ]
+        },
+        {
+          "source": "odrl_agent.verifiers",
+          "specifiers": [
+            "odrl_agent.verifiers"
+          ]
+        },
+        {
+          "source": "odrl_agent",
+          "specifiers": [
+            "__version__"
+          ]
+        },
+        {
+          "source": "odrl_agent.adapter",
+          "specifiers": [
+            "DEFAULT_MODEL",
+            "ModelNotConfiguredError"
+          ]
+        },
+        {
+          "source": "odrl_agent.pipeline",
+          "specifiers": [
+            "run_conversion"
+          ]
+        },
+        {
+          "source": "odrl_agent.dspy_opt",
+          "specifiers": [
+            "PackRejectedError",
+            "load_pack"
+          ]
+        },
+        {
+          "source": "odrl_agent.remediation",
+          "specifiers": [
+            "reference_patch_for"
+          ]
+        },
+        {
+          "source": "odrl_agent.tools",
+          "specifiers": [
+            "PARSE_POLICY",
+            "SAVE_ODRL",
+            "render_untrusted"
+          ]
+        }
+      ],
+      "exports": [
+        "cmd_run",
+        "_retrieved_doc_spans",
+        "cmd_keys",
+        "cmd_billing",
+        "cmd_optimize_prompts",
+        "cmd_serve",
+        "cmd_chaos",
+        "_infer_scenario",
+        "_trace_seed",
+        "cmd_diagnose",
+        "cmd_replay",
+        "_regress_golden",
+        "main"
+      ],
+      "totalLines": 937,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/compiler.py": {
+      "filePath": "odrl_agent/compiler.py",
+      "contentHash": "83dc4392dd6994fceba3219267d5c461eb902f37006171f0a7b2c8beaebc46ae",
+      "functions": [
+        {
+          "name": "mint_iri",
+          "params": [
+            "name",
+            "prefix"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "canonical_json",
+          "params": [
+            "doc"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "_literal",
+          "params": [
+            "value_type",
+            "raw"
+          ],
+          "returnType": "Any",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "_constraint",
+          "params": [
+            "node"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "_action",
+          "params": [
+            "rule"
+          ],
+          "returnType": "Any",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "_duty",
+          "params": [
+            "duty"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "_rule",
+          "params": [
+            "rule",
+            "index",
+            "policy"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 21
+        },
+        {
+          "name": "_policy_uid",
+          "params": [
+            "ir"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "compile_doc",
+          "params": [
+            "ir"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 28
+        },
+        {
+          "name": "_verify_graph",
+          "params": [
+            "ir",
+            "graph"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "compile_ir",
+          "params": [
+            "ir"
+          ],
+          "returnType": "tuple[dict[str, Any], rdflib.Graph]",
+          "exported": true,
+          "lineCount": 6
+        }
+      ],
+      "classes": [
+        {
+          "name": "CompileError",
+          "methods": [],
+          "properties": [],
+          "exported": true,
+          "lineCount": 2
+        }
+      ],
+      "imports": [
+        {
+          "source": "hashlib",
+          "specifiers": [
+            "hashlib"
+          ]
+        },
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "re",
+          "specifiers": [
+            "re"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "urllib.parse",
+          "specifiers": [
+            "quote"
+          ]
+        },
+        {
+          "source": "rdflib",
+          "specifiers": [
+            "rdflib"
+          ]
+        },
+        {
+          "source": "odrl_agent.ir",
+          "specifiers": [
+            "ConstraintIR",
+            "DutyIR",
+            "LogicalConstraintIR",
+            "PolicyIR",
+            "RuleIR"
+          ]
+        },
+        {
+          "source": "odrl_agent.odrl",
+          "specifiers": [
+            "ODRL_CONTEXT",
+            "jsonld_to_graph"
+          ]
+        }
+      ],
+      "exports": [
+        "CompileError",
+        "mint_iri",
+        "canonical_json",
+        "_literal",
+        "_constraint",
+        "_action",
+        "_duty",
+        "_rule",
+        "_policy_uid",
+        "compile_doc",
+        "_verify_graph",
+        "compile_ir"
+      ],
+      "totalLines": 181,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/db.py": {
+      "filePath": "odrl_agent/db.py",
+      "contentHash": "f3265fd22fd20c3d707b47ed97e5e3f5a3ba56939bb27385f68ba3acf7c0b99e",
+      "functions": [
+        {
+          "name": "utcnow",
+          "params": [],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "connect",
+          "params": [
+            "path"
+          ],
+          "returnType": "sqlite3.Connection",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "migrate",
+          "params": [
+            "conn"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "insert_run",
+          "params": [
+            "conn",
+            "record"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 111
+        },
+        {
+          "name": "_run_row",
+          "params": [
+            "row"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "list_runs",
+          "params": [
+            "conn",
+            "scenario",
+            "verdict",
+            "status",
+            "limit"
+          ],
+          "returnType": "list[dict[str, Any]]",
+          "exported": true,
+          "lineCount": 34
+        },
+        {
+          "name": "get_run",
+          "params": [
+            "conn",
+            "run_key"
+          ],
+          "returnType": "dict[str, Any] | None",
+          "exported": true,
+          "lineCount": 95
+        },
+        {
+          "name": "list_odrl_docs",
+          "params": [
+            "conn",
+            "scenario",
+            "valid",
+            "attacker",
+            "limit"
+          ],
+          "returnType": "list[dict[str, Any]]",
+          "exported": true,
+          "lineCount": 38
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "sqlite3",
+          "specifiers": [
+            "sqlite3"
+          ]
+        },
+        {
+          "source": "datetime",
+          "specifiers": [
+            "UTC",
+            "datetime"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        }
+      ],
+      "exports": [
+        "utcnow",
+        "connect",
+        "migrate",
+        "insert_run",
+        "_run_row",
+        "list_runs",
+        "get_run",
+        "list_odrl_docs"
+      ],
+      "totalLines": 412,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/dspy_opt.py": {
+      "filePath": "odrl_agent/dspy_opt.py",
+      "contentHash": "b404a4e3feb21192e037e78be1f29b253ffe825026dabc1876e94f3658f61c7d",
+      "functions": [
+        {
+          "name": "_require_dspy",
+          "params": [],
+          "returnType": "Any",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "_doc",
+          "params": [
+            "uid",
+            "action",
+            "target",
+            "assignee",
+            "constraint"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 21
+        },
+        {
+          "name": "_expiry",
+          "params": [
+            "right"
+          ],
+          "returnType": "list[dict[str, Any]]",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "trainset_hash",
+          "params": [
+            "rows"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "_extract_json",
+          "params": [
+            "text"
+          ],
+          "returnType": "dict[str, Any] | None",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "_triples",
+          "params": [
+            "doc"
+          ],
+          "returnType": "set[tuple[str, str, str]]",
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "_assignees",
+          "params": [
+            "doc"
+          ],
+          "returnType": "set[str]",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "score_doc",
+          "params": [
+            "doc",
+            "expected"
+          ],
+          "returnType": "float",
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "odrl_metric",
+          "params": [
+            "example",
+            "pred",
+            "trace"
+          ],
+          "returnType": "float",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "build_trainset",
+          "params": [
+            "rows"
+          ],
+          "returnType": "list[Any]",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "split_rows",
+          "params": [
+            "rows",
+            "val_size"
+          ],
+          "returnType": "tuple[list[dict[str, Any]], list[dict[str, Any]]]",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "build_program",
+          "params": [
+            "instruction"
+          ],
+          "returnType": "Any",
+          "exported": true,
+          "lineCount": 30
+        },
+        {
+          "name": "program_instruction",
+          "params": [
+            "program"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "evaluate",
+          "params": [
+            "program",
+            "examples"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "check_budget",
+          "params": [
+            "calls",
+            "max_live_calls",
+            "stage"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "live_lm",
+          "params": [
+            "model",
+            "api_base",
+            "api_key",
+            "timeout_s"
+          ],
+          "returnType": "Any",
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "run_probe",
+          "params": [
+            "model",
+            "api_base",
+            "api_key",
+            "timeout_s",
+            "rows",
+            "val_size",
+            "compile_rows",
+            "bsize",
+            "num_candidates",
+            "max_steps",
+            "max_demos",
+            "max_live_calls",
+            "seed"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 65
+        },
+        {
+          "name": "pack_for_report",
+          "params": [
+            "report"
+          ],
+          "returnType": "dict[str, Any] | None",
+          "exported": true,
+          "lineCount": 17
+        },
+        {
+          "name": "load_pack",
+          "params": [
+            "path"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 32
+        },
+        {
+          "name": "write_pack",
+          "params": [
+            "report",
+            "path",
+            "force"
+          ],
+          "returnType": "Path | None",
+          "exported": true,
+          "lineCount": 11
+        }
+      ],
+      "classes": [
+        {
+          "name": "ProbeBudgetExceeded",
+          "methods": [],
+          "properties": [],
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "PackRejectedError",
+          "methods": [],
+          "properties": [],
+          "exported": true,
+          "lineCount": 2
+        }
+      ],
+      "imports": [
+        {
+          "source": "hashlib",
+          "specifiers": [
+            "hashlib"
+          ]
+        },
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "odrl_agent.odrl",
+          "specifiers": [
+            "validate_odrl"
+          ]
+        }
+      ],
+      "exports": [
+        "_require_dspy",
+        "_doc",
+        "_expiry",
+        "trainset_hash",
+        "_extract_json",
+        "_triples",
+        "_assignees",
+        "score_doc",
+        "odrl_metric",
+        "build_trainset",
+        "split_rows",
+        "build_program",
+        "program_instruction",
+        "evaluate",
+        "ProbeBudgetExceeded",
+        "check_budget",
+        "live_lm",
+        "run_probe",
+        "pack_for_report",
+        "PackRejectedError",
+        "load_pack",
+        "write_pack"
+      ],
+      "totalLines": 498,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/extractor.py": {
+      "filePath": "odrl_agent/extractor.py",
+      "contentHash": "cc7bba18192d2903249c3e737bf6c817bb999814d79d68aac7923f7a420b36cb",
+      "functions": [
+        {
+          "name": "split_sentences",
+          "params": [
+            "text"
+          ],
+          "returnType": "list[str]",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "classify",
+          "params": [
+            "text"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "_system_prompt",
+          "params": [],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "_source_block",
+          "params": [
+            "text",
+            "clauses"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "format_validation_errors",
+          "params": [
+            "exc"
+          ],
+          "returnType": "list[str]",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "parse_ir",
+          "params": [
+            "raw"
+          ],
+          "returnType": "tuple[PolicyIR | None, list[str]]",
+          "exported": true,
+          "lineCount": 6
+        }
+      ],
+      "classes": [
+        {
+          "name": "ClauseSplit",
+          "methods": [],
+          "properties": [
+            "clauses"
+          ],
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "ModelRoute",
+          "methods": [],
+          "properties": [
+            "fast",
+            "strong"
+          ],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "ExtractResult",
+          "methods": [],
+          "properties": [
+            "ir",
+            "raw",
+            "errors",
+            "model"
+          ],
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "Extractor",
+          "methods": [
+            "__init__",
+            "decompose",
+            "extract",
+            "repair"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 67
+        }
+      ],
+      "imports": [
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "re",
+          "specifiers": [
+            "re"
+          ]
+        },
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "dataclass"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "pydantic",
+          "specifiers": [
+            "BaseModel",
+            "Field",
+            "ValidationError"
+          ]
+        },
+        {
+          "source": "odrl_agent.ir",
+          "specifiers": [
+            "ACTIONS",
+            "LEFT_OPERANDS",
+            "OPERATORS",
+            "PolicyIR",
+            "wire_schema"
+          ]
+        },
+        {
+          "source": "odrl_agent.llm",
+          "specifiers": [
+            "StructuredLlm"
+          ]
+        }
+      ],
+      "exports": [
+        "ClauseSplit",
+        "ModelRoute",
+        "ExtractResult",
+        "split_sentences",
+        "classify",
+        "_system_prompt",
+        "_source_block",
+        "format_validation_errors",
+        "parse_ir",
+        "Extractor"
+      ],
+      "totalLines": 195,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/grounder.py": {
+      "filePath": "odrl_agent/grounder.py",
+      "contentHash": "ecf02f9b3094f4b567de1e131f8be410d0f9931647808a4a65664472447038e2",
+      "functions": [
+        {
+          "name": "normalize_name",
+          "params": [
+            "text"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "_suspicious",
+          "params": [
+            "name"
+          ],
+          "returnType": "str | None",
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "trusted_parties_from_env",
+          "params": [],
+          "returnType": "list[str]",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "injected_ranges",
+          "params": [
+            "source"
+          ],
+          "returnType": "list[tuple[int, int]]",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "_overlaps",
+          "params": [
+            "span",
+            "ranges"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "_mentions",
+          "params": [
+            "name",
+            "source"
+          ],
+          "returnType": "list[tuple[int, int]]",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "_aliases",
+          "params": [
+            "name"
+          ],
+          "returnType": "list[str]",
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "_constraint_values",
+          "params": [
+            "nodes"
+          ],
+          "returnType": "Iterable[ConstraintIR]",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "ground_entities",
+          "params": [
+            "ir",
+            "source",
+            "catalog"
+          ],
+          "returnType": "tuple[PolicyIR, GroundingReport]",
+          "exported": true,
+          "lineCount": 10
+        }
+      ],
+      "classes": [
+        {
+          "name": "CatalogEntry",
+          "methods": [],
+          "properties": [
+            "iri",
+            "kind",
+            "names",
+            "external"
+          ],
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "EntityCatalog",
+          "methods": [
+            "__init__",
+            "add",
+            "lookup",
+            "from_dict",
+            "from_file"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 36
+        },
+        {
+          "name": "GroundingIssue",
+          "methods": [],
+          "properties": [
+            "code",
+            "detail",
+            "rule_index",
+            "field",
+            "value"
+          ],
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "GroundingReport",
+          "methods": [
+            "grounded",
+            "codes",
+            "as_dict",
+            "messages"
+          ],
+          "properties": [
+            "issues",
+            "resolved",
+            "untrusted_ranges"
+          ],
+          "exported": true,
+          "lineCount": 27
+        },
+        {
+          "name": "Grounder",
+          "methods": [
+            "__init__",
+            "_resolve",
+            "ground",
+            "_ground_rule"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 130
+        }
+      ],
+      "imports": [
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "os",
+          "specifiers": [
+            "os"
+          ]
+        },
+        {
+          "source": "re",
+          "specifiers": [
+            "re"
+          ]
+        },
+        {
+          "source": "unicodedata",
+          "specifiers": [
+            "unicodedata"
+          ]
+        },
+        {
+          "source": "collections.abc",
+          "specifiers": [
+            "Iterable"
+          ]
+        },
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "asdict",
+            "dataclass",
+            "field"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "odrl_agent.ir",
+          "specifiers": [
+            "ConstraintIR",
+            "LogicalConstraintIR",
+            "PolicyIR",
+            "RuleIR"
+          ]
+        }
+      ],
+      "exports": [
+        "normalize_name",
+        "_suspicious",
+        "CatalogEntry",
+        "EntityCatalog",
+        "GroundingIssue",
+        "GroundingReport",
+        "trusted_parties_from_env",
+        "injected_ranges",
+        "_overlaps",
+        "_mentions",
+        "_aliases",
+        "_constraint_values",
+        "Grounder",
+        "ground_entities"
+      ],
+      "totalLines": 404,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/instrument.py": {
+      "filePath": "odrl_agent/instrument.py",
+      "contentHash": "d2f08e50afe6ff2aacc6d87ebf6854a1b08391b27915d5beef7ea71e011cf2b0",
+      "functions": [
+        {
+          "name": "build_sdk",
+          "params": [],
+          "returnType": "AgentCrash",
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "default_sdk",
+          "params": [],
+          "returnType": "AgentCrash",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "chaos_sdk",
+          "params": [
+            "schedule",
+            "seed"
+          ],
+          "returnType": "AgentCrash",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "finish",
+          "params": [
+            "sdk",
+            "run",
+            "trace_path"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 29
+        },
+        {
+          "name": "load_sidecar",
+          "params": [
+            "trace_path"
+          ],
+          "returnType": "list[dict[str, Any]]",
+          "exported": true,
+          "lineCount": 5
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "os",
+          "specifiers": [
+            "os"
+          ]
+        },
+        {
+          "source": "threading",
+          "specifiers": [
+            "threading"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "agentcrash",
+          "specifiers": [
+            "AgentCrash",
+            "RunContext",
+            "WorkflowConfig",
+            "export_otel_spans",
+            "verify_sdk_chain"
+          ]
+        }
+      ],
+      "exports": [
+        "build_sdk",
+        "default_sdk",
+        "chaos_sdk",
+        "finish",
+        "load_sidecar"
+      ],
+      "totalLines": 118,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/ir.py": {
+      "filePath": "odrl_agent/ir.py",
+      "contentHash": "8ff10487acb44f418916deb3b9064489858d3ff2c226d3aba26dcfa196619d2d",
+      "functions": [
+        {
+          "name": "check_value",
+          "params": [
+            "value_type",
+            "raw"
+          ],
+          "returnType": "str | None",
+          "exported": true,
+          "lineCount": 29
+        },
+        {
+          "name": "constraint_depth",
+          "params": [
+            "node"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "_check_depth",
+          "params": [
+            "nodes"
+          ],
+          "returnType": "list",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "ir_json_schema",
+          "params": [],
+          "returnType": "dict",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "_unroll",
+          "params": [
+            "node",
+            "defs",
+            "stack",
+            "limit"
+          ],
+          "returnType": "Any",
+          "exported": true,
+          "lineCount": 36
+        },
+        {
+          "name": "schema_depth",
+          "params": [
+            "node"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "wire_schema",
+          "params": [
+            "logical_depth"
+          ],
+          "returnType": "dict",
+          "exported": true,
+          "lineCount": 10
+        }
+      ],
+      "classes": [
+        {
+          "name": "_Model",
+          "methods": [],
+          "properties": [],
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "SpanRef",
+          "methods": [],
+          "properties": [
+            "quote",
+            "start",
+            "end"
+          ],
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "ConstraintIR",
+          "methods": [
+            "_check"
+          ],
+          "properties": [
+            "kind",
+            "left_operand",
+            "operator",
+            "right_operand",
+            "value_type",
+            "span"
+          ],
+          "exported": true,
+          "lineCount": 28
+        },
+        {
+          "name": "LogicalConstraintIR",
+          "methods": [],
+          "properties": [
+            "kind",
+            "operator",
+            "constraints",
+            "span"
+          ],
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "DutyIR",
+          "methods": [],
+          "properties": [
+            "action",
+            "target",
+            "assignee",
+            "constraints",
+            "source_spans"
+          ],
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "RuleIR",
+          "methods": [
+            "_check"
+          ],
+          "properties": [
+            "modality",
+            "action",
+            "action_refinements",
+            "target",
+            "assignee",
+            "assigner",
+            "constraints",
+            "duties",
+            "source_spans",
+            "confidence"
+          ],
+          "exported": true,
+          "lineCount": 26
+        },
+        {
+          "name": "AmbiguityFlag",
+          "methods": [],
+          "properties": [
+            "kind",
+            "description",
+            "span",
+            "rule_index"
+          ],
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "AssumptionRecord",
+          "methods": [],
+          "properties": [
+            "field",
+            "assumed_value",
+            "reason"
+          ],
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "PolicyIR",
+          "methods": [
+            "_check",
+            "is_compilable"
+          ],
+          "properties": [
+            "analysis",
+            "ir_version",
+            "policy_type",
+            "profile",
+            "conflict_strategy",
+            "uid",
+            "assigner",
+            "assignee",
+            "rules",
+            "ambiguities",
+            "assumptions"
+          ],
+          "exported": true,
+          "lineCount": 40
+        }
+      ],
+      "imports": [
+        {
+          "source": "re",
+          "specifiers": [
+            "re"
+          ]
+        },
+        {
+          "source": "datetime",
+          "specifiers": [
+            "date",
+            "datetime"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Annotated",
+            "Any",
+            "Literal",
+            "Union"
+          ]
+        },
+        {
+          "source": "pydantic",
+          "specifiers": [
+            "BaseModel",
+            "ConfigDict",
+            "Field",
+            "field_validator",
+            "model_validator"
+          ]
+        }
+      ],
+      "exports": [
+        "_Model",
+        "SpanRef",
+        "check_value",
+        "ConstraintIR",
+        "LogicalConstraintIR",
+        "constraint_depth",
+        "_check_depth",
+        "DutyIR",
+        "RuleIR",
+        "AmbiguityFlag",
+        "AssumptionRecord",
+        "PolicyIR",
+        "ir_json_schema",
+        "_unroll",
+        "schema_depth",
+        "wire_schema"
+      ],
+      "totalLines": 394,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/llm.py": {
+      "filePath": "odrl_agent/llm.py",
+      "contentHash": "5cf7cd1f35781eb1e44fcbed41ffd25dfea51c58bd9c5993d4773df5c5be8bac",
+      "functions": [],
+      "classes": [
+        {
+          "name": "LlmError",
+          "methods": [],
+          "properties": [],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "LlmNotConfiguredError",
+          "methods": [],
+          "properties": [],
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "LlmUsage",
+          "methods": [
+            "add",
+            "as_dict"
+          ],
+          "properties": [
+            "calls",
+            "prompt_tokens",
+            "completion_tokens",
+            "total_tokens",
+            "attempts"
+          ],
+          "exported": true,
+          "lineCount": 21
+        },
+        {
+          "name": "StructuredLlm",
+          "methods": [
+            "from_config",
+            "_retry_delay",
+            "complete_json"
+          ],
+          "properties": [
+            "base_url",
+            "api_key",
+            "timeout_s",
+            "max_tokens",
+            "max_attempts",
+            "backoff_s",
+            "transport",
+            "sleep",
+            "usage"
+          ],
+          "exported": true,
+          "lineCount": 107
+        }
+      ],
+      "imports": [
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "time",
+          "specifiers": [
+            "time"
+          ]
+        },
+        {
+          "source": "collections.abc",
+          "specifiers": [
+            "Callable"
+          ]
+        },
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "dataclass",
+            "field"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "httpx",
+          "specifiers": [
+            "httpx"
+          ]
+        }
+      ],
+      "exports": [
+        "LlmError",
+        "LlmNotConfiguredError",
+        "LlmUsage",
+        "StructuredLlm"
+      ],
+      "totalLines": 172,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/netguard.py": {
+      "filePath": "odrl_agent/netguard.py",
+      "contentHash": "ea7d6c68833c80bf7ca34b202ee79121ce08d66b62c6a31c6fff94485d2277ce",
+      "functions": [
+        {
+          "name": "_blocked",
+          "params": [
+            "addr"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "validate_base_url",
+          "params": [
+            "url"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 37
+        }
+      ],
+      "classes": [
+        {
+          "name": "UnsafeBaseUrlError",
+          "methods": [],
+          "properties": [],
+          "exported": true,
+          "lineCount": 2
+        }
+      ],
+      "imports": [
+        {
+          "source": "ipaddress",
+          "specifiers": [
+            "ipaddress"
+          ]
+        },
+        {
+          "source": "os",
+          "specifiers": [
+            "os"
+          ]
+        },
+        {
+          "source": "socket",
+          "specifiers": [
+            "socket"
+          ]
+        },
+        {
+          "source": "urllib.parse",
+          "specifiers": [
+            "urlsplit"
+          ]
+        }
+      ],
+      "exports": [
+        "UnsafeBaseUrlError",
+        "_blocked",
+        "validate_base_url"
+      ],
+      "totalLines": 59,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/observability.py": {
+      "filePath": "odrl_agent/observability.py",
+      "contentHash": "8f366b98231aa6b7e0e1b73621f5817221e95b89b650106dc6548f379bef3e1c",
+      "functions": [
+        {
+          "name": "request_id",
+          "params": [
+            "incoming"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "route_template",
+          "params": [
+            "path"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "log_event",
+          "params": [
+            "event"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "configure_logging",
+          "params": [
+            "level"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "_labels",
+          "params": [
+            "labels"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 8
+        }
+      ],
+      "classes": [
+        {
+          "name": "Metrics",
+          "methods": [
+            "__init__",
+            "_key",
+            "describe",
+            "inc",
+            "set",
+            "observe",
+            "quantile",
+            "value",
+            "reset",
+            "render"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 70
+        }
+      ],
+      "imports": [
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "logging",
+          "specifiers": [
+            "logging"
+          ]
+        },
+        {
+          "source": "re",
+          "specifiers": [
+            "re"
+          ]
+        },
+        {
+          "source": "threading",
+          "specifiers": [
+            "threading"
+          ]
+        },
+        {
+          "source": "time",
+          "specifiers": [
+            "time"
+          ]
+        },
+        {
+          "source": "uuid",
+          "specifiers": [
+            "uuid"
+          ]
+        },
+        {
+          "source": "collections",
+          "specifiers": [
+            "defaultdict"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        }
+      ],
+      "exports": [
+        "request_id",
+        "route_template",
+        "log_event",
+        "configure_logging",
+        "_labels",
+        "Metrics"
+      ],
+      "totalLines": 164,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/odrl.py": {
+      "filePath": "odrl_agent/odrl.py",
+      "contentHash": "4bb8fa228e71049e3debfd42b14f9e8976293ef01f88d10b5cc085284a8caa31",
+      "functions": [
+        {
+          "name": "_repo_file",
+          "params": [
+            "name"
+          ],
+          "returnType": "Path",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "_policy_subclasses",
+          "params": [],
+          "returnType": "set[str]",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "ontology_terms",
+          "params": [],
+          "returnType": "set[str]",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "contains_attacker_grant",
+          "params": [
+            "doc",
+            "principal"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "_load_context",
+          "params": [],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "_localize_context",
+          "params": [
+            "value"
+          ],
+          "returnType": "Any",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "jsonld_to_graph",
+          "params": [
+            "doc"
+          ],
+          "returnType": "rdflib.Graph",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "validate_odrl",
+          "params": [
+            "doc"
+          ],
+          "returnType": "tuple[bool, list[str]]",
+          "exported": true,
+          "lineCount": 36
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "rdflib",
+          "specifiers": [
+            "rdflib"
+          ]
+        },
+        {
+          "source": "pyshacl",
+          "specifiers": [
+            "shacl_validate"
+          ]
+        }
+      ],
+      "exports": [
+        "_repo_file",
+        "_policy_subclasses",
+        "ontology_terms",
+        "contains_attacker_grant",
+        "_load_context",
+        "_localize_context",
+        "jsonld_to_graph",
+        "validate_odrl"
+      ],
+      "totalLines": 171,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/pipeline.py": {
+      "filePath": "odrl_agent/pipeline.py",
+      "contentHash": "45870ba432b6c03dcf572721064b49a451b4528b142d86d2dcb27f3dad3d6484",
+      "functions": [
+        {
+          "name": "_normalize",
+          "params": [
+            "text"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "locate",
+          "params": [
+            "quote",
+            "source"
+          ],
+          "returnType": "tuple[int, int] | None",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "ground",
+          "params": [
+            "ir",
+            "source"
+          ],
+          "returnType": "tuple[PolicyIR, list[str]]",
+          "exported": true,
+          "lineCount": 23
+        },
+        {
+          "name": "_is_grounded",
+          "params": [
+            "rule"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "_key",
+          "params": [
+            "rule",
+            "ir"
+          ],
+          "returnType": "tuple[str, str, str, str]",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "widening",
+          "params": [
+            "old",
+            "new"
+          ],
+          "returnType": "list[str]",
+          "exported": true,
+          "lineCount": 20
+        },
+        {
+          "name": "_source_text",
+          "params": [
+            "scenario"
+          ],
+          "returnType": "tuple[str, str, str, str]",
+          "exported": true,
+          "lineCount": 17
+        },
+        {
+          "name": "_record_key",
+          "params": [
+            "scenario"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "_usage_delta",
+          "params": [
+            "llm",
+            "before"
+          ],
+          "returnType": "dict[str, int]",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "_call",
+          "params": [
+            "run",
+            "llm",
+            "purpose",
+            "model",
+            "fn"
+          ],
+          "returnType": "Any",
+          "exported": true,
+          "lineCount": 24
+        },
+        {
+          "name": "_hold",
+          "params": [
+            "draft",
+            "alert"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "_publish",
+          "params": [
+            "run",
+            "ledger",
+            "record",
+            "doc",
+            "draft"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 40
+        },
+        {
+          "name": "convert",
+          "params": [
+            "text",
+            "extractor",
+            "run",
+            "source_meta",
+            "grounder"
+          ],
+          "returnType": "tuple[PolicyDraft, dict[str, Any] | None]",
+          "exported": true,
+          "lineCount": 178
+        },
+        {
+          "name": "run_conversion",
+          "params": [
+            "scenario",
+            "policy",
+            "seed",
+            "trace_path",
+            "state_path",
+            "scenario_text",
+            "policy_text",
+            "model",
+            "strong_model",
+            "llm_config",
+            "llm",
+            "sdk",
+            "request_id",
+            "grounder"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 156
+        }
+      ],
+      "classes": [
+        {
+          "name": "PipelineError",
+          "methods": [],
+          "properties": [],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "PolicyDraft",
+          "methods": [
+            "as_dict"
+          ],
+          "properties": [
+            "status",
+            "odrl",
+            "ir",
+            "valid",
+            "errors",
+            "ambiguities",
+            "assumptions",
+            "dropped_rules",
+            "repairs",
+            "rejected_repairs",
+            "route",
+            "shapes",
+            "grounding",
+            "reasoning",
+            "alerts",
+            "auto_publish"
+          ],
+          "exported": true,
+          "lineCount": 24
+        },
+        {
+          "name": "_Run",
+          "methods": [
+            "__init__",
+            "stage",
+            "model_call",
+            "tool",
+            "fault"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 107
+        }
+      ],
+      "imports": [
+        {
+          "source": "copy",
+          "specifiers": [
+            "copy"
+          ]
+        },
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "random",
+          "specifiers": [
+            "random"
+          ]
+        },
+        {
+          "source": "re",
+          "specifiers": [
+            "re"
+          ]
+        },
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "asdict",
+            "dataclass",
+            "field"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "agentcrash",
+          "specifiers": [
+            "AgentCrash",
+            "RunContext"
+          ]
+        },
+        {
+          "source": "agentcrash.clock",
+          "specifiers": [
+            "VirtualClock"
+          ]
+        },
+        {
+          "source": "agentcrash.ledger",
+          "specifiers": [
+            "Ledger"
+          ]
+        },
+        {
+          "source": "agentcrash.tracer",
+          "specifiers": [
+            "TraceWriter",
+            "compute_run_id"
+          ]
+        },
+        {
+          "source": "agentcrash.verifiers",
+          "specifiers": [
+            "load_state_snapshot",
+            "load_trace_events"
+          ]
+        },
+        {
+          "source": "odrl_agent.compiler",
+          "specifiers": [
+            "CompileError",
+            "compile_ir"
+          ]
+        },
+        {
+          "source": "odrl_agent.extractor",
+          "specifiers": [
+            "DEFAULT_MODEL",
+            "Extractor",
+            "ExtractResult",
+            "ModelRoute",
+            "classify"
+          ]
+        },
+        {
+          "source": "odrl_agent.grounder",
+          "specifiers": [
+            "INJECTED_GRANT",
+            "Grounder"
+          ]
+        },
+        {
+          "source": "odrl_agent.instrument",
+          "specifiers": [
+            "BOUNDARY_LLM",
+            "BOUNDARY_SOURCE",
+            "BOUNDARY_STORE",
+            "WORKFLOW",
+            "default_sdk",
+            "finish"
+          ]
+        },
+        {
+          "source": "odrl_agent.ir",
+          "specifiers": [
+            "AmbiguityFlag",
+            "PolicyIR",
+            "RuleIR"
+          ]
+        },
+        {
+          "source": "odrl_agent.llm",
+          "specifiers": [
+            "LlmError",
+            "StructuredLlm"
+          ]
+        },
+        {
+          "source": "odrl_agent.odrl",
+          "specifiers": [
+            "ODRL_SHAPES_ID",
+            "validate_odrl"
+          ]
+        },
+        {
+          "source": "odrl_agent.reasoning",
+          "specifiers": [
+            "analyze"
+          ]
+        },
+        {
+          "source": "odrl_agent.strict",
+          "specifiers": [
+            "strict_validate"
+          ]
+        },
+        {
+          "source": "odrl_agent.tools",
+          "specifiers": [
+            "SAVE_ODRL",
+            "VALIDATE_ODRL",
+            "ToolRegistry"
+          ]
+        }
+      ],
+      "exports": [
+        "PipelineError",
+        "PolicyDraft",
+        "_normalize",
+        "locate",
+        "ground",
+        "_is_grounded",
+        "_key",
+        "widening",
+        "_source_text",
+        "_record_key",
+        "_Run",
+        "_usage_delta",
+        "_call",
+        "_hold",
+        "_publish",
+        "convert",
+        "run_conversion"
+      ],
+      "totalLines": 733,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/publish.py": {
+      "filePath": "odrl_agent/publish.py",
+      "contentHash": "794805b1f9263a9885398b8f5d58d7701512ae4ce4c2f501546d1d8fb3472dbb",
+      "functions": [
+        {
+          "name": "ensure_tables",
+          "params": [
+            "conn"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "run_end_detail",
+          "params": [
+            "events"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "draft_of",
+          "params": [
+            "events"
+          ],
+          "returnType": "dict[str, Any] | None",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "source_of",
+          "params": [
+            "events"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "decision_for",
+          "params": [
+            "conn",
+            "run_key"
+          ],
+          "returnType": "dict[str, Any] | None",
+          "exported": true,
+          "lineCount": 14
+        },
+        {
+          "name": "review_draft",
+          "params": [
+            "draft",
+            "source",
+            "edited_ir"
+          ],
+          "returnType": "Review",
+          "exported": true,
+          "lineCount": 43
+        },
+        {
+          "name": "decide",
+          "params": [
+            "conn",
+            "run_key",
+            "events",
+            "reviewer_fp",
+            "decision",
+            "reason",
+            "edited_ir"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 75
+        },
+        {
+          "name": "list_drafts",
+          "params": [
+            "conn",
+            "scope",
+            "include_decided",
+            "limit"
+          ],
+          "returnType": "list[dict[str, Any]]",
+          "exported": true,
+          "lineCount": 39
+        }
+      ],
+      "classes": [
+        {
+          "name": "PublishError",
+          "methods": [
+            "__init__"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "Review",
+          "methods": [
+            "blocking",
+            "as_dict"
+          ],
+          "properties": [
+            "doc",
+            "ir",
+            "valid",
+            "shacl_errors",
+            "conflicts",
+            "alerts",
+            "widening"
+          ],
+          "exported": true,
+          "lineCount": 30
+        }
+      ],
+      "imports": [
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "dataclass",
+            "field"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "pydantic",
+          "specifiers": [
+            "ValidationError"
+          ]
+        },
+        {
+          "source": "odrl_agent",
+          "specifiers": [
+            "db_module"
+          ]
+        },
+        {
+          "source": "odrl_agent.compiler",
+          "specifiers": [
+            "CompileError",
+            "compile_ir"
+          ]
+        },
+        {
+          "source": "odrl_agent.ir",
+          "specifiers": [
+            "PolicyIR"
+          ]
+        },
+        {
+          "source": "odrl_agent.odrl",
+          "specifiers": [
+            "contains_attacker_grant",
+            "validate_odrl"
+          ]
+        },
+        {
+          "source": "odrl_agent.reasoning",
+          "specifiers": [
+            "analyze"
+          ]
+        }
+      ],
+      "exports": [
+        "PublishError",
+        "ensure_tables",
+        "run_end_detail",
+        "draft_of",
+        "source_of",
+        "decision_for",
+        "Review",
+        "review_draft",
+        "decide",
+        "list_drafts"
+      ],
+      "totalLines": 301,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/reasoning.py": {
+      "filePath": "odrl_agent/reasoning.py",
+      "contentHash": "cc4e34192d277d4fdf99fa2b86ac5a8c72dbf421abeb854521fea84db80c7ca5",
+      "functions": [
+        {
+          "name": "action_parents",
+          "params": [],
+          "returnType": "dict[str, frozenset[str]]",
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "ancestors",
+          "params": [
+            "action"
+          ],
+          "returnType": "frozenset[str]",
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "includes",
+          "params": [
+            "broad",
+            "narrow"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "_duration_seconds",
+          "params": [
+            "text"
+          ],
+          "returnType": "float",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "_epoch",
+          "params": [
+            "value_type",
+            "text"
+          ],
+          "returnType": "float",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "_numeric",
+          "params": [
+            "value_type",
+            "text"
+          ],
+          "returnType": "float | None",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "_solve",
+          "params": [
+            "constraint_lists"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "satisfiable",
+          "params": [],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "_same",
+          "params": [
+            "a",
+            "b"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "_assignee",
+          "params": [
+            "rule",
+            "ir"
+          ],
+          "returnType": "str | None",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "analyze",
+          "params": [
+            "ir"
+          ],
+          "returnType": "ReasoningReport",
+          "exported": true,
+          "lineCount": 70
+        }
+      ],
+      "classes": [
+        {
+          "name": "_Encoder",
+          "methods": [
+            "__init__",
+            "real",
+            "string",
+            "fresh",
+            "atom",
+            "node",
+            "all"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 57
+        },
+        {
+          "name": "Finding",
+          "methods": [],
+          "properties": [
+            "code",
+            "detail",
+            "rules",
+            "path"
+          ],
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "ReasoningReport",
+          "methods": [
+            "conflicts",
+            "unsatisfiable",
+            "ok",
+            "as_dict",
+            "messages"
+          ],
+          "properties": [
+            "findings"
+          ],
+          "exported": true,
+          "lineCount": 24
+        }
+      ],
+      "imports": [
+        {
+          "source": "re",
+          "specifiers": [
+            "re"
+          ]
+        },
+        {
+          "source": "threading",
+          "specifiers": [
+            "threading"
+          ]
+        },
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "asdict",
+            "dataclass",
+            "field"
+          ]
+        },
+        {
+          "source": "datetime",
+          "specifiers": [
+            "UTC",
+            "date",
+            "datetime"
+          ]
+        },
+        {
+          "source": "functools",
+          "specifiers": [
+            "lru_cache"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "z3",
+          "specifiers": [
+            "z3"
+          ]
+        },
+        {
+          "source": "odrl_agent.ir",
+          "specifiers": [
+            "ConstraintIR",
+            "LogicalConstraintIR",
+            "PolicyIR",
+            "RuleIR"
+          ]
+        }
+      ],
+      "exports": [
+        "action_parents",
+        "ancestors",
+        "includes",
+        "_duration_seconds",
+        "_epoch",
+        "_numeric",
+        "_Encoder",
+        "_solve",
+        "satisfiable",
+        "Finding",
+        "ReasoningReport",
+        "_same",
+        "_assignee",
+        "analyze"
+      ],
+      "totalLines": 318,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/remediation.py": {
+      "filePath": "odrl_agent/remediation.py",
+      "contentHash": "fe1dff03b280f964923adef5b88c1ee2e03db2e4e68e1373ab36aea37bb78ebc",
+      "functions": [
+        {
+          "name": "reference_patch_s4_validate",
+          "params": [
+            "source_run_id"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 29
+        },
+        {
+          "name": "reference_patch_s4_fresh",
+          "params": [
+            "source_run_id"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 25
+        },
+        {
+          "name": "reference_patch_s4_reconcile",
+          "params": [
+            "source_run_id"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 27
+        },
+        {
+          "name": "reference_patch_for",
+          "params": [
+            "scenario_id",
+            "source_run_id"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 9
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        }
+      ],
+      "exports": [
+        "reference_patch_s4_validate",
+        "reference_patch_s4_fresh",
+        "reference_patch_s4_reconcile",
+        "reference_patch_for"
+      ],
+      "totalLines": 109,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/strict.py": {
+      "filePath": "odrl_agent/strict.py",
+      "contentHash": "c890cc74715c3048a58c3eb8f039248f2dd3e52e2e3ec603bb9c61b9168bce11",
+      "functions": [
+        {
+          "name": "_canonical",
+          "params": [
+            "event"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "strict_validate",
+          "params": [
+            "trace",
+            "scenario",
+            "scenario_text",
+            "policy_text",
+            "policy",
+            "state",
+            "envelope_schema"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 96
+        },
+        {
+          "name": "_keyed_tools",
+          "params": [
+            "policy"
+          ],
+          "returnType": "set[str]",
+          "exported": true,
+          "lineCount": 15
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "hashlib",
+          "specifiers": [
+            "hashlib"
+          ]
+        },
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "jsonschema",
+          "specifiers": [
+            "jsonschema"
+          ]
+        },
+        {
+          "source": "agentcrash.ledger",
+          "specifiers": [
+            "Ledger"
+          ]
+        },
+        {
+          "source": "agentcrash.tracer",
+          "specifiers": [
+            "compute_run_id"
+          ]
+        },
+        {
+          "source": "agentcrash.verifiers",
+          "specifiers": [
+            "TraceCorruptError"
+          ]
+        }
+      ],
+      "exports": [
+        "_canonical",
+        "strict_validate",
+        "_keyed_tools"
+      ],
+      "totalLines": 157,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/tools.py": {
+      "filePath": "odrl_agent/tools.py",
+      "contentHash": "f66eb9e761e4b1a01fd8567864f9c3f6d27273be33b4d20b21c48acdc70d3858",
+      "functions": [
+        {
+          "name": "render_untrusted",
+          "params": [
+            "text",
+            "source"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "_is_number",
+          "params": [
+            "value"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "_validate_args",
+          "params": [
+            "name",
+            "args"
+          ],
+          "returnType": "str | None",
+          "exported": true,
+          "lineCount": 34
+        }
+      ],
+      "classes": [
+        {
+          "name": "ToolRegistry",
+          "methods": [
+            "__init__",
+            "from_scenario",
+            "tool_names",
+            "spec",
+            "call"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 173
+        }
+      ],
+      "imports": [
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "agentcrash.clock",
+          "specifiers": [
+            "VirtualClock"
+          ]
+        },
+        {
+          "source": "agentcrash.ledger",
+          "specifiers": [
+            "Ledger"
+          ]
+        },
+        {
+          "source": "odrl_agent.odrl",
+          "specifiers": [
+            "ODRL_SHAPES_ID",
+            "validate_odrl"
+          ]
+        }
+      ],
+      "exports": [
+        "render_untrusted",
+        "_is_number",
+        "_validate_args",
+        "ToolRegistry"
+      ],
+      "totalLines": 255,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/verifiers.py": {
+      "filePath": "odrl_agent/verifiers.py",
+      "contentHash": "e48fd6bf767ca208dc42e416b8989cbd88663f04e46b36e353129596d72f39bf",
+      "functions": [
+        {
+          "name": "_mutating_calls",
+          "params": [
+            "trace",
+            "tool"
+          ],
+          "returnType": "list[dict[str, Any]]",
+          "exported": true,
+          "lineCount": 18
+        },
+        {
+          "name": "_committed_saves",
+          "params": [
+            "trace"
+          ],
+          "returnType": "list[dict[str, Any]]",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "_run_end",
+          "params": [
+            "trace"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "_source",
+          "params": [
+            "trace"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "_draft_ir",
+          "params": [
+            "trace"
+          ],
+          "returnType": "Any",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "register_odrl_verifiers",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 16
+        }
+      ],
+      "classes": [
+        {
+          "name": "OdrlValid",
+          "methods": [
+            "check"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 26
+        },
+        {
+          "name": "NoAttackerGrant",
+          "methods": [
+            "check"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 31
+        },
+        {
+          "name": "ExactlyOnceSave",
+          "methods": [
+            "check"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 19
+        },
+        {
+          "name": "OdrlShaclValid",
+          "methods": [
+            "check"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 29
+        },
+        {
+          "name": "NoDeonticConflict",
+          "methods": [
+            "check"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 23
+        },
+        {
+          "name": "GroundedPrincipals",
+          "methods": [
+            "check"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 33
+        },
+        {
+          "name": "ExactlyOncePublish",
+          "methods": [
+            "check"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 23
+        }
+      ],
+      "imports": [
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "agentcrash.verifiers",
+          "specifiers": [
+            "FreshWriteOnly",
+            "NoLostUpdate",
+            "Verdict",
+            "get_verifier",
+            "register_verifier",
+            "verifier_ids"
+          ]
+        },
+        {
+          "source": "odrl_agent.odrl",
+          "specifiers": [
+            "ATTACKER_PRINCIPAL",
+            "contains_attacker_grant",
+            "validate_odrl"
+          ]
+        }
+      ],
+      "exports": [
+        "_mutating_calls",
+        "_committed_saves",
+        "OdrlValid",
+        "NoAttackerGrant",
+        "ExactlyOnceSave",
+        "_run_end",
+        "_source",
+        "_draft_ir",
+        "OdrlShaclValid",
+        "NoDeonticConflict",
+        "GroundedPrincipals",
+        "ExactlyOncePublish",
+        "register_odrl_verifiers"
+      ],
+      "totalLines": 352,
+      "hasStructuralAnalysis": true
+    },
+    "odrl_agent/web.py": {
+      "filePath": "odrl_agent/web.py",
+      "contentHash": "72317ab4ddc5c92bb8fd7cde9d7349f0eca5c97e2b60efb2c2d1c6f89f516b39",
+      "functions": [
+        {
+          "name": "_api_keys",
+          "params": [],
+          "returnType": "list[str]",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "_key_state",
+          "params": [
+            "conn"
+          ],
+          "returnType": "tuple[list[str], set[str], bool]",
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "key_state",
+          "params": [
+            "conn"
+          ],
+          "returnType": "tuple[list[str], set[str], bool]",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "find_repo_root",
+          "params": [
+            "start"
+          ],
+          "returnType": "Path | None",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "load_yaml",
+          "params": [
+            "path"
+          ],
+          "returnType": "tuple[dict[str, Any], str]",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "validate_convert",
+          "params": [
+            "body"
+          ],
+          "returnType": "tuple[str, str, int, int]",
+          "exported": true,
+          "lineCount": 19
+        },
+        {
+          "name": "build_inline_run",
+          "params": [
+            "nl_text",
+            "variant",
+            "seed",
+            "max_steps",
+            "root",
+            "attempt",
+            "out_dir",
+            "tenant"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 42
+        },
+        {
+          "name": "read_events",
+          "params": [
+            "trace_path"
+          ],
+          "returnType": "list[dict[str, Any]]",
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "sum_usage",
+          "params": [
+            "events"
+          ],
+          "returnType": "tuple[dict[str, int], int]",
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "summarize_saves",
+          "params": [
+            "events"
+          ],
+          "returnType": "list[dict[str, Any]]",
+          "exported": true,
+          "lineCount": 25
+        },
+        {
+          "name": "_snapshot_from_parts",
+          "params": [
+            "run_key",
+            "spec",
+            "status",
+            "events",
+            "outcome",
+            "patch_doc",
+            "chain_ok",
+            "wall_seconds",
+            "error"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 39
+        },
+        {
+          "name": "_draft_from",
+          "params": [
+            "events"
+          ],
+          "returnType": "dict[str, Any] | None",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "_record_snapshot",
+          "params": [
+            "db_path",
+            "run_key",
+            "snap",
+            "spec"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 51
+        },
+        {
+          "name": "_scripted_transport",
+          "params": [
+            "replies"
+          ],
+          "returnType": "Any",
+          "exported": true,
+          "lineCount": 21
+        },
+        {
+          "name": "run_and_store",
+          "params": [
+            "spec",
+            "run_key",
+            "actions"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 89
+        },
+        {
+          "name": "_public_snapshot",
+          "params": [
+            "snap"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "_db_conn",
+          "params": [
+            "root",
+            "out_dir"
+          ],
+          "returnType": "Any",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "keys_db",
+          "params": [
+            "root",
+            "out_dir"
+          ],
+          "returnType": "Any",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "_ensure_saas_tables",
+          "params": [
+            "conn"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "_ensure_tenant_table",
+          "params": [
+            "conn"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "_fp",
+          "params": [
+            "raw"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "_stored_key_fps",
+          "params": [
+            "conn"
+          ],
+          "returnType": "set[str]",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "issue_api_key",
+          "params": [
+            "conn",
+            "label"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "revoke_api_key",
+          "params": [
+            "conn",
+            "fp_prefix"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "list_api_keys",
+          "params": [
+            "conn"
+          ],
+          "returnType": "list[dict[str, Any]]",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "_tenant_for",
+          "params": [
+            "conn",
+            "run_key"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "_list_runs",
+          "params": [
+            "conn",
+            "flags",
+            "key_fp"
+          ],
+          "returnType": "list[dict[str, Any]]",
+          "exported": true,
+          "lineCount": 38
+        },
+        {
+          "name": "_list_pairs",
+          "params": [
+            "conn",
+            "flags",
+            "key_fp"
+          ],
+          "returnType": "list[dict[str, Any]]",
+          "exported": true,
+          "lineCount": 42
+        },
+        {
+          "name": "billing_lines",
+          "params": [
+            "conn",
+            "key_fp",
+            "since"
+          ],
+          "returnType": "list[dict[str, Any]]",
+          "exported": true,
+          "lineCount": 23
+        },
+        {
+          "name": "_usage_rows",
+          "params": [
+            "conn",
+            "key_fp"
+          ],
+          "returnType": "list[dict[str, Any]]",
+          "exported": true,
+          "lineCount": 37
+        },
+        {
+          "name": "_env_int",
+          "params": [
+            "name",
+            "default",
+            "low",
+            "high"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "_query_flags",
+          "params": [
+            "query"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 24
+        },
+        {
+          "name": "model_status",
+          "params": [
+            "tenant"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "apply_model_settings",
+          "params": [
+            "body",
+            "tenant"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 30
+        },
+        {
+          "name": "serve_ui",
+          "params": [
+            "port",
+            "bind",
+            "ui_dir"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 16
+        }
+      ],
+      "classes": [
+        {
+          "name": "ConvertError",
+          "methods": [],
+          "properties": [],
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "BusyError",
+          "methods": [
+            "__init__"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "RunRegistry",
+          "methods": [
+            "__init__",
+            "_gauges",
+            "_evict",
+            "_retry_after",
+            "active",
+            "queued",
+            "retained",
+            "start",
+            "_worker",
+            "_execute",
+            "snapshot",
+            "wait"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 262
+        },
+        {
+          "name": "ServerSettings",
+          "methods": [
+            "__init__",
+            "reset",
+            "update",
+            "config",
+            "raw"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 38
+        }
+      ],
+      "imports": [
+        {
+          "source": "collections",
+          "specifiers": [
+            "collections"
+          ]
+        },
+        {
+          "source": "copy",
+          "specifiers": [
+            "copy"
+          ]
+        },
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "math",
+          "specifiers": [
+            "math"
+          ]
+        },
+        {
+          "source": "os",
+          "specifiers": [
+            "os"
+          ]
+        },
+        {
+          "source": "threading",
+          "specifiers": [
+            "threading"
+          ]
+        },
+        {
+          "source": "time",
+          "specifiers": [
+            "time"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "yaml",
+          "specifiers": [
+            "yaml"
+          ]
+        },
+        {
+          "source": "agentcrash.policy",
+          "specifiers": [
+            "PolicyRejectedError",
+            "validate_patch_data"
+          ]
+        },
+        {
+          "source": "agentcrash.tracer",
+          "specifiers": [
+            "compute_run_id",
+            "verify_chain"
+          ]
+        },
+        {
+          "source": "agentcrash.verifiers",
+          "specifiers": [
+            "TraceCorruptError",
+            "UnknownVerifierError",
+            "VerifierError",
+            "load_state_snapshot",
+            "run_verifiers"
+          ]
+        },
+        {
+          "source": "odrl_agent.verifiers",
+          "specifiers": [
+            "odrl_agent.verifiers"
+          ]
+        },
+        {
+          "source": "odrl_agent",
+          "specifiers": [
+            "db_module"
+          ]
+        },
+        {
+          "source": "odrl_agent.adapter",
+          "specifiers": [
+            "DEFAULT_MODEL",
+            "LLAMA_KEY_ENV",
+            "LLAMA_MAX_TOKENS_ENV",
+            "LLAMA_TIMEOUT_ENV",
+            "LLAMA_URL_ENV",
+            "LlmConfig",
+            "ModelNotConfiguredError"
+          ]
+        },
+        {
+          "source": "odrl_agent.netguard",
+          "specifiers": [
+            "UnsafeBaseUrlError",
+            "validate_base_url"
+          ]
+        },
+        {
+          "source": "odrl_agent.observability",
+          "specifiers": [
+            "METRICS",
+            "configure_logging",
+            "log_event"
+          ]
+        },
+        {
+          "source": "odrl_agent.odrl",
+          "specifiers": [
+            "contains_attacker_grant",
+            "validate_odrl"
+          ]
+        },
+        {
+          "source": "odrl_agent.pipeline",
+          "specifiers": [
+            "run_conversion"
+          ]
+        },
+        {
+          "source": "odrl_agent.remediation",
+          "specifiers": [
+            "reference_patch_for"
+          ]
+        }
+      ],
+      "exports": [
+        "_api_keys",
+        "_key_state",
+        "key_state",
+        "ConvertError",
+        "find_repo_root",
+        "load_yaml",
+        "validate_convert",
+        "build_inline_run",
+        "read_events",
+        "sum_usage",
+        "summarize_saves",
+        "_snapshot_from_parts",
+        "_draft_from",
+        "_record_snapshot",
+        "_scripted_transport",
+        "run_and_store",
+        "_public_snapshot",
+        "_db_conn",
+        "keys_db",
+        "_ensure_saas_tables",
+        "_ensure_tenant_table",
+        "_fp",
+        "_stored_key_fps",
+        "issue_api_key",
+        "revoke_api_key",
+        "list_api_keys",
+        "_tenant_for",
+        "_list_runs",
+        "_list_pairs",
+        "billing_lines",
+        "_usage_rows",
+        "BusyError",
+        "_env_int",
+        "RunRegistry",
+        "_query_flags",
+        "ServerSettings",
+        "model_status",
+        "apply_model_settings",
+        "serve_ui"
+      ],
+      "totalLines": 1143,
+      "hasStructuralAnalysis": true
+    },
+    "policies/default.yaml": {
+      "filePath": "policies/default.yaml",
+      "contentHash": "34096da6bece003980d8990303c48e2c659b94b8bb76e57a15e4c196b7926e8c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 6,
+      "hasStructuralAnalysis": false
+    },
+    "policies/fixed-odrl-convert.yaml": {
+      "filePath": "policies/fixed-odrl-convert.yaml",
+      "contentHash": "7676aa4d44b3e2f6aeefddf84499afd3fdac3998799c4fd4ab35ae12f2d067db",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 22,
+      "hasStructuralAnalysis": false
+    },
+    "prompts/pack-probe-v1.json": {
+      "filePath": "prompts/pack-probe-v1.json",
+      "contentHash": "531249304c4b0ea1880057f3dacf8f4543fce7b92ecff6259110ec7950d9d060",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 29,
+      "hasStructuralAnalysis": false
+    },
+    "pyproject.toml": {
+      "filePath": "pyproject.toml",
+      "contentHash": "b0f752c9e2c301d18b4e893c60fe053928102a5a327e2cf1d14b869ad8bc10cf",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 42,
+      "hasStructuralAnalysis": false
+    },
+    "scenarios/odrl_convert/scenario.yaml": {
+      "filePath": "scenarios/odrl_convert/scenario.yaml",
+      "contentHash": "2382a422e21bde6a0d3e746533cfc860997f0b129b097af5b860eb29abea8d02",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 46,
+      "hasStructuralAnalysis": false
+    },
+    "scenarios/odrl_convert_poisoned/scenario.yaml": {
+      "filePath": "scenarios/odrl_convert_poisoned/scenario.yaml",
+      "contentHash": "42e0484bd1bd65c7161bf75a32050194b4f762382074d0929edb76bea46a336c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 47,
+      "hasStructuralAnalysis": false
+    },
+    "schemas/env-state.json": {
+      "filePath": "schemas/env-state.json",
+      "contentHash": "d3426816f17d71479503dbb33fb44f4967b72aa831aeb4237a1c020a944592a6",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 21,
+      "hasStructuralAnalysis": false
+    },
+    "schemas/odrl-2.2-shapes.ttl": {
+      "filePath": "schemas/odrl-2.2-shapes.ttl",
+      "contentHash": "25b82d9e125bb872afee5a50cb24ea3051ad57bc002b5f21161df77808c2f2bd",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 237,
+      "hasStructuralAnalysis": false
+    },
+    "schemas/odrl-2.2.jsonld": {
+      "filePath": "schemas/odrl-2.2.jsonld",
+      "contentHash": "0e55c3cff90992a045fbf087248c8ce4d5666910f280e3d6e1c587a493a1aa37",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 201,
+      "hasStructuralAnalysis": false
+    },
+    "schemas/odrl-2.2.ttl": {
+      "filePath": "schemas/odrl-2.2.ttl",
+      "contentHash": "7895765e80d86d1d0349d945a28b8a2479f03169572345080a5b3e561ef31457",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 2275,
+      "hasStructuralAnalysis": false
+    },
+    "schemas/policy-patch.json": {
+      "filePath": "schemas/policy-patch.json",
+      "contentHash": "c338b36eb30061beeb930e05f0b9aff215e337d62a6c25ae591f62da0d9916d9",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 14,
+      "hasStructuralAnalysis": false
+    },
+    "schemas/policy.json": {
+      "filePath": "schemas/policy.json",
+      "contentHash": "e10cf5834cba6c851029ef2182da46c4853a36621e09d2f13984db61fc5d58a0",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 43,
+      "hasStructuralAnalysis": false
+    },
+    "schemas/scenario.json": {
+      "filePath": "schemas/scenario.json",
+      "contentHash": "2e676208b6e8f9739200cc686959fdc5417a7cf958180b9d0e7d4210f8b7e092",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 50,
+      "hasStructuralAnalysis": false
+    },
+    "schemas/trace-event.json": {
+      "filePath": "schemas/trace-event.json",
+      "contentHash": "b238ae77e1695d7deb81e462c0a7300ac3a783e7716a5fdd291fce14b2b99469",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 36,
+      "hasStructuralAnalysis": false
+    },
+    "scripts/baseline_v0.py": {
+      "filePath": "scripts/baseline_v0.py",
+      "contentHash": "5eeb603407348e729cc8985afe5386668a6b4e94bc88edb32eda7b9a338e516a",
+      "functions": [
+        {
+          "name": "main",
+          "params": [],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 74
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "argparse",
+          "specifiers": [
+            "argparse"
+          ]
+        },
+        {
+          "source": "hashlib",
+          "specifiers": [
+            "hashlib"
+          ]
+        },
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "subprocess",
+          "specifiers": [
+            "subprocess"
+          ]
+        },
+        {
+          "source": "tempfile",
+          "specifiers": [
+            "tempfile"
+          ]
+        },
+        {
+          "source": "time",
+          "specifiers": [
+            "time"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "odrl_agent.adapter",
+          "specifiers": [
+            "DEFAULT_MODEL"
+          ]
+        },
+        {
+          "source": "odrl_agent.web",
+          "specifiers": [
+            "SETTINGS",
+            "build_inline_run",
+            "run_and_store"
+          ]
+        }
+      ],
+      "exports": [
+        "main"
+      ],
+      "totalLines": 102,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/make_baseline_cases.py": {
+      "filePath": "scripts/make_baseline_cases.py",
+      "contentHash": "ef0e80503501ed33275e872265ffcdf4210a925651c72396531e3ff387286886",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "odrl_agent.dspy_opt",
+          "specifiers": [
+            "TRAINSET_ROWS",
+            "trainset_hash"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 68,
+      "hasStructuralAnalysis": true
+    },
+    "ui-react/.oxlintrc.json": {
+      "filePath": "ui-react/.oxlintrc.json",
+      "contentHash": "b4d344818a1e1bf43997e4744a9153c8eef770c98b58229cd86363dabb85ded4",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 9,
+      "hasStructuralAnalysis": false
+    },
+    "ui-react/README.md": {
+      "filePath": "ui-react/README.md",
+      "contentHash": "fa8aac78b8be1993010b57f41000a243ecba006f6731513fe4ec91e788bf2517",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 33,
+      "hasStructuralAnalysis": false
+    },
+    "ui-react/index.html": {
+      "filePath": "ui-react/index.html",
+      "contentHash": "52589ef500159273901a8f63787a0d4d01684e858446561ca7894afa58dfc598",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 16,
+      "hasStructuralAnalysis": false
+    },
+    "ui-react/package.json": {
+      "filePath": "ui-react/package.json",
+      "contentHash": "7400e881153d04fe2193751c078df7ced4ff1db20b9736797a0f1dd53f34c002",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 26,
+      "hasStructuralAnalysis": false
+    },
+    "ui-react/src/App.tsx": {
+      "filePath": "ui-react/src/App.tsx",
+      "contentHash": "191ef660dfea503fc39d3cfa9fcdd2c63b7acad8b39695f5d20854c065d2139e",
+      "functions": [
+        {
+          "name": "highlightJson",
+          "params": [
+            "value"
+          ],
+          "returnType": "string",
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "markAttacker",
+          "params": [
+            "text"
+          ],
+          "returnType": "ReactElement[]",
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "outcomeOf",
+          "params": [
+            "snap"
+          ],
+          "returnType": "string",
+          "exported": false,
+          "lineCount": 17
+        },
+        {
+          "name": "PoliciesView",
+          "params": [
+            "{ onOpenRun }"
+          ],
+          "exported": false,
+          "lineCount": 54
+        },
+        {
+          "name": "ModelSetupDialog",
+          "params": [
+            "{ initial, onClose, onSaved }"
+          ],
+          "exported": false,
+          "lineCount": 33
+        },
+        {
+          "name": "ConvertView",
+          "params": [
+            "{ onOpenRun, onNeedSetup }"
+          ],
+          "exported": false,
+          "lineCount": 56
+        },
+        {
+          "name": "RunView",
+          "params": [
+            "{ focusKey, onConsumed }"
+          ],
+          "exported": false,
+          "lineCount": 80
+        },
+        {
+          "name": "Highlighted",
+          "params": [
+            "{ text, rules, active }"
+          ],
+          "exported": false,
+          "lineCount": 23
+        },
+        {
+          "name": "ReviewView",
+          "params": [
+            "{ onOpenRun }"
+          ],
+          "exported": false,
+          "lineCount": 98
+        },
+        {
+          "name": "App",
+          "params": [],
+          "exported": true,
+          "lineCount": 44
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "useCallback",
+            "useEffect",
+            "useMemo",
+            "useState",
+            "ReactElement"
+          ]
+        },
+        {
+          "source": "./api",
+          "specifiers": [
+            "api",
+            "ApiError",
+            "fmt",
+            "followRun",
+            "DraftRow",
+            "ModelSettings",
+            "OdrlPair",
+            "RuleIR",
+            "RunSnapshot"
+          ]
+        }
+      ],
+      "exports": [
+        "App"
+      ],
+      "totalLines": 432,
+      "hasStructuralAnalysis": true
+    },
+    "ui-react/src/api.ts": {
+      "filePath": "ui-react/src/api.ts",
+      "contentHash": "0fc0c64f4cae72d168fe13f7fcbc633b9f0e6b8a1ac578b1a4a301dcef925691",
+      "functions": [
+        {
+          "name": "json",
+          "params": [
+            "url",
+            "init"
+          ],
+          "returnType": "Promise<T>",
+          "exported": false,
+          "lineCount": 14
+        },
+        {
+          "name": "post",
+          "params": [
+            "body"
+          ],
+          "returnType": "RequestInit",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "followRun",
+          "params": [
+            "runKey",
+            "onProgress"
+          ],
+          "returnType": "Promise<RunSnapshot>",
+          "exported": true,
+          "lineCount": 24
+        },
+        {
+          "name": "fmt",
+          "params": [
+            "n"
+          ],
+          "returnType": "string",
+          "exported": true,
+          "lineCount": 3
+        }
+      ],
+      "classes": [
+        {
+          "name": "ApiError",
+          "methods": [
+            "constructor"
+          ],
+          "properties": [
+            "status",
+            "code",
+            "detail"
+          ],
+          "exported": true,
+          "lineCount": 11
+        }
+      ],
+      "imports": [],
+      "exports": [
+        "ApiError",
+        "api",
+        "followRun",
+        "fmt"
+      ],
+      "totalLines": 119,
+      "hasStructuralAnalysis": true
+    },
+    "ui-react/src/index.css": {
+      "filePath": "ui-react/src/index.css",
+      "contentHash": "3d40327c815c2ec43aae68227d8672bd44d9d00262339c2158ac2a6ffa8d4eac",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 132,
+      "hasStructuralAnalysis": false
+    },
+    "ui-react/src/main.tsx": {
+      "filePath": "ui-react/src/main.tsx",
+      "contentHash": "1d3e00f9b31a65004df9cd8e5bab600499137dc4dcd4413e3bbc05e4ae60c822",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "StrictMode"
+          ]
+        },
+        {
+          "source": "react-dom/client",
+          "specifiers": [
+            "createRoot"
+          ]
+        },
+        {
+          "source": "./App.tsx",
+          "specifiers": [
+            "App"
+          ]
+        },
+        {
+          "source": "./index.css",
+          "specifiers": []
+        }
+      ],
+      "exports": [],
+      "totalLines": 11,
+      "hasStructuralAnalysis": true
+    },
+    "ui-react/tsconfig.app.json": {
+      "filePath": "ui-react/tsconfig.app.json",
+      "contentHash": "8e5d12ba330e7d86409edec74b95451e0db22ee09b9426c94b5bf817571eddb0",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 27,
+      "hasStructuralAnalysis": false
+    },
+    "ui-react/tsconfig.json": {
+      "filePath": "ui-react/tsconfig.json",
+      "contentHash": "770b4140bbb581e2dfd9ea9946ffc9c75a1d86ba7d2db5f77c83e37cbdf9d808",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 8,
+      "hasStructuralAnalysis": false
+    },
+    "ui-react/tsconfig.node.json": {
+      "filePath": "ui-react/tsconfig.node.json",
+      "contentHash": "d366cc0827139db39c61815f22491bbfda56c654354a42ad7795143d314e45e8",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 24,
+      "hasStructuralAnalysis": false
+    },
+    "ui-react/vite.config.ts": {
+      "filePath": "ui-react/vite.config.ts",
+      "contentHash": "64f193a3a10caf008cb47c4255f2fb274a6c6b7b0f908e104c16a380826c04f9",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@vitejs/plugin-react",
+          "specifiers": [
+            "react"
+          ]
+        },
+        {
+          "source": "vite",
+          "specifiers": [
+            "defineConfig"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 11,
+      "hasStructuralAnalysis": true
+    },
+    "ui/index.html": {
+      "filePath": "ui/index.html",
+      "contentHash": "4ca1620aecb9aacd4138ea04e4eb2f8b4199df37469f2f99cd43cf95496e5b74",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 17,
+      "hasStructuralAnalysis": false
+    }
+  }
+}

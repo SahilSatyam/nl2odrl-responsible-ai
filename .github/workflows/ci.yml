@@ -24,6 +24,12 @@ jobs:
         run: pytest
       - name: Chaos gate (live pipeline under fuzzed fault schedules, mocked model)
         run: odrl-host chaos --max-cases 20 --report-out reports/chaos.json
+      - name: Benchmark integrity (manifest hash, prompt/model pins)
+        run: |
+          python -m odrl_agent.bench verify
+          python -m odrl_agent.bench pins
+      - name: Benchmark gates (offline oracle, no model)
+        run: python -m odrl_agent.bench run --mode offline --out reports/bench-offline.json
       - name: PII guardrail (scan-pii over PASS golden trace + state)
         run: >
           agentcrash check
