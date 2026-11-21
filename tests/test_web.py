@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import pytest
 
+import odrl_agent.verifiers  # noqa: F401 -- import registers product verifiers
+
 from odrl_agent.web import (
     ConvertError,
     RunRegistry,
+    apply_model_settings,
     build_inline_run,
+    model_status,
     validate_convert,
 )
 
@@ -120,6 +124,25 @@ def test_convert_flow_reports_verdict_and_patch(monkeypatch, tmp_path) -> None:
     }
     assert len(done["events"]) > 4
     assert all(e.get("injector_event") is None for e in done["events"])
+
+
+def test_model_settings_round_trip(monkeypatch) -> None:
+    monkeypatch.delenv("LLAMA_API_KEY", raising=False)
+    monkeypatch.delenv("LLAMA_BASE_URL", raising=False)
+    assert model_status()["configured"] is False
+    status = apply_model_settings(
+        {"base_url": "https://llama.example/v1/", "api_key": "  secret  "}
+    )
+    assert status["configured"] is True
+    assert status["base_url"] == "https://llama.example/v1"
+    assert status["api_key_set"] is True
+    assert "secret" not in status.values()
+    with pytest.raises(ConvertError):
+        apply_model_settings({"base_url": "not-a-url"})
+    with pytest.raises(ConvertError):
+        apply_model_settings({"api_key": "   "})
+    with pytest.raises(ConvertError):
+        apply_model_settings(["nope"])
 
 
 def test_convert_without_model_key_reports_error(monkeypatch, tmp_path) -> None:

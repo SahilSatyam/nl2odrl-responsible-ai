@@ -30,3 +30,24 @@ jobs:
           --plugin odrl_agent.verifiers
           --invariant odrl_valid --invariant no_attacker_grant --invariant exactly_once_save
           --report-out /tmp/scan-pii.verdict.json --scan-pii
+  studio:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui-react/package-lock.json
+      - name: Build studio
+        run: |
+          cd ui-react
+          npm ci --no-audit --no-fund
+          npm run build
+  image:
+    runs-on: ubuntu-latest
+    needs: [converter, studio]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build self-host image
+        run: docker build -t nl2odrl-studio:ci .

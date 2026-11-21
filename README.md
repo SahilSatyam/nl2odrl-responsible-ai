@@ -13,13 +13,16 @@ The ethical red line is **over-permission**: the conversion grants a
 right the source sentence did not. Fluency is not a control.
 
 ```bash
-pip install -e .
+git clone <this-repo> && cd nl2odrl-responsible-ai
+uv venv && uv pip install -e .          # or: python3 -m venv .venv && pip install -e .
 export PYTHONPATH=.
-odrl-host seed                                        # offline fixtures, no key
-odrl-host run --scenario odrl_convert --seed 42       # live model, needs key
-agentcrash check --trace traces/<run>.jsonl --plugin odrl_agent.verifiers \
-  --invariant odrl_valid --scan-pii
+cd ui-react && npm ci && npm run build && cd ..   # build the studio into ui/
+odrl-host serve --port 8901                       # open http://localhost:8901/
+odrl-host run --scenario odrl_convert --seed 42   # live model, needs key
 ```
+
+Or ship it as one image: `docker compose up --build` (same port;
+`LLAMA_API_KEY`, `LLAMA_BASE_URL`, and `NL2ODRL_API_KEYS` via env).
 
 ## How it works
 
@@ -86,7 +89,7 @@ suite work **with no key**. Only live model calls need one:
 
 | Needs `LLAMA_API_KEY` + `LLAMA_BASE_URL` | Works offline, no key |
 |---|---|
-| `odrl-host run` (live ReAct conversion) | `odrl-host seed`, `check` via `agentcrash`, `diagnose`, `serve` |
+| `odrl-host run` (live ReAct conversion) | `check` via `agentcrash`, `diagnose`, `serve` |
 | `odrl-host optimize-prompts` (live DSPy probe; refuses without a key) | `agentcrash check --plugin odrl_agent.verifiers`, PII scan, full pytest, frozen golden traces |
 
 Any OpenAI-compatible `{LLAMA_BASE_URL}/chat/completions` endpoint
@@ -100,6 +103,25 @@ export LLAMA_BASE_URL=<your-endpoint>/v1
 # export LLAMA_MAX_TOKENS=8000
 ```
 
+Product API keys gate the studio API in hosted mode:
+
+```bash
+export NL2ODRL_API_KEYS=tenant-one-key,tenant-two-key
+```
+
+With no keys anywhere the server stays open for local single-user use.
+Set `NL2ODRL_API_KEYS` or issue keys with `odrl-host keys issue --label L,
+and every `/api/*` call needs `Authorization: Bearer <key>` while anything
+else gets `E_AUTH` (401); the studio setup dialog has a field for the
+studio key. The gate fails closed: revoking all keys denies everyone.
+`odrl-host keys list` shows fingerprints (never raw keys);
+`odrl-host keys revoke --fp <prefix>` disables one.
+`GET /api/usage` reports per-key run and token totals for the caller.
+Runs, pairs, and single-run snapshots are scoped to the calling key when
+keys are set; unattributed runs from before keys were enabled stay hidden.
+Attribution lives in a `nl2odrl_run_tenants` sidecar table, so framework
+upgrades never touch it.
+
 Without a key, `odrl-host run` fails closed with `E_MODEL_API`
 (exit 5) naming the missing variables — intentional, not an install
 problem.
@@ -111,9 +133,10 @@ problem.
 | `odrl-host run --scenario S --seed N [--model M] [--policy P] [--dry-run] [--json]` | Execute the live agent against a scenario; writes trace + state |
 | `odrl-host diagnose --trace T --output O [--model M] [--scenario S] [--policy P]` | Propose a policy patch for a failing trace (read-only; fixture-backed unless `LLAMA_BASE_URL` is set) |
 | `odrl-host replay --trace T [--policy P] [--patch P] [--regression R]` | Re-run a trace scenario under a patched policy + regression check |
-| `odrl-host seed` | Replay scripted fixture runs into `agentcrash.db` (offline) |
 | `odrl-host optimize-prompts [--model M] [--max-live-calls N] [--out O]` | Budgeted DSPy probe of the conversion instruction (needs key) |
 | `odrl-host serve [--port P] [--bind B]` | Browse the ODRL/Policy Studio (serves `ui/`, local only) |
+| `odrl-host keys issue --label L` / `list` / `revoke --fp P` | Manage product API keys (only fingerprints are stored) |
+| `odrl-host billing export [--key-fp F] [--since T] [--format json\|csv]` | Dump per-run billing line items (vendor-neutral) |
 | `agentcrash check --trace T --plugin odrl_agent.verifiers --invariant I [--state S] [--report-out R] [--scan-pii]` | Framework verdict over any trace |
 
 ## Scenarios and policies
@@ -152,6 +175,5 @@ CI runs the same suite on Python 3.11–3.13 plus the PII guardrail
 | `schemas/` | Trace, scenario, env-state, ODRL-subset SHACL shapes |
 | `prompts/` | DSPy probe instruction pack |
 | `tests/` + `tests/fixtures/` | Converter tests + frozen golden traces |
-| `examples/odrl_host/` | Reference host: optional-SDK NL→ODRL app |
 | `ui/` | ODRL/Policy Studio assets served by `odrl-host serve` |
 | `.github/workflows/ci.yml` | Converter tests + PII guardrail on 3.11–3.13 |
