@@ -7,10 +7,10 @@ including the reconcile-first fix the live model discovered.
 """
 
 import json
-import urllib.request
 from pathlib import Path
 
 import pytest
+from scripted_llm import BASIC_IR, install
 
 from odrl_agent.cli import main
 from odrl_agent.remediation import reference_patch_for
@@ -21,121 +21,6 @@ FIXED_POLICY = REPO / "policies" / "fixed-odrl-convert.yaml"
 TRACE_DIR = REPO / "tests" / "fixtures" / "traces"
 FAILING_TRACE = TRACE_DIR / "odrl_convert-naive-seed42.jsonl"
 FAILING_STATE = TRACE_DIR / "odrl_convert-naive-seed42.state.json"
-
-STRICT_ODRL = {
-    "@context": "http://www.w3.org/ns/odrl.jsonld",
-    "type": "Offer",
-    "uid": "urn:odrl:policy:dataset-7",
-    "assigner": "data-steward",
-    "permission": [
-        {
-            "action": "use",
-            "target": "urn:data:dataset-7",
-            "assignee": "research-team",
-        }
-    ],
-}
-
-SLOPPY_ODRL = {
-    "@context": "http://www.w3.org/ns/odrl.jsonld",
-    "type": "Offer",
-    "uid": "urn:odrl:policy:dataset-7",
-    "permission": [{"action": "use", "assignee": "research-team"}],
-}
-
-DONE = {"type": "done", "reason": "saved"}
-
-#: Reconcile-first behavior under the diagnosed patch: sloppy parse,
-#: re-read, versioned write, stop. Exactly one save with freshness proof.
-RECONCILE_ACTIONS = [
-    {
-        "type": "call",
-        "tool": "parse_policy",
-        "args": {"doc_id": "access-request-1", "mode": "sloppy"},
-    },
-    {
-        "type": "call",
-        "tool": "save_odrl",
-        "args": {"op": "read", "record": "odrl-policy-1"},
-    },
-    {
-        "type": "call",
-        "tool": "save_odrl",
-        "args": {
-            "op": "write",
-            "record": "odrl-policy-1",
-            "value": SLOPPY_ODRL,
-            "expected_version": 1,
-        },
-    },
-    {
-        "type": "call",
-        "tool": "save_odrl",
-        "args": {"op": "read", "record": "odrl-policy-1"},
-    },
-    DONE,
-]
-
-#: Strict + reconcile behavior under the fixed policy: the fixed live run.
-FIXED_ACTIONS = [
-    {
-        "type": "call",
-        "tool": "parse_policy",
-        "args": {"doc_id": "access-request-1", "mode": "strict"},
-    },
-    {"type": "call", "tool": "validate_odrl", "args": {"odrl": STRICT_ODRL}},
-    {
-        "type": "call",
-        "tool": "save_odrl",
-        "args": {"op": "read", "record": "odrl-policy-1"},
-    },
-    {
-        "type": "call",
-        "tool": "save_odrl",
-        "args": {
-            "op": "write",
-            "record": "odrl-policy-1",
-            "value": STRICT_ODRL,
-            "expected_version": 1,
-        },
-    },
-    {
-        "type": "call",
-        "tool": "save_odrl",
-        "args": {"op": "read", "record": "odrl-policy-1"},
-    },
-    DONE,
-]
-
-
-def scripted_transport(monkeypatch, actions):
-    """Serve canned chat-completions actions through urlopen."""
-
-    class _FakeResponse:
-        def __init__(self, payload):
-            self._payload = payload
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *exc):
-            return False
-
-        def read(self):
-            return json.dumps(self._payload).encode("utf-8")
-
-    state = {"i": 0}
-
-    def _fake_urlopen(request, timeout=None):
-        idx = state["i"]
-        action = actions[idx] if idx < len(actions) else DONE
-        state["i"] += 1
-        return _FakeResponse({"choices": [{"message": {"content": json.dumps(action)}}]})
-
-    monkeypatch.setenv("LLAMA_API_KEY", "test-key")
-    monkeypatch.setenv("LLAMA_BASE_URL", "https://llama.example/v1")
-    monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen)
-
 
 def replay(trace, output_args, *extra, state=None):
     """Run replay against the reference scenario; return the exit code."""
@@ -163,8 +48,8 @@ def write_patch(tmp_path, mutate=None):
     return path
 
 
-def test_replay_patch_fixes_freshness_but_not_validity(tmp_path, monkeypatch, capsys) -> None:
-    scripted_transport(monkeypatch, RECONCILE_ACTIONS)
+def test_replay_patch_verifies_because_pipeline_validates(tmp_path, monkeypatch, capsys) -> None:
+    install(monkeypatch, [BASIC_IR])
     monkeypatch.chdir(REPO)
     patch = write_patch(tmp_path)
     report_out = tmp_path / "replay.report.json"
@@ -180,18 +65,18 @@ def test_replay_patch_fixes_freshness_but_not_validity(tmp_path, monkeypatch, ca
         "--no-regression",
         state=FAILING_STATE,
     )
-    assert code == 1
+    assert code == 0
     out = capsys.readouterr().out
-    assert "fix: NOT_FIXED" in out and "verdict FAIL" in out
+    assert "fix: VERIFIED" in out
     report = json.loads(report_out.read_text(encoding="utf-8"))
-    assert report["verdict"] == "FAIL"
-    assert sorted(report["fixed"]) == ["fresh_write_only"]
+    assert report["verdict"] == "PASS"
+    assert sorted(report["fixed"]) == ["fresh_write_only", "odrl_valid"]
     assert report["broken"] == []
     assert report["api_version"] == "v1"
 
 
 def test_replay_fixed_policy_verifies(tmp_path, monkeypatch, capsys) -> None:
-    scripted_transport(monkeypatch, FIXED_ACTIONS)
+    install(monkeypatch, [BASIC_IR])
     monkeypatch.chdir(REPO)
     code = replay(
         FAILING_TRACE,

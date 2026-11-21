@@ -56,8 +56,8 @@ from odrl_agent import __version__
 from odrl_agent.adapter import (
     DEFAULT_MODEL,
     ModelNotConfiguredError,
-    run_react_loop,
 )
+from odrl_agent.pipeline import run_conversion
 from odrl_agent.dspy_opt import PackRejectedError, load_pack
 from odrl_agent.remediation import reference_patch_for
 from odrl_agent.tools import PARSE_POLICY, SAVE_ODRL, render_untrusted
@@ -130,7 +130,7 @@ def cmd_run(argv: list[str]) -> int:
             "seed": seed,
             "max_steps": max_steps,
             "model": args.model,
-            "adapter": "live (LLAMA_BASE_URL)",
+            "adapter": "pipeline (LLAMA_BASE_URL)",
             "tools": [t.get("name") for t in scenario.get("tools", [])],
             "policy": str(policy_path),
             "instruction_pack": args.instruction_pack,
@@ -149,7 +149,7 @@ def cmd_run(argv: list[str]) -> int:
     try:
         Path(trace_out).parent.mkdir(parents=True, exist_ok=True)
         Path(state_out).parent.mkdir(parents=True, exist_ok=True)
-        summary = run_react_loop(
+        summary = run_conversion(
             scenario=scenario,
             policy=policy,
             seed=seed,
@@ -196,7 +196,7 @@ def cmd_run(argv: list[str]) -> int:
                 f"untrusted_source=true, {span['source']}):"
             )
             print(render_untrusted(span["text"], span["source"]))
-    return EXIT_RUNABORTED if summary["status"] == "runaway" else EXIT_OK
+    return EXIT_RUNABORTED if summary["status"] in ("runaway", "failed") else EXIT_OK
 
 
 def _retrieved_doc_spans(trace_path: str) -> list[dict[str, Any]]:
@@ -207,6 +207,18 @@ def _retrieved_doc_spans(trace_path: str) -> list[dict[str, Any]]:
         return []
     spans: list[dict[str, Any]] = []
     for event in events:
+        detail = event.get("detail", {}) or {}
+        if detail.get("phase") == "pipeline_stage" and detail.get("stage") == "ingest":
+            if "text" in detail:
+                spans.append(
+                    {
+                        "doc_id": detail.get("doc_id", "?"),
+                        "text": str(detail.get("text", "")),
+                        "bytes": detail.get("bytes", 0),
+                        "source": str(detail.get("source", "")),
+                    }
+                )
+            continue
         if event.get("tool") != PARSE_POLICY:
             continue
         if event.get("detail", {}).get("phase") != "tool_result":
@@ -425,6 +437,44 @@ def cmd_serve(argv: list[str]) -> int:
         )
         return EXIT_USAGE
     return serve_ui(args.port, args.bind, root / "ui")
+
+
+def cmd_chaos(argv: list[str]) -> int:
+    """Fuzz fault schedules against the live pipeline (mocked model and store)."""
+    import argparse
+    import json as _json
+
+    from odrl_agent.chaos import run_chaos
+
+    parser = argparse.ArgumentParser(prog="odrl-host chaos")
+    parser.add_argument("--scenario", action="append", dest="scenarios",
+                        help="scenario id (repeatable; default: both ODRL scenarios)")
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--max-cases", type=int, default=20)
+    parser.add_argument("--report-out", default=None, help="write the JSON report here")
+    args = parser.parse_args(argv)
+    kwargs = {"seed": args.seed, "max_cases": args.max_cases}
+    if args.scenarios:
+        kwargs["scenario_ids"] = tuple(args.scenarios)
+    report = run_chaos(Path.cwd(), **kwargs)
+    for scenario_id, row in report["scenarios"].items():
+        mark = "PASS" if row["passed"] else "FAIL"
+        print(
+            f"[{mark}] {scenario_id}: baseline={row['baseline_verdict']} "
+            f"cases={row['cases_tested']} faults_fired_runs={row['faults_fired_runs']}"
+        )
+        if row["minimal_schedule"]:
+            print(f"  minimal failing schedule: {_json.dumps(row['minimal_schedule'], sort_keys=True)}")
+            for result in (row["report"] or {}).get("results", []):
+                if not result.get("passed"):
+                    print(f"  violated {result.get('id')}: {result.get('evidence')}")
+    if args.report_out:
+        Path(args.report_out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.report_out).write_text(
+            _json.dumps(report, sort_keys=True, indent=2, default=str) + "\n", encoding="utf-8"
+        )
+    print(f"chaos: {'clean' if report['ok'] else 'FAILED'}")
+    return EXIT_OK if report["ok"] else EXIT_VERDICT_FAIL
 
 
 def _infer_scenario(trace_scenario: str) -> Path:
@@ -710,7 +760,7 @@ def cmd_replay(argv: list[str]) -> int:
     Path(replay_trace).parent.mkdir(parents=True, exist_ok=True)
     Path(replay_state).parent.mkdir(parents=True, exist_ok=True)
     try:
-        summary = run_react_loop(
+        summary = run_conversion(
             scenario=scenario,
             policy=new_policy,
             seed=seed,
@@ -822,7 +872,7 @@ def _regress_golden(
         trace_out = str(Path(tmp) / "trace.jsonl")
         state_out = str(Path(tmp) / "state.json")
         try:
-            run_react_loop(
+            run_conversion(
                 scenario=scenario,
                 policy=policy,
                 seed=seed,
@@ -849,14 +899,15 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_OK
     if not raw or raw[0] in ("-h", "--help"):
         print(
-            "usage: odrl-host [--version] {run, diagnose, replay, keys, billing, optimize-prompts, serve} ...\n"
+            "usage: odrl-host [--version] {run, diagnose, replay, keys, billing, optimize-prompts, serve, chaos} ...\n"
             "  run: execute a live NL-to-ODRL conversion against a scenario\n"
             "  diagnose: propose a policy patch for a failing trace (read-only)\n"
             "  replay: re-run a trace scenario under a patched policy + regression\n"
             "  keys: issue, list, or revoke product API keys (fingerprints only on disk)\n"
             "  billing: export per-run line items as JSON or CSV (vendor-neutral)\n"
             "  optimize-prompts: budgeted DSPy probe of the NL-to-ODRL instruction (live model)\n"
-            "  serve: browse the ODRL/Policy Studio (reads ui/, local only)\n"
+            "  serve: run the Studio API + UI (FastAPI/Uvicorn)\n"
+            "  chaos: fuzz fault schedules against the live pipeline (mocked model)\n"
             "framework checks (any trace): agentcrash check/serve"
         )
         return EXIT_OK if raw else EXIT_USAGE
@@ -875,6 +926,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_optimize_prompts(rest)
     if command == "serve":
         return cmd_serve(rest)
+    if command == "chaos":
+        return cmd_chaos(rest)
     print(f"odrl-host: unknown command {command!r}", file=sys.stderr)
     return EXIT_USAGE
 

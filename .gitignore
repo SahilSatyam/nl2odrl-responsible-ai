@@ -19,3 +19,12 @@ build/
 *.db
 /ui/assets/
 node_modules/
+
+# Generated tool output: keep the results, ignore scratch
+.ua/.trash-*/
+.ua/tmp/
+.archify/**/run*/
+.archify/**/receipt*.txt
+.archify/**/*.finalize*.json
+.archify/**/*.delivery*.json
+.archify/**/*.browser-check.json

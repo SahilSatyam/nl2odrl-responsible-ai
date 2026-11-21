@@ -1,0 +1,236 @@
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix odrl: <http://www.w3.org/ns/odrl/2/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex: <urn:nl2odrl:shapes:> .
+
+# SHACL shapes for the ODRL 2.2 core profile (odrl-2.2-shapes-v1).
+#
+# Validated graph: the RDF produced by parsing compiler output (compact
+# JSON-LD with the bundled schemas/odrl-2.2.jsonld context). Every node is
+# typed explicitly, so shapes target classes and need no RDFS inference.
+# Vocabulary membership lists below are pinned to schemas/odrl-2.2.ttl by
+# tests/test_ir.py. Extra properties are allowed (no sh:closed): profiles
+# add terms in Phase 5.
+
+# ---- vocabulary lists -------------------------------------------------------
+
+ex:ActionTerms rdf:value (
+    odrl:use odrl:grantUse odrl:aggregate odrl:annotate odrl:anonymize odrl:archive
+    odrl:concurrentUse odrl:derive odrl:digitize odrl:display odrl:distribute
+    odrl:execute odrl:extract odrl:give odrl:index odrl:install odrl:modify odrl:move
+    odrl:play odrl:present odrl:print odrl:read odrl:reproduce odrl:sell odrl:stream
+    odrl:textToSpeech odrl:transfer odrl:transform odrl:translate odrl:acceptTracking
+    odrl:attribute odrl:compensate odrl:delete odrl:ensureExclusivity odrl:include
+    odrl:inform odrl:nextPolicy odrl:obtainConsent odrl:reviewPolicy odrl:uninstall
+    odrl:watermark
+) .
+
+# ---- policy -----------------------------------------------------------------
+
+ex:PolicyShape a sh:NodeShape ;
+    sh:targetClass odrl:Set, odrl:Offer, odrl:Agreement ;
+    sh:nodeKind sh:IRI ;
+    sh:message "policy must be an IRI-identified odrl:Set, odrl:Offer or odrl:Agreement with at least one rule" ;
+    sh:or (
+        [ sh:path odrl:permission ; sh:minCount 1 ]
+        [ sh:path odrl:prohibition ; sh:minCount 1 ]
+        [ sh:path odrl:obligation ; sh:minCount 1 ]
+    ) ;
+    sh:property [
+        sh:path odrl:conflict ;
+        sh:maxCount 1 ;
+        sh:in ( odrl:perm odrl:prohibit odrl:invalid ) ;
+        sh:message "conflict must be one of odrl:perm, odrl:prohibit, odrl:invalid" ;
+    ] ;
+    sh:property [
+        sh:path odrl:assigner ; sh:maxCount 1 ; sh:nodeKind sh:IRI ;
+        sh:message "assigner must be a single IRI" ;
+    ] ;
+    sh:property [
+        sh:path odrl:assignee ; sh:maxCount 1 ; sh:nodeKind sh:IRI ;
+        sh:message "assignee must be a single IRI" ;
+    ] .
+
+ex:OfferShape a sh:NodeShape ;
+    sh:targetClass odrl:Offer, odrl:Agreement ;
+    sh:message "Offer and Agreement need an assigner at policy level or on every rule" ;
+    sh:or (
+        [ sh:property [ sh:path odrl:assigner ; sh:minCount 1 ] ]
+        [ sh:and (
+            [ sh:property [ sh:path odrl:permission ; sh:node ex:HasAssigner ] ]
+            [ sh:property [ sh:path odrl:prohibition ; sh:node ex:HasAssigner ] ]
+            [ sh:property [ sh:path odrl:obligation ; sh:node ex:HasAssigner ] ]
+        ) ]
+    ) .
+
+ex:AgreementShape a sh:NodeShape ;
+    sh:targetClass odrl:Agreement ;
+    sh:message "Agreement needs an assignee at policy level or on every permission/prohibition" ;
+    sh:or (
+        [ sh:property [ sh:path odrl:assignee ; sh:minCount 1 ] ]
+        [ sh:and (
+            [ sh:property [ sh:path odrl:permission ; sh:node ex:HasAssignee ] ]
+            [ sh:property [ sh:path odrl:prohibition ; sh:node ex:HasAssignee ] ]
+        ) ]
+    ) .
+
+ex:HasAssigner a sh:NodeShape ;
+    sh:property [ sh:path odrl:assigner ; sh:minCount 1 ] .
+
+ex:HasAssignee a sh:NodeShape ;
+    sh:property [ sh:path odrl:assignee ; sh:minCount 1 ] .
+
+# ---- rules ------------------------------------------------------------------
+# Rules are identified by the property that points at them (ODRL 2.2 does not
+# require an explicit rdf:type on a rule).
+
+ex:RuleShape a sh:NodeShape ;
+    sh:targetObjectsOf odrl:permission, odrl:prohibition ;
+    sh:property [
+        sh:path odrl:action ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:node ex:ActionValueShape ;
+        sh:message "rule needs exactly one action from the ODRL 2.2 vocabulary" ;
+    ] ;
+    sh:property [
+        sh:path odrl:target ;
+        sh:minCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:message "rule needs a target that is an IRI" ;
+    ] ;
+    sh:property [
+        sh:path odrl:assignee ; sh:maxCount 1 ; sh:nodeKind sh:IRI ;
+        sh:message "assignee must be a single IRI" ;
+    ] ;
+    sh:property [
+        sh:path odrl:assigner ; sh:maxCount 1 ; sh:nodeKind sh:IRI ;
+        sh:message "assigner must be a single IRI" ;
+    ] .
+
+ex:ProhibitionShape a sh:NodeShape ;
+    sh:targetObjectsOf odrl:prohibition ;
+    sh:property [
+        sh:path odrl:duty ; sh:maxCount 0 ;
+        sh:message "a prohibition cannot carry a duty" ;
+    ] .
+
+ex:ActionValueShape a sh:NodeShape ;
+    sh:message "action must be an ODRL 2.2 action IRI, or a refined action with rdf:value" ;
+    sh:or (
+        [ sh:nodeKind sh:IRI ; sh:in (
+            odrl:use odrl:grantUse odrl:aggregate odrl:annotate odrl:anonymize odrl:archive
+            odrl:concurrentUse odrl:derive odrl:digitize odrl:display odrl:distribute
+            odrl:execute odrl:extract odrl:give odrl:index odrl:install odrl:modify odrl:move
+            odrl:play odrl:present odrl:print odrl:read odrl:reproduce odrl:sell odrl:stream
+            odrl:textToSpeech odrl:transfer odrl:transform odrl:translate odrl:acceptTracking
+            odrl:attribute odrl:compensate odrl:delete odrl:ensureExclusivity odrl:include
+            odrl:inform odrl:nextPolicy odrl:obtainConsent odrl:reviewPolicy odrl:uninstall
+            odrl:watermark
+        ) ]
+        [ sh:nodeKind sh:BlankNode ;
+          sh:property [
+            sh:path rdf:value ; sh:minCount 1 ; sh:maxCount 1 ; sh:in (
+            odrl:use odrl:grantUse odrl:aggregate odrl:annotate odrl:anonymize odrl:archive
+            odrl:concurrentUse odrl:derive odrl:digitize odrl:display odrl:distribute
+            odrl:execute odrl:extract odrl:give odrl:index odrl:install odrl:modify odrl:move
+            odrl:play odrl:present odrl:print odrl:read odrl:reproduce odrl:sell odrl:stream
+            odrl:textToSpeech odrl:transfer odrl:transform odrl:translate odrl:acceptTracking
+            odrl:attribute odrl:compensate odrl:delete odrl:ensureExclusivity odrl:include
+            odrl:inform odrl:nextPolicy odrl:obtainConsent odrl:reviewPolicy odrl:uninstall
+            odrl:watermark ) ] ;
+          sh:property [ sh:path odrl:refinement ; sh:minCount 1 ] ]
+    ) .
+
+# ---- duties -----------------------------------------------------------------
+
+ex:DutyShape a sh:NodeShape ;
+    sh:targetObjectsOf odrl:duty, odrl:obligation ;
+    sh:property [
+        sh:path odrl:action ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:node ex:ActionValueShape ;
+        sh:message "duty needs exactly one action from the ODRL 2.2 vocabulary" ;
+    ] ;
+    sh:property [
+        sh:path odrl:target ; sh:nodeKind sh:IRI ;
+        sh:message "duty target must be an IRI" ;
+    ] ;
+    sh:property [
+        sh:path odrl:assignee ; sh:maxCount 1 ; sh:nodeKind sh:IRI ;
+        sh:message "duty assignee must be a single IRI" ;
+    ] .
+
+# A policy-level obligation names the party who must act.
+ex:ObligationShape a sh:NodeShape ;
+    sh:targetObjectsOf odrl:obligation ;
+    sh:property [
+        sh:path odrl:assignee ; sh:minCount 1 ; sh:nodeKind sh:IRI ;
+        sh:message "an obligation needs an assignee who must act" ;
+    ] .
+
+# ---- constraints ------------------------------------------------------------
+# A constraint is identified by the property that points at it (constraint,
+# refinement, and/or/xone, andSequence members), so third-party documents that
+# omit "type": "Constraint" still validate. Literal datatypes are enforced at
+# the IR layer (odrl_agent.ir), where the compiler types every value.
+
+ex:ConstraintValueShape a sh:NodeShape ;
+    sh:message "constraint must be atomic (leftOperand/operator/rightOperand) or logical (and/or/xone/andSequence)" ;
+    sh:xone ( ex:AtomicConstraintShape ex:LogicalConstraintShape ) .
+
+ex:ConstraintTargetShape a sh:NodeShape ;
+    sh:targetObjectsOf odrl:constraint, odrl:refinement, odrl:and, odrl:or, odrl:xone ;
+    sh:node ex:ConstraintValueShape ;
+    sh:message "constraint must be atomic (leftOperand/operator/rightOperand) or logical (and/or/xone/andSequence)" .
+
+ex:AtomicConstraintShape a sh:NodeShape ;
+    sh:property [
+        sh:path odrl:leftOperand ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:in (
+            odrl:absolutePosition odrl:absoluteSpatialPosition odrl:absoluteTemporalPosition
+            odrl:absoluteSize odrl:count odrl:dateTime odrl:delayPeriod odrl:deliveryChannel
+            odrl:elapsedTime odrl:event odrl:fileFormat odrl:industry odrl:language odrl:media
+            odrl:meteredTime odrl:payAmount odrl:percentage odrl:product odrl:purpose
+            odrl:recipient odrl:relativePosition odrl:relativeSpatialPosition
+            odrl:relativeTemporalPosition odrl:relativeSize odrl:resolution odrl:spatial
+            odrl:spatialCoordinates odrl:systemDevice odrl:timeInterval odrl:unitOfCount
+            odrl:version odrl:virtualLocation
+        ) ;
+    ] ;
+    sh:property [
+        sh:path odrl:operator ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:in (
+            odrl:eq odrl:gt odrl:gteq odrl:lt odrl:lteq odrl:neq odrl:isA odrl:hasPart
+            odrl:isPartOf odrl:isAllOf odrl:isAnyOf odrl:isNoneOf
+        ) ;
+    ] ;
+    sh:property [ sh:path odrl:rightOperand ; sh:minCount 1 ] .
+
+ex:LogicalConstraintShape a sh:NodeShape ;
+    sh:xone (
+        [ sh:property [ sh:path odrl:and ; sh:minCount 2 ] ]
+        [ sh:property [ sh:path odrl:or ; sh:minCount 2 ] ]
+        [ sh:property [ sh:path odrl:xone ; sh:minCount 2 ] ]
+        [ sh:property [
+            sh:path ( odrl:andSequence [ sh:zeroOrMorePath rdf:rest ] rdf:first ) ;
+            sh:minCount 2 ; sh:node ex:AtomicOrLogicalShape ] ]
+    ) .
+
+# Members of an andSequence list (rdf:List items are not reachable by a target).
+ex:AtomicOrLogicalShape a sh:NodeShape ;
+    sh:or (
+        [ sh:property [ sh:path odrl:leftOperand ; sh:minCount 1 ] ]
+        [ sh:property [ sh:path odrl:and ; sh:minCount 1 ] ]
+        [ sh:property [ sh:path odrl:or ; sh:minCount 1 ] ]
+        [ sh:property [ sh:path odrl:xone ; sh:minCount 1 ] ]
+        [ sh:property [ sh:path odrl:andSequence ; sh:minCount 1 ] ]
+    ) .
+
+# Atomic checks with precise messages for every typed constraint node.
+ex:TypedConstraintShape a sh:NodeShape ;
+    sh:targetClass odrl:Constraint ;
+    sh:node ex:AtomicConstraintShape ;
+    sh:message "odrl:Constraint needs one ODRL 2.2 leftOperand, one ODRL 2.2 operator and a rightOperand" .

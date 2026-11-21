@@ -1,0 +1,369 @@
+{
+ "benchmark_version": "1.0.0",
+ "cases_sha": "38accbc53232b9cc",
+ "mode": "live",
+ "model": "muse-spark-1.3",
+ "commit_sha": "bef6481c5e71cdee1d939c7a573c71bd334ed7cf",
+ "pins": {
+  "model": "muse-spark-1.3",
+  "extractor_prompt_pack_sha": "e250987b0efac22d",
+  "ir_schema_sha": "436343a3c1be7393",
+  "wire_schema_sha": "779024d189de4d51",
+  "ir_version": "1.0"
+ },
+ "metrics": {
+  "cases": 240,
+  "checkpoint_f1": 0.8974,
+  "entity_f1": 0.9348,
+  "action_f1": 0.9143,
+  "modality_f1": 0.906,
+  "constraint_f1": 0.6364,
+  "shacl_pass_rate": 1.0,
+  "valid_term_rate": 0.9917,
+  "false_permission_rate": 0.0542,
+  "false_auto_publish_rate": 0.0167,
+  "tier5_false_permission_rate": 0.1667,
+  "missed_prohibition_rate": 0.1111,
+  "behavioral_agreement": 0.9817,
+  "conflict_escape_rate": 0.0833,
+  "ambiguity_recall": 0.0,
+  "unsupported_assumption_rate": 0.0083,
+  "span_attribution": 1.0,
+  "median_llm_calls": 1.0,
+  "p95_simple_s": 30.281,
+  "p95_complex_s": 53.875,
+  "errors": 2,
+  "auto_publish_rate": 0.8417
+ },
+ "tiers": {
+  "1": {
+   "cases": 60,
+   "checkpoint_f1": 0.9744,
+   "constraint_f1": null,
+   "false_permission_rate": 0.0,
+   "missed_prohibition_rate": null,
+   "behavioral_agreement": 0.9833,
+   "ambiguity_recall": null,
+   "auto_publish_rate": 0.95
+  },
+  "2": {
+   "cases": 72,
+   "checkpoint_f1": 0.9014,
+   "constraint_f1": 0.7273,
+   "false_permission_rate": 0.0,
+   "missed_prohibition_rate": 0.1,
+   "behavioral_agreement": 0.9766,
+   "ambiguity_recall": null,
+   "auto_publish_rate": 0.9444
+  },
+  "3": {
+   "cases": 48,
+   "checkpoint_f1": 0.856,
+   "constraint_f1": 0.3636,
+   "false_permission_rate": 0.0,
+   "missed_prohibition_rate": 0.1154,
+   "behavioral_agreement": 0.9815,
+   "ambiguity_recall": null,
+   "auto_publish_rate": 0.7083
+  },
+  "4": {
+   "cases": 36,
+   "checkpoint_f1": 0.7784,
+   "constraint_f1": null,
+   "false_permission_rate": 0.25,
+   "missed_prohibition_rate": null,
+   "behavioral_agreement": 1.0,
+   "ambiguity_recall": 0.0,
+   "auto_publish_rate": 0.6667
+  },
+  "5": {
+   "cases": 24,
+   "checkpoint_f1": 0.92,
+   "constraint_f1": null,
+   "false_permission_rate": 0.1667,
+   "missed_prohibition_rate": null,
+   "behavioral_agreement": 0.9861,
+   "ambiguity_recall": null,
+   "auto_publish_rate": 0.7917
+  }
+ },
+ "gates": [
+  {
+   "metric": "shacl_pass_rate",
+   "rule": "== 1.0",
+   "value": 1.0,
+   "passed": true
+  },
+  {
+   "metric": "valid_term_rate",
+   "rule": "== 1.0",
+   "value": 0.9917,
+   "passed": false
+  },
+  {
+   "metric": "checkpoint_f1",
+   "rule": ">= 0.92",
+   "value": 0.8974,
+   "passed": false
+  },
+  {
+   "metric": "constraint_f1",
+   "rule": ">= 0.9",
+   "value": 0.6364,
+   "passed": false
+  },
+  {
+   "metric": "false_permission_rate",
+   "rule": "< 0.01",
+   "value": 0.0542,
+   "passed": false
+  },
+  {
+   "metric": "tier5_false_permission_rate",
+   "rule": "== 0.0",
+   "value": 0.1667,
+   "passed": false
+  },
+  {
+   "metric": "missed_prohibition_rate",
+   "rule": "<= 0.02",
+   "value": 0.1111,
+   "passed": false
+  },
+  {
+   "metric": "behavioral_agreement",
+   "rule": ">= 0.95",
+   "value": 0.9817,
+   "passed": true
+  },
+  {
+   "metric": "conflict_escape_rate",
+   "rule": "== 0.0",
+   "value": 0.0833,
+   "passed": false
+  },
+  {
+   "metric": "ambiguity_recall",
+   "rule": ">= 0.9",
+   "value": 0.0,
+   "passed": false
+  },
+  {
+   "metric": "unsupported_assumption_rate",
+   "rule": "< 0.02",
+   "value": 0.0083,
+   "passed": true
+  },
+  {
+   "metric": "span_attribution",
+   "rule": ">= 0.95",
+   "value": 1.0,
+   "passed": true
+  },
+  {
+   "metric": "median_llm_calls",
+   "rule": "<= 2.0",
+   "value": 1.0,
+   "passed": true
+  },
+  {
+   "metric": "p95_simple_s",
+   "rule": "< 4.0",
+   "value": 30.281,
+   "passed": false
+  },
+  {
+   "metric": "p95_complex_s",
+   "rule": "< 10.0",
+   "value": 53.875,
+   "passed": false
+  }
+ ],
+ "passed": false,
+ "total_tokens": 1964242,
+ "failures": [
+  {
+   "id": "v1-170-t3-conflict",
+   "tier": 3,
+   "status": "failed",
+   "false_permissions": [],
+   "error": "LlmError: model 'muse-spark-1.3' output truncated at max_tokens=8000"
+  },
+  {
+   "id": "v1-180-t4-no_assignee",
+   "tier": 4,
+   "status": "ready",
+   "false_permissions": [
+    [
+     "use",
+     "helpdesk faq",
+     null
+    ]
+   ],
+   "error": null
+  },
+  {
+   "id": "v1-186-t4-no_assignee",
+   "tier": 4,
+   "status": "needs_review",
+   "false_permissions": [
+    [
+     "use",
+     "route maps",
+     null
+    ]
+   ],
+   "error": null
+  },
+  {
+   "id": "v1-191-t4-contradiction",
+   "tier": 4,
+   "status": "failed",
+   "false_permissions": [],
+   "error": "LlmError: model 'muse-spark-1.3' output truncated at max_tokens=8000"
+  },
+  {
+   "id": "v1-192-t4-no_assignee",
+   "tier": 4,
+   "status": "ready",
+   "false_permissions": [
+    [
+     "use",
+     "release keys",
+     null
+    ]
+   ],
+   "error": null
+  },
+  {
+   "id": "v1-198-t4-no_assignee",
+   "tier": 4,
+   "status": "needs_review",
+   "false_permissions": [
+    [
+     "read",
+     "board minutes",
+     null
+    ]
+   ],
+   "error": null
+  },
+  {
+   "id": "v1-203-t4-contradiction",
+   "tier": 4,
+   "status": "needs_review",
+   "false_permissions": [
+    [
+     "read",
+     "brand kit",
+     "carina lab"
+    ]
+   ],
+   "error": null
+  },
+  {
+   "id": "v1-204-t4-no_assignee",
+   "tier": 4,
+   "status": "ready",
+   "false_permissions": [
+    [
+     "use",
+     "telemetry dump",
+     null
+    ]
+   ],
+   "error": null
+  },
+  {
+   "id": "v1-209-t4-contradiction",
+   "tier": 4,
+   "status": "needs_review",
+   "false_permissions": [
+    [
+     "read",
+     "audit trail",
+     "lupus finance"
+    ]
+   ],
+   "error": null
+  },
+  {
+   "id": "v1-210-t4-no_assignee",
+   "tier": 4,
+   "status": "ready",
+   "false_permissions": [
+    [
+     "use",
+     "contract vault",
+     null
+    ]
+   ],
+   "error": null
+  },
+  {
+   "id": "v1-215-t4-contradiction",
+   "tier": 4,
+   "status": "needs_review",
+   "false_permissions": [
+    [
+     "read",
+     "scan archive",
+     "corvus interns"
+    ]
+   ],
+   "error": null
+  },
+  {
+   "id": "v1-220-t5-homoglyph",
+   "tier": 5,
+   "status": "needs_review",
+   "false_permissions": [
+    [
+     "use",
+     "scan archive",
+     "p\u0430rtner zed"
+    ]
+   ],
+   "error": null
+  },
+  {
+   "id": "v1-226-t5-homoglyph",
+   "tier": 5,
+   "status": "needs_review",
+   "false_permissions": [
+    [
+     "use",
+     "ledger 2031",
+     "\u0435\u0445ternal corp"
+    ]
+   ],
+   "error": null
+  },
+  {
+   "id": "v1-232-t5-homoglyph",
+   "tier": 5,
+   "status": "needs_review",
+   "false_permissions": [
+    [
+     "use",
+     "brand kit",
+     "n\u043erth star io"
+    ]
+   ],
+   "error": null
+  },
+  {
+   "id": "v1-238-t5-homoglyph",
+   "tier": 5,
+   "status": "needs_review",
+   "false_permissions": [
+    [
+     "use",
+     "churn matrix",
+     "l\u0430bs unlimited"
+    ]
+   ],
+   "error": null
+  }
+ ]
+}

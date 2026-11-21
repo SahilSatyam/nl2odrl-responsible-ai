@@ -1,0 +1,563 @@
+{
+    "schema_version":  1,
+    "diagram_type":  "architecture",
+    "meta":  {
+                 "title":  "NL-to-ODRL: studio, conversion pipeline and audit trail",
+                 "output":  ".archify/architecture-nl-to-odrl-20261121-205631/nl-to-odrl-architecture.html",
+                 "quality_profile":  "showcase",
+                 "repository":  {
+                                    "url":  "https://github.com/SahilSatyam/nl2odrl-responsible-ai.git",
+                                    "revision":  "ecdf1fe27b66c834b37dcb81e773f89bdae10ba3"
+                                }
+             },
+    "components":  [
+                       {
+                           "id":  "users",
+                           "type":  "external",
+                           "label":  "Policy author",
+                           "sublabel":  "browser",
+                           "pos":  [
+                                       40,
+                                       40
+                                   ],
+                           "size":  [
+                                        130,
+                                        60
+                                    ]
+                       },
+                       {
+                           "id":  "ui",
+                           "type":  "frontend",
+                           "label":  "Studio UI",
+                           "sublabel":  "React, built to ui/",
+                           "pos":  [
+                                       250,
+                                       40
+                                   ],
+                           "size":  [
+                                        130,
+                                        60
+                                    ],
+                           "sources":  [
+                                           {
+                                               "path":  "ui-react/src/api.ts",
+                                               "line":  70,
+                                               "end_line":  84
+                                           }
+                                       ]
+                       },
+                       {
+                           "id":  "api",
+                           "type":  "backend",
+                           "label":  "FastAPI app",
+                           "sublabel":  "Uvicorn :8901",
+                           "pos":  [
+                                       460,
+                                       40
+                                   ],
+                           "size":  [
+                                        130,
+                                        60
+                                    ],
+                           "sources":  [
+                                           {
+                                               "path":  "odrl_agent/app.py",
+                                               "line":  216,
+                                               "end_line":  233
+                                           },
+                                           {
+                                               "path":  "odrl_agent/app.py",
+                                               "line":  318,
+                                               "end_line":  350
+                                           },
+                                           {
+                                               "path":  "odrl_agent/app.py",
+                                               "line":  381,
+                                               "end_line":  381
+                                           }
+                                       ]
+                       },
+                       {
+                           "id":  "auth",
+                           "type":  "security",
+                           "label":  "Auth",
+                           "sublabel":  "Bearer key / cookie",
+                           "pos":  [
+                                       460,
+                                       180
+                                   ],
+                           "size":  [
+                                        130,
+                                        60
+                                    ],
+                           "tag":  "fail-closed",
+                           "sources":  [
+                                           {
+                                               "path":  "odrl_agent/auth.py",
+                                               "line":  132,
+                                               "end_line":  152
+                                           }
+                                       ]
+                       },
+                       {
+                           "id":  "registry",
+                           "type":  "backend",
+                           "label":  "Run registry",
+                           "sublabel":  "worker pool + queue",
+                           "pos":  [
+                                       670,
+                                       40
+                                   ],
+                           "size":  [
+                                        130,
+                                        60
+                                    ],
+                           "sources":  [
+                                           {
+                                               "path":  "odrl_agent/web.py",
+                                               "line":  749,
+                                               "end_line":  760
+                                           },
+                                           {
+                                               "path":  "odrl_agent/web.py",
+                                               "line":  388,
+                                               "end_line":  400
+                                           }
+                                       ]
+                       },
+                       {
+                           "id":  "sqlite",
+                           "type":  "database",
+                           "label":  "SQLite",
+                           "sublabel":  "runs, verdicts, ODRL",
+                           "pos":  [
+                                       670,
+                                       180
+                                   ],
+                           "size":  [
+                                        130,
+                                        60
+                                    ],
+                           "sources":  [
+                                           {
+                                               "path":  "odrl_agent/db.py",
+                                               "line":  94,
+                                               "end_line":  120
+                                           }
+                                       ]
+                       },
+                       {
+                           "id":  "pipeline",
+                           "type":  "backend",
+                           "label":  "Pipeline",
+                           "sublabel":  "fixed stages",
+                           "pos":  [
+                                       880,
+                                       40
+                                   ],
+                           "size":  [
+                                        130,
+                                        60
+                                    ],
+                           "sources":  [
+                                           {
+                                               "path":  "odrl_agent/pipeline.py",
+                                               "line":  397,
+                                               "end_line":  420
+                                           },
+                                           {
+                                               "path":  "odrl_agent/pipeline.py",
+                                               "line":  54,
+                                               "end_line":  56
+                                           }
+                                       ]
+                       },
+                       {
+                           "id":  "bench",
+                           "type":  "backend",
+                           "label":  "Bench / CLI",
+                           "sublabel":  "240 gold cases",
+                           "pos":  [
+                                       1090,
+                                       40
+                                   ],
+                           "size":  [
+                                        130,
+                                        60
+                                    ],
+                           "sources":  [
+                                           {
+                                               "path":  "odrl_agent/bench/runner.py",
+                                               "line":  33,
+                                               "end_line":  50
+                                           }
+                                       ]
+                       },
+                       {
+                           "id":  "extractor",
+                           "type":  "backend",
+                           "label":  "Extractor",
+                           "sublabel":  "extract + repair",
+                           "pos":  [
+                                       880,
+                                       180
+                                   ],
+                           "size":  [
+                                        130,
+                                        60
+                                    ],
+                           "tag":  "only model caller",
+                           "sources":  [
+                                           {
+                                               "path":  "odrl_agent/extractor.py",
+                                               "line":  128,
+                                               "end_line":  175
+                                           }
+                                       ]
+                       },
+                       {
+                           "id":  "llm",
+                           "type":  "external",
+                           "label":  "Model endpoint",
+                           "sublabel":  "OpenAI-compatible",
+                           "pos":  [
+                                       1090,
+                                       180
+                                   ],
+                           "size":  [
+                                        130,
+                                        60
+                                    ],
+                           "sources":  [
+                                           {
+                                               "path":  "odrl_agent/llm.py",
+                                               "line":  65,
+                                               "end_line":  70
+                                           }
+                                       ]
+                       },
+                       {
+                           "id":  "grounder",
+                           "type":  "security",
+                           "label":  "Grounder",
+                           "sublabel":  "spans, entities",
+                           "pos":  [
+                                       880,
+                                       320
+                                   ],
+                           "size":  [
+                                        130,
+                                        60
+                                    ],
+                           "sources":  [
+                                           {
+                                               "path":  "odrl_agent/grounder.py",
+                                               "line":  262,
+                                               "end_line":  270
+                                           },
+                                           {
+                                               "path":  "odrl_agent/pipeline.py",
+                                               "line":  113,
+                                               "end_line":  135
+                                           }
+                                       ]
+                       },
+                       {
+                           "id":  "compiler",
+                           "type":  "backend",
+                           "label":  "Compiler",
+                           "sublabel":  "IR to JSON-LD",
+                           "pos":  [
+                                       670,
+                                       320
+                                   ],
+                           "size":  [
+                                        130,
+                                        60
+                                    ],
+                           "sources":  [
+                                           {
+                                               "path":  "odrl_agent/compiler.py",
+                                               "line":  175,
+                                               "end_line":  180
+                                           }
+                                       ]
+                       },
+                       {
+                           "id":  "shacl",
+                           "type":  "security",
+                           "label":  "SHACL check",
+                           "sublabel":  "ODRL 2.2 shapes",
+                           "pos":  [
+                                       460,
+                                       320
+                                   ],
+                           "size":  [
+                                        130,
+                                        60
+                                    ],
+                           "sources":  [
+                                           {
+                                               "path":  "odrl_agent/odrl.py",
+                                               "line":  135,
+                                               "end_line":  145
+                                           }
+                                       ]
+                       },
+                       {
+                           "id":  "reasoning",
+                           "type":  "backend",
+                           "label":  "Z3 reasoning",
+                           "sublabel":  "conflicts, unsat",
+                           "pos":  [
+                                       250,
+                                       320
+                                   ],
+                           "size":  [
+                                        130,
+                                        60
+                                    ],
+                           "sources":  [
+                                           {
+                                               "path":  "odrl_agent/reasoning.py",
+                                               "line":  248,
+                                               "end_line":  255
+                                           }
+                                       ]
+                       },
+                       {
+                           "id":  "publish",
+                           "type":  "security",
+                           "label":  "Publish gate",
+                           "sublabel":  "auto or HITL hold",
+                           "pos":  [
+                                       250,
+                                       460
+                                   ],
+                           "size":  [
+                                        130,
+                                        60
+                                    ],
+                           "tag":  "exactly once",
+                           "sources":  [
+                                           {
+                                               "path":  "odrl_agent/publish.py",
+                                               "line":  185,
+                                               "end_line":  195
+                                           },
+                                           {
+                                               "path":  "odrl_agent/pipeline.py",
+                                               "line":  355,
+                                               "end_line":  396
+                                           }
+                                       ]
+                       },
+                       {
+                           "id":  "store",
+                           "type":  "database",
+                           "label":  "Record store",
+                           "sublabel":  "save_odrl, versioned",
+                           "pos":  [
+                                       40,
+                                       460
+                                   ],
+                           "size":  [
+                                        130,
+                                        60
+                                    ],
+                           "sources":  [
+                                           {
+                                               "path":  "odrl_agent/tools.py",
+                                               "line":  82,
+                                               "end_line":  90
+                                           }
+                                       ]
+                       },
+                       {
+                           "id":  "traces",
+                           "type":  "database",
+                           "label":  "Trace JSONL",
+                           "sublabel":  "hash-chained",
+                           "pos":  [
+                                       460,
+                                       460
+                                   ],
+                           "size":  [
+                                        130,
+                                        60
+                                    ],
+                           "sources":  [
+                                           {
+                                               "path":  "odrl_agent/instrument.py",
+                                               "line":  82,
+                                               "end_line":  95
+                                           }
+                                       ]
+                       },
+                       {
+                           "id":  "verifiers",
+                           "type":  "security",
+                           "label":  "Verifiers",
+                           "sublabel":  "invariants, PASS/FAIL",
+                           "pos":  [
+                                       670,
+                                       460
+                                   ],
+                           "size":  [
+                                        130,
+                                        60
+                                    ],
+                           "sources":  [
+                                           {
+                                               "path":  "odrl_agent/verifiers.py",
+                                               "line":  308,
+                                               "end_line":  320
+                                           }
+                                       ]
+                       }
+                   ],
+    "boundaries":  [
+                       {
+                           "kind":  "region",
+                           "label":  "Deterministic code, no model calls",
+                           "wraps":  [
+                                         "grounder",
+                                         "compiler",
+                                         "shacl",
+                                         "reasoning"
+                                     ]
+                       }
+                   ],
+    "connections":  [
+                        {
+                            "id":  "e1",
+                            "from":  "users",
+                            "to":  "ui",
+                            "label":  "browser"
+                        },
+                        {
+                            "id":  "e2",
+                            "from":  "ui",
+                            "to":  "api",
+                            "label":  "/api",
+                            "variant":  "emphasis"
+                        },
+                        {
+                            "id":  "e3",
+                            "from":  "api",
+                            "to":  "auth",
+                            "label":  "verify key",
+                            "variant":  "security"
+                        },
+                        {
+                            "id":  "e4",
+                            "from":  "api",
+                            "to":  "registry",
+                            "label":  "enqueue"
+                        },
+                        {
+                            "id":  "e5",
+                            "from":  "registry",
+                            "to":  "pipeline",
+                            "label":  "convert",
+                            "variant":  "emphasis"
+                        },
+                        {
+                            "id":  "e6",
+                            "from":  "registry",
+                            "to":  "sqlite",
+                            "label":  "persist"
+                        },
+                        {
+                            "id":  "e7",
+                            "from":  "bench",
+                            "to":  "pipeline",
+                            "label":  "gates",
+                            "variant":  "dashed"
+                        },
+                        {
+                            "id":  "e8",
+                            "from":  "pipeline",
+                            "to":  "extractor",
+                            "label":  "extract"
+                        },
+                        {
+                            "id":  "e9",
+                            "from":  "extractor",
+                            "to":  "llm",
+                            "label":  "JSON call"
+                        },
+                        {
+                            "id":  "e10",
+                            "from":  "extractor",
+                            "to":  "grounder",
+                            "label":  "PolicyIR",
+                            "variant":  "emphasis"
+                        },
+                        {
+                            "id":  "e11",
+                            "from":  "grounder",
+                            "to":  "compiler",
+                            "label":  "grounded"
+                        },
+                        {
+                            "id":  "e12",
+                            "from":  "compiler",
+                            "to":  "shacl",
+                            "label":  "JSON-LD"
+                        },
+                        {
+                            "id":  "e13",
+                            "from":  "shacl",
+                            "to":  "reasoning",
+                            "label":  "valid"
+                        },
+                        {
+                            "id":  "e14",
+                            "from":  "reasoning",
+                            "to":  "publish",
+                            "label":  "draft",
+                            "variant":  "emphasis"
+                        },
+                        {
+                            "id":  "e15",
+                            "from":  "publish",
+                            "to":  "store",
+                            "label":  "save_odrl"
+                        },
+                        {
+                            "id":  "e16",
+                            "from":  "publish",
+                            "to":  "traces",
+                            "label":  "trace",
+                            "variant":  "dashed"
+                        },
+                        {
+                            "id":  "e17",
+                            "from":  "traces",
+                            "to":  "verifiers",
+                            "label":  "judge",
+                            "variant":  "dashed"
+                        }
+                    ],
+    "cards":  [
+                  {
+                      "dot":  "cyan",
+                      "title":  "Flow",
+                      "items":  [
+                                    "Studio posts text to /api/convert; the registry queues it for a worker",
+                                    "One structured model call yields a typed PolicyIR",
+                                    "Code grounds, compiles, SHACL-checks and reasons over it"
+                                ]
+                  },
+                  {
+                      "dot":  "rose",
+                      "title":  "Safety",
+                      "items":  [
+                                    "Repair runs up to 2 times and may only shrink permissions",
+                                    "Only a clean draft auto-publishes; others wait for a reviewer",
+                                    "Verifiers judge each run from recorded traces"
+                                ]
+                  }
+              ]
+}
