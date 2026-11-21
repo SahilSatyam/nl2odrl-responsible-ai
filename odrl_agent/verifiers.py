@@ -15,13 +15,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from agentcrash._registry import (
+from agentcrash.verifiers import (
+    FreshWriteOnly,
+    NoLostUpdate,
     Verdict,
     get_verifier,
     register_verifier,
     verifier_ids,
 )
-from agentcrash.verifiers import FreshWriteOnly, NoLostUpdate
 
 from odrl_agent.odrl import (
     ATTACKER_PRINCIPAL,

@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 import odrl_agent.verifiers  # noqa: F401 -- import registers product verifiers
-
 from odrl_agent.web import (
     ConvertError,
     RunRegistry,

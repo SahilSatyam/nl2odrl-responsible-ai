@@ -1,0 +1,36 @@
+{
+ "baseline": "v0",
+ "model": "muse-spark-1.3",
+ "base_url_host": "api.meta.ai",
+ "commit_sha": "5322e09a442774b053acec923df0038f88d62f1e",
+ "prompt_pack_sha256": "531249304c4b0ea1",
+ "cases_sha": "f5e546e1a131bf7e",
+ "variant": "fixed",
+ "summary": {
+  "n": 1,
+  "done": 1,
+  "errors": 0,
+  "pass": 1,
+  "median_model_calls": 5,
+  "p50_wall_s": 31.56,
+  "p95_wall_s": 31.56,
+  "total_tokens": 11197
+ },
+ "results": [
+  {
+   "id": "fixture-sloppy",
+   "tier": "trainset",
+   "status": "done",
+   "verdict": "PASS",
+   "failed_invariants": [],
+   "model_calls": 5,
+   "usage": {
+    "prompt_tokens": 6202,
+    "completion_tokens": 4995,
+    "total_tokens": 11197
+   },
+   "wall_s": 31.56,
+   "error": null
+  }
+ ]
+}
