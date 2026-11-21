@@ -216,8 +216,9 @@ New `odrl_agent/reasoning.py`:
 
 ### Phase 4 exit gate
 
-- [ ] Benchmark published with version + grouping manifest; Baseline v1 numbers recorded.
-- [ ] Gates enforced in CI (`.github/workflows`); red build blocks prompt/model changes.
+- [x] Benchmark published with version + grouping manifest (`benchmarks/v1/`, 240 cases, `odrl_agent/bench/`).
+- [ ] Baseline v1 numbers recorded: needs one live run (`python -m odrl_agent.bench run --mode live --freeze benchmarks/v1/baseline_v1.json`).
+- [x] Gates enforced in CI: offline gates per PR (`ci.yml`), live gates nightly and on prompt/model/pin changes (`bench-live.yml`).
 
 ---
 

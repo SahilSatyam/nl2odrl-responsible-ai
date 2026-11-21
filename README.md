@@ -51,6 +51,29 @@ The framework never owns the pipeline — IR (`ir.py`), extractor
 Complex multi-clause inputs get one extra decompose call; a median
 conversion is one model call.
 
+## Benchmark and release gates (Phase 4)
+
+`benchmarks/v1` holds 240 stratified cases (25/30/20/15/10 % across core
+permissions, constraints/prohibitions/duties, multi-rule, ambiguous and
+adversarial), each with a gold IR, grouped by source family so no group
+spans the dev and test splits. `manifest.json` pins the case hash.
+
+```bash
+python -m odrl_agent.bench run                 # offline: gold-IR oracle, no model, enforces gates
+python -m odrl_agent.bench run --mutant overpermit   # must exit 1: proves the gates can fail
+python -m odrl_agent.bench run --mode live --workers 4 --out reports/live.json
+python -m odrl_agent.bench run --mode live --freeze benchmarks/v1/baseline_v1.json
+python -m odrl_agent.bench pins [--write]      # model id / prompt pack / IR schema hashes
+```
+
+Per PR the offline run checks the harness and the pipeline stages
+(SHACL, grounding, reasoning, publish gate). The `bench-live` workflow
+runs the real model nightly and on changes to prompts, the extractor,
+the LLM client or the pins, and also blocks a false-permission-rate
+increase above 0.5 points or a checkpoint-F1 drop above 0.01 against
+`baseline_v1.json`. Baseline v1 is frozen with `--freeze` from a live
+run; it is not committed until a maintainer has run one.
+
 ## The flagship failure it catches
 
 Sloppy conversion used to mean a model that skipped validation and saved
