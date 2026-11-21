@@ -439,6 +439,44 @@ def cmd_serve(argv: list[str]) -> int:
     return serve_ui(args.port, args.bind, root / "ui")
 
 
+def cmd_chaos(argv: list[str]) -> int:
+    """Fuzz fault schedules against the live pipeline (mocked model and store)."""
+    import argparse
+    import json as _json
+
+    from odrl_agent.chaos import run_chaos
+
+    parser = argparse.ArgumentParser(prog="odrl-host chaos")
+    parser.add_argument("--scenario", action="append", dest="scenarios",
+                        help="scenario id (repeatable; default: both ODRL scenarios)")
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--max-cases", type=int, default=20)
+    parser.add_argument("--report-out", default=None, help="write the JSON report here")
+    args = parser.parse_args(argv)
+    kwargs = {"seed": args.seed, "max_cases": args.max_cases}
+    if args.scenarios:
+        kwargs["scenario_ids"] = tuple(args.scenarios)
+    report = run_chaos(Path.cwd(), **kwargs)
+    for scenario_id, row in report["scenarios"].items():
+        mark = "PASS" if row["passed"] else "FAIL"
+        print(
+            f"[{mark}] {scenario_id}: baseline={row['baseline_verdict']} "
+            f"cases={row['cases_tested']} faults_fired_runs={row['faults_fired_runs']}"
+        )
+        if row["minimal_schedule"]:
+            print(f"  minimal failing schedule: {_json.dumps(row['minimal_schedule'], sort_keys=True)}")
+            for result in (row["report"] or {}).get("results", []):
+                if not result.get("passed"):
+                    print(f"  violated {result.get('id')}: {result.get('evidence')}")
+    if args.report_out:
+        Path(args.report_out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.report_out).write_text(
+            _json.dumps(report, sort_keys=True, indent=2, default=str) + "\n", encoding="utf-8"
+        )
+    print(f"chaos: {'clean' if report['ok'] else 'FAILED'}")
+    return EXIT_OK if report["ok"] else EXIT_VERDICT_FAIL
+
+
 def _infer_scenario(trace_scenario: str) -> Path:
     """Find the scenario.yaml whose id matches the trace scenario."""
     for candidate in sorted(Path("scenarios").glob("*/scenario.yaml")):
@@ -861,14 +899,15 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_OK
     if not raw or raw[0] in ("-h", "--help"):
         print(
-            "usage: odrl-host [--version] {run, diagnose, replay, keys, billing, optimize-prompts, serve} ...\n"
+            "usage: odrl-host [--version] {run, diagnose, replay, keys, billing, optimize-prompts, serve, chaos} ...\n"
             "  run: execute a live NL-to-ODRL conversion against a scenario\n"
             "  diagnose: propose a policy patch for a failing trace (read-only)\n"
             "  replay: re-run a trace scenario under a patched policy + regression\n"
             "  keys: issue, list, or revoke product API keys (fingerprints only on disk)\n"
             "  billing: export per-run line items as JSON or CSV (vendor-neutral)\n"
             "  optimize-prompts: budgeted DSPy probe of the NL-to-ODRL instruction (live model)\n"
-            "  serve: browse the ODRL/Policy Studio (reads ui/, local only)\n"
+            "  serve: run the Studio API + UI (FastAPI/Uvicorn)\n"
+            "  chaos: fuzz fault schedules against the live pipeline (mocked model)\n"
             "framework checks (any trace): agentcrash check/serve"
         )
         return EXIT_OK if raw else EXIT_USAGE
@@ -887,6 +926,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_optimize_prompts(rest)
     if command == "serve":
         return cmd_serve(rest)
+    if command == "chaos":
+        return cmd_chaos(rest)
     print(f"odrl-host: unknown command {command!r}", file=sys.stderr)
     return EXIT_USAGE
 

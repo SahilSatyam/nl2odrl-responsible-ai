@@ -96,12 +96,19 @@ def test_run_is_one_model_call_and_fixed_stages(tmp_path, monkeypatch) -> None:
     assert run_cli(trace, tmp_path / "s.json") == 0
     events = read_events(trace)
     stages = [e["detail"]["stage"] for e in events if e["detail"].get("phase") == "pipeline_stage"]
-    assert stages == ["ingest", "decompose", "extract", "ground", "compile", "verify", "draft"]
+    assert stages == [
+        "ingest", "decompose", "extract", "ground", "compile", "verify", "reason", "ground",
+        "reason", "draft",
+    ]
     calls = [e for e in events if e["detail"].get("phase") == "model_call"]
     assert [c["detail"]["purpose"] for c in calls] == ["extract"]
     tools = [(e["tool"], (e["args"] or {}).get("op")) for e in events
              if e["detail"].get("phase") == "tool_result"]
-    assert tools == [("validate_odrl", None), ("save_odrl", "read"), ("save_odrl", "write")]
+    # validate, read, freshness re-read (check_then_act), write
+    assert tools == [
+        ("validate_odrl", None), ("save_odrl", "read"), ("save_odrl", "read"),
+        ("save_odrl", "write"),
+    ]
     end = events[-1]["detail"]
     assert end["phase"] == "run_end" and end["draft_status"] == "ready"
 

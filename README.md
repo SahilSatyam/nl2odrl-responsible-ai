@@ -7,7 +7,7 @@ A fixed-stage pipeline turns natural-language access rules into **W3C
 ODRL 2.2** and saves it **exactly once**. The model only extracts meaning
 into a typed IR (`PolicyIR`); a deterministic compiler owns syntax, IRIs
 and literal types, and full ODRL 2.2 SHACL shapes check every document.
-Custom invariants then judge each run against recorded evidence. 536
+Custom invariants then judge each run against recorded evidence. 663
 tests green, 1 skipped (live-model only).
 
 The ethical red line is **over-permission**: the conversion grants a
@@ -18,7 +18,7 @@ git clone <this-repo> && cd nl2odrl-responsible-ai
 uv venv && uv pip install -e .          # or: python3 -m venv .venv && pip install -e .
 export PYTHONPATH=.
 cd ui-react && npm ci && npm run build && cd ..   # build the studio into ui/
-odrl-host serve --port 8901                       # open http://localhost:8901/
+odrl-host serve --port 8901                       # FastAPI + Uvicorn; open http://localhost:8901/
 odrl-host run --scenario odrl_convert --seed 42   # live model, needs key
 ```
 
@@ -147,7 +147,8 @@ problem.
 | `odrl-host diagnose --trace T --output O [--model M] [--scenario S] [--policy P]` | Propose a policy patch for a failing trace (read-only; fixture-backed unless `LLAMA_BASE_URL` is set) |
 | `odrl-host replay --trace T [--policy P] [--patch P] [--regression R]` | Re-run a trace scenario under a patched policy + regression check |
 | `odrl-host optimize-prompts [--model M] [--max-live-calls N] [--out O]` | Budgeted DSPy probe of the conversion instruction (needs key) |
-| `odrl-host serve [--port P] [--bind B]` | Browse the ODRL/Policy Studio (serves `ui/`, local only) |
+| `odrl-host serve [--port P] [--bind B]` | Run the Studio API + UI (FastAPI on Uvicorn; OpenAPI at `/docs`) |
+| `odrl-host chaos [--scenario S] [--seed N] [--max-cases N] [--report-out R]` | Fuzz fault schedules against the live pipeline (mocked model); exit 1 on any invariant violation |
 | `odrl-host keys issue --label L` / `list` / `revoke --fp P` | Manage product API keys (only fingerprints are stored) |
 | `odrl-host billing export [--key-fp F] [--since T] [--format json\|csv]` | Dump per-run billing line items (vendor-neutral) |
 | `agentcrash check --trace T --plugin odrl_agent.verifiers --invariant I [--state S] [--report-out R] [--scan-pii]` | Framework verdict over any trace |
@@ -163,11 +164,64 @@ problem.
 
 ```bash
 export PYTHONPATH=.
-python3 -m pytest        # 198 passed, 1 skipped (live-model only)
+python3 -m pytest        # 663 passed, 1 skipped (live-model only)
 ```
 
-CI runs the same suite on Python 3.11–3.13 plus the PII guardrail
-(`scan-pii` over the PASS golden trace + state must stay clean).
+CI runs the same suite on Python 3.11–3.13, the chaos gate
+(`odrl-host chaos`), and the PII guardrail (`scan-pii` over the PASS golden
+trace + state must stay clean).
+
+## Grounding, reasoning and the publish gate
+
+Every draft passes three deterministic checks before anything is saved:
+
+- **Grounding** (`odrl_agent/grounder.py`): every assignee, assigner and
+  target maps to an `EntityCatalog` entry, or is named in the source text
+  (with no catalog). Wildcard/public grants, unknown external principals,
+  look-alike (homoglyph) names, and permissions supported only by injected
+  text ("ignore previous instructions", `INSTRUCTION:`, role overrides, JSON
+  breakout) are flagged for any principal name. Parties the deployment vouches
+  for come from `NL2ODRL_TRUSTED_PARTIES`, never from the text.
+- **Reasoning** (`odrl_agent/reasoning.py`, Z3): unsatisfiable constraints,
+  permission/prohibition overlaps without a `conflict` strategy (including the
+  `odrl:includedIn` action hierarchy), and duties that are themselves
+  prohibited.
+- **SHACL**: the full ODRL 2.2 shapes.
+
+Only a draft with no ambiguities, assumptions, dropped rules, grounding
+issues or conflicts and a full SHACL pass is published automatically. Every
+other draft waits in **Review** (`GET /api/drafts`): a reviewer approves,
+edits the IR, or rejects, always with a reason
+(`POST /api/runs/{key}/publish`). Conflicts and SHACL failures can only be
+cleared by an edit, which is re-grounded, recompiled and re-checked; a run
+gets one decision, so a draft is published at most once.
+
+## Service
+
+`odrl-host serve` runs the FastAPI app (`odrl_agent/app.py`) on Uvicorn.
+
+- **Queue**: `NL2ODRL_WORKERS` (default 4) conversions run at once, up to
+  `NL2ODRL_QUEUE_DEPTH` (16) wait; beyond that `POST /api/convert` answers
+  `429` with `Retry-After`. Finished runs stay in memory for
+  `NL2ODRL_RUN_TTL` seconds (at most `NL2ODRL_MAX_RETAINED`), then are served
+  from SQLite.
+- **Progress**: `GET /api/runs/{key}/events` streams Server-Sent Events
+  (`status`, `trace`, `end`); the studio no longer polls.
+- **Observability**: one JSON log line per request with `X-Request-ID`; the
+  same id is written into the conversion trace (`run_start.request_id`) and
+  the AgentCrash SDK run (`trace_link`). `GET /api/metrics` serves Prometheus
+  text: request, queue-wait and run-time histograms, queue gauges, token
+  counters. SLO: p95 queue wait <= 5 s
+  (`histogram_quantile(0.95, sum(rate(nl2odrl_queue_wait_seconds_bucket[5m])) by (le))`).
+- **AgentCrash SDK**: each conversion runs inside `AgentCrash.run()`; stages,
+  model calls and tool calls are SDK events written to a hash-chained
+  `<trace>.sdk.jsonl` (HMAC-signed with `AGENTCRASH_SIGNING_KEY`), exported to
+  `AGENTCRASH_ENDPOINT` when set, and to OpenTelemetry with `NL2ODRL_OTEL=1`.
+- **Auth**: Bearer API keys as before, or `POST /api/session` to exchange a key
+  for an `HttpOnly; SameSite=Strict` session cookie (the studio never stores
+  the key). Cookie-authenticated writes must send `X-Requested-With: nl2odrl`.
+  Model settings are held per tenant in server memory: one tenant cannot
+  change another tenant's endpoint or key.
 
 ## Troubleshooting
 

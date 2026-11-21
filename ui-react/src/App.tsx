@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
-import { api, fmt, productKey, saveProductKey, type ModelSettings, type OdrlPair, type RunSnapshot } from './api';
+import { api, ApiError, fmt, followRun, type DraftRow, type ModelSettings, type OdrlPair, type RuleIR, type RunSnapshot } from './api';
 
-type Tab = 'convert' | 'policies' | 'runs';
+type Tab = 'convert' | 'review' | 'policies' | 'runs';
 const ATTACKER = 'attacker-client';
 const EXAMPLE = 'Allow the research team to use dataset-7 for model training for 90 days for non-commercial research only.';
 
@@ -20,8 +20,12 @@ function markAttacker(text: string): ReactElement[] {
 }
 
 function outcomeOf(snap: RunSnapshot): string {
-  if (snap.status === 'running') return 'Converting…';
+  if (snap.status === 'running' || snap.status === 'queued') return snap.status === 'queued' ? 'Queued…' : 'Converting…';
   if (snap.status === 'error') return `Could not finish: ${snap.error?.hint || 'unknown error'}`;
+  if (snap.draft && !snap.draft.auto_publish && snap.saves.length === 0) {
+    if (snap.decision) return `Reviewed: ${snap.decision.decision} (${snap.decision.reason}).`;
+    return `Held for review: ${snap.draft.alerts.length || snap.draft.ambiguities.length + snap.draft.dropped_rules.length} issue(s) need a human. Open Review to approve, edit or reject.`;
+  }
   if (!snap.verdict) return 'Finished without a verdict.';
   if (snap.verdict.verdict === 'PASS') return 'Valid ODRL, saved exactly once.';
   const failed = snap.verdict.results.filter((r) => !r.passed).map((r) => r.id);
@@ -91,14 +95,14 @@ function PoliciesView({ onOpenRun }: { onOpenRun: (k: string) => void }) {
 function ModelSetupDialog({ initial, onClose, onSaved }: { initial: ModelSettings | null; onClose: () => void; onSaved: (s: ModelSettings) => void }) {
   const [baseUrl, setBaseUrl] = useState(initial?.base_url || '');
   const [apiKey, setApiKey] = useState('');
-  const [studioKey, setStudioKey] = useState(productKey());
+  const [studioKey, setStudioKey] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const save = useCallback(async () => {
     setSaving(true); setError('');
     try {
+      if (studioKey.trim()) await api.login(studioKey.trim());
       const s = await api.saveSettings({ base_url: baseUrl.trim(), api_key: apiKey.trim() });
-      saveProductKey(studioKey.trim());
       onSaved(s);
       onClose();
     } catch (e) { setError(e instanceof Error ? e.message : 'save failed'); }
@@ -111,7 +115,7 @@ function ModelSetupDialog({ initial, onClose, onSaved }: { initial: ModelSetting
         <p className="status">Live conversion calls your OpenAI-compatible chat endpoint. The key is kept in the server process only, never traced or returned.</p>
         <label className="field">Base URL<input type="text" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://…/v1" inputMode="url" /></label>
         <label className="field">API key<input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder={initial?.api_key_set ? 'Saved — enter a new key to replace it' : 'Paste the key'} autoComplete="off" /></label>
-        <label className="field">Studio API key (only if this server enforces keys)<input type="password" value={studioKey} onChange={(e) => setStudioKey(e.target.value)} placeholder="Leave empty on a local server" autoComplete="off" /></label>
+        <label className="field">Studio API key (signs you in with a secure cookie; never stored in the browser)<input type="password" value={studioKey} onChange={(e) => setStudioKey(e.target.value)} placeholder="Leave empty on a local server" autoComplete="off" /></label>
         {error ? <p className="status" role="alert">{error}</p> : null}
         <div className="row">
           <button className="btn primary" disabled={saving || !baseUrl.trim() || !apiKey.trim()} onClick={save}>{saving ? 'Saving…' : 'Save'}</button>
@@ -133,17 +137,10 @@ function ConvertView({ onOpenRun, onNeedSetup }: { onOpenRun: (k: string) => voi
     setBusy(true); setSnap(null); setNeedsKey(false); setStatus('Converting…');
     try {
       const rec = await api.convert(nlText);
-      setStatus(`Converting… ${rec.run_key}`);
-      for (let i = 0; i < 120; i++) {
-        await new Promise((r) => setTimeout(r, 1000));
-        const s2 = await api.run(rec.run_key);
-        if (s2.status !== 'running') {
-          setSnap(s2); setStatus(outcomeOf(s2));
-          if (s2.status === 'error' && s2.error?.code === 'E_MODEL_API') setNeedsKey(true);
-          break;
-        }
-        setStatus(`Converting… ${s2.events.length} events · ${s2.model_calls} model calls`);
-      }
+      setStatus(`${rec.status === 'queued' ? 'Queued' : 'Converting'}… ${rec.run_key}`);
+      const s2 = await followRun(rec.run_key, (n, st) => setStatus(`${st === 'queued' ? 'Queued' : 'Converting'}… ${n} events`));
+      setSnap(s2); setStatus(outcomeOf(s2));
+      if (s2.status === 'error' && s2.error?.code === 'E_MODEL_API') setNeedsKey(true);
     } catch (e) { setStatus(e instanceof Error ? e.message : 'request failed'); }
     finally { setBusy(false); }
   }, []);
@@ -267,6 +264,127 @@ function RunView({ focusKey, onConsumed }: { focusKey: string | null; onConsumed
   );
 }
 
+function Highlighted({ text, rules, active }: { text: string; rules: RuleIR[]; active: number | null }) {
+  // Build React segments (no innerHTML): each cited span is marked, the active rule's spans stronger.
+  const marks: { start: number; end: number; rule: number }[] = [];
+  rules.forEach((r, i) => (r.source_spans || []).forEach((sp) => {
+    let start = typeof sp.start === 'number' ? sp.start : -1;
+    let end = typeof sp.end === 'number' ? sp.end : -1;
+    if (start < 0 || end <= start || text.slice(start, end).toLowerCase() !== sp.quote.toLowerCase()) {
+      start = text.toLowerCase().indexOf(sp.quote.toLowerCase()); end = start + sp.quote.length;
+    }
+    if (start >= 0) marks.push({ start, end, rule: i });
+  }));
+  marks.sort((x, y) => x.start - y.start);
+  const out: ReactElement[] = [];
+  let pos = 0;
+  marks.forEach((m, k) => {
+    if (m.start < pos) return;
+    if (m.start > pos) out.push(<span key={`t${k}`}>{text.slice(pos, m.start)}</span>);
+    out.push(<mark key={`m${k}`} title={`rule ${m.rule + 1}`} style={m.rule === active ? { outline: '2px solid var(--accent, #4c8bf5)' } : undefined}>{text.slice(m.start, m.end)}</mark>);
+    pos = m.end;
+  });
+  if (pos < text.length) out.push(<span key="tail">{text.slice(pos)}</span>);
+  return <div className="nl">{out}</div>;
+}
+function ReviewView({ onOpenRun }: { onOpenRun: (k: string) => void }) {
+  const [rows, setRows] = useState<DraftRow[]>([]);
+  const [sel, setSel] = useState<string | null>(null);
+  const [active, setActive] = useState<number | null>(null);
+  const [reason, setReason] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [irText, setIrText] = useState('');
+  const [note, setNote] = useState('Loading drafts' + '\u2026');
+  const [error, setError] = useState('');
+  const [blocking, setBlocking] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(async () => {
+    try {
+      const b = await api.drafts();
+      setRows(b.drafts);
+      setNote(b.drafts.length ? `${b.drafts.length} waiting for review` : 'Nothing waiting for review');
+      setSel((cur) => (cur && b.drafts.some((d) => d.run_key === cur) ? cur : b.drafts[0]?.run_key ?? null));
+    } catch (e) { setNote(e instanceof Error ? e.message : 'load failed'); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  const row = rows.find((r) => r.run_key === sel) || null;
+  useEffect(() => {
+    setActive(null); setReason(''); setError(''); setBlocking([]); setEditing(false);
+    setIrText(row?.draft.ir ? JSON.stringify(row.draft.ir, null, 2) : '');
+  }, [sel]); // eslint-disable-line react-hooks/exhaustive-deps
+  const decide = useCallback(async (decision: 'approve' | 'edit' | 'reject') => {
+    if (!row) return;
+    setBusy(true); setError(''); setBlocking([]);
+    try {
+      let ir: unknown;
+      if (decision === 'edit') {
+        try { ir = JSON.parse(irText); } catch { setError('The edited IR is not valid JSON.'); setBusy(false); return; }
+      }
+      const res = await api.publish(row.run_key, { decision, reason: reason.trim(), ...(decision === 'edit' ? { ir } : {}) });
+      setNote(res.published ? `Published ${row.run_key.slice(0, 8)}` : `Rejected ${row.run_key.slice(0, 8)}`);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'decision failed');
+      if (e instanceof ApiError && e.detail && typeof e.detail === 'object' && 'blocking' in (e.detail as object)) {
+        setBlocking((e.detail as { blocking: string[] }).blocking);
+      }
+    } finally { setBusy(false); }
+  }, [row, reason, irText, load]);
+  const rules = row?.draft.ir?.rules || [];
+  return (
+    <div>
+      <div className="title-row"><h1>Review drafts before they publish</h1><span className="stat-chip" role="status">{note}</span></div>
+      <p className="sub">The model drafts; a person publishes anything the deterministic checks could not clear. Every decision needs a reason.</p>
+      {rows.length === 0 ? <p className="status">Drafts that need a human appear here.</p> : (<>
+        <div className="row" style={{ marginBottom: 12 }}>
+          <label className="field">Draft<select value={sel || ''} onChange={(e) => setSel(e.target.value)}>
+            {rows.map((r) => <option key={r.run_key} value={r.run_key}>{`${r.run_key.slice(0, 8)} \u00b7 ${r.draft.alerts.length} alert(s) \u00b7 ${r.created_at}`}</option>)}
+          </select></label>
+          <button className="btn" onClick={load}>Refresh</button>
+          {row ? <button className="btn" onClick={() => onOpenRun(row.run_key)}>Open run</button> : null}
+        </div>
+        {row && (<div className="grid-2">
+          <section className="panel"><div className="panel-h"><h2>Source text</h2><p>marked spans are the evidence each rule cites</p></div>
+            <div className="panel-b">
+              <Highlighted text={row.nl_text} rules={rules} active={active} />
+              <h3 style={{ marginTop: 16 }}>Why it was held</h3>
+              <ul className="status">
+                {row.draft.alerts.map((a, i) => <li key={`a${i}`}>{a}</li>)}
+                {row.draft.ambiguities.map((a, i) => <li key={`b${i}`}>ambiguity: {a.kind} {'\u2014'} {a.description}</li>)}
+                {row.draft.assumptions.map((a, i) => <li key={`c${i}`}>assumption: {a.field} = {a.assumed_value} ({a.reason})</li>)}
+                {row.draft.dropped_rules.map((r, i) => <li key={`d${i}`}>dropped {r.modality} {r.action} for {r.assignee || 'anyone'} (not supported by the text)</li>)}
+              </ul>
+            </div>
+          </section>
+          <section className="panel"><div className="panel-h"><h2>Rules</h2><p>{rules.length} rule(s) {'\u00b7'} hover to see the span</p></div>
+            <div className="panel-b">
+              <table className="grid"><thead><tr><th>#</th><th>Modality</th><th>Action</th><th>Target</th><th>Assignee</th></tr></thead><tbody>
+                {rules.map((r, i) => (
+                  <tr key={i} onMouseEnter={() => setActive(i)} onFocus={() => setActive(i)} tabIndex={0} style={i === active ? { background: 'var(--raised)' } : undefined}>
+                    <td className="num mono">{i + 1}</td><td>{r.modality}</td><td className="mono">{r.action}</td><td className="mono">{r.target || '\u2014'}</td><td className="mono">{r.assignee || '\u2014'}</td>
+                  </tr>
+                ))}
+              </tbody></table>
+              <div style={{ height: 12 }} />
+              {row.draft.odrl ? <pre className="code" tabIndex={0} dangerouslySetInnerHTML={{ __html: highlightJson(row.draft.odrl) }} /> : <p className="status">No compiled document; publish requires an edit.</p>}
+              {editing ? <label className="field">Edited IR (re-grounded, recompiled and re-checked on publish)<textarea value={irText} onChange={(e) => setIrText(e.target.value)} style={{ minHeight: 220, fontFamily: 'var(--mono, monospace)' }} /></label> : null}
+              <label className="field">Reason (required)<textarea value={reason} maxLength={2000} onChange={(e) => setReason(e.target.value)} placeholder="Why this decision is right" /></label>
+              {error ? <p className="status" role="alert">{error}</p> : null}
+              {blocking.length ? <ul className="status" role="alert">{blocking.map((b, i) => <li key={i}>{b}</li>)}</ul> : null}
+              <div className="row">
+                {editing
+                  ? <button className="btn primary" disabled={busy || !reason.trim()} onClick={() => decide('edit')}>Publish edit</button>
+                  : <button className="btn primary" disabled={busy || !reason.trim()} onClick={() => decide('approve')}>Approve &amp; Publish</button>}
+                <button className="btn" disabled={busy} onClick={() => setEditing((v) => !v)}>{editing ? 'Cancel edit' : 'Edit'}</button>
+                <button className="btn" disabled={busy || !reason.trim()} onClick={() => decide('reject')}>Reject</button>
+              </div>
+            </div>
+          </section>
+        </div>)}
+      </>)}
+    </div>
+  );
+}
 export default function App() {
   const [tab, setTab] = useState<Tab>('convert');
   const [focusKey, setFocusKey] = useState<string | null>(null);
@@ -280,13 +398,13 @@ export default function App() {
   useEffect(() => {
     if (settings && !settings.configured) setSetupOpen(true);
   }, [settings]);
-  const titles: Record<Tab, string> = { convert: 'Convert', policies: 'Policies', runs: 'Runs' };
+  const titles: Record<Tab, string> = { convert: 'Convert', review: 'Review', policies: 'Policies', runs: 'Runs' };
   return (
     <div className="frame">
       <aside className="sidebar" aria-label="Primary">
         <div className="brand"><div className="mark">N</div><div><b>NL2ODRL</b><small>Responsible AI console</small></div></div>
         <div className="nav-label">Studio</div>
-        {(['convert', 'policies', 'runs'] as Tab[]).map((t) => (
+        {(['convert', 'review', 'policies', 'runs'] as Tab[]).map((t) => (
           <button key={t} className="nav-item" aria-current={tab === t ? 'page' : undefined} onClick={() => setTab(t)}><span className="dot" />{titles[t]}</button>
         ))}
         <div className="side-foot">Runs stay in the local database. Traces are hash-chained JSONL.</div>
@@ -298,11 +416,12 @@ export default function App() {
       </div>
       <div className="sheet-wrap"><main className="sheet">
         <div className="tabs" role="tablist" aria-label="Views">
-          {(['convert', 'policies', 'runs'] as Tab[]).map((t) => (
+          {(['convert', 'review', 'policies', 'runs'] as Tab[]).map((t) => (
             <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>{titles[t]}</button>
           ))}
         </div>
         {tab === 'convert' && <ConvertView onOpenRun={openRun} onNeedSetup={openSetup} />}
+        {tab === 'review' && <ReviewView onOpenRun={openRun} />}
         {tab === 'policies' && <PoliciesView onOpenRun={openRun} />}
         {tab === 'runs' && <RunView focusKey={focusKey} onConsumed={() => setFocusKey(null)} />}
       </main></div>

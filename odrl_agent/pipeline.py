@@ -20,26 +20,41 @@ import re
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from agentcrash import AgentCrash, RunContext
 from agentcrash.clock import VirtualClock
 from agentcrash.ledger import Ledger
 from agentcrash.tracer import TraceWriter, compute_run_id
+from agentcrash.verifiers import load_state_snapshot, load_trace_events
 
 from odrl_agent.compiler import CompileError, compile_ir
 from odrl_agent.extractor import (
     DEFAULT_MODEL,
-    ExtractResult,
     Extractor,
+    ExtractResult,
     ModelRoute,
     classify,
+)
+from odrl_agent.grounder import INJECTED_GRANT, Grounder
+from odrl_agent.instrument import (
+    BOUNDARY_LLM,
+    BOUNDARY_SOURCE,
+    BOUNDARY_STORE,
+    WORKFLOW,
+    default_sdk,
+    finish,
 )
 from odrl_agent.ir import PolicyIR, RuleIR
 from odrl_agent.llm import LlmError, StructuredLlm
 from odrl_agent.odrl import ODRL_SHAPES_ID, validate_odrl
+from odrl_agent.reasoning import analyze
+from odrl_agent.strict import strict_validate
 from odrl_agent.tools import SAVE_ODRL, VALIDATE_ODRL, ToolRegistry
 
 PIPELINE_ID = "pipeline/v1"
 MAX_REPAIRS = 2
-STAGES = ("ingest", "decompose", "extract", "ground", "compile", "verify", "repair", "draft")
+STAGES = (
+    "ingest", "decompose", "extract", "ground", "compile", "verify", "reason", "repair", "draft",
+)  # fmt: skip
 
 
 class PipelineError(LlmError):
@@ -64,6 +79,12 @@ class PolicyDraft:
     rejected_repairs: list[str] = field(default_factory=list)
     route: str = "SIMPLE"
     shapes: str = ODRL_SHAPES_ID
+    grounding: dict[str, Any] = field(default_factory=dict)
+    reasoning: dict[str, Any] = field(default_factory=dict)
+    alerts: list[str] = field(default_factory=list)
+    #: True only with zero ambiguities/assumptions, zero conflicts, every
+    #: entity grounded and a full SHACL pass. Anything else needs a human.
+    auto_publish: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -181,12 +202,24 @@ def _record_key(scenario: dict[str, Any]) -> str:
 
 
 class _Run:
-    """Per-run trace + tool plumbing (keeps run_conversion readable)."""
+    """Per-run trace + tool plumbing (keeps run_conversion readable).
 
-    def __init__(self, writer: TraceWriter, registry: ToolRegistry, clock: VirtualClock) -> None:
+    Writes the legacy TraceWriter envelope the ODRL verifiers judge and, when
+    an SDK run is attached, mirrors each stage, model call and tool call as
+    AgentCrash SDK events.
+    """
+
+    def __init__(
+        self,
+        writer: TraceWriter,
+        registry: ToolRegistry,
+        clock: VirtualClock,
+        sdk_run: RunContext | None = None,
+    ) -> None:
         self.writer = writer
         self.registry = registry
         self.clock = clock
+        self.sdk_run = sdk_run
         self.step = 1
         self.tool_calls = 0
 
@@ -198,8 +231,13 @@ class _Run:
             ts_virtual=self.clock.now(),
             detail={"phase": "pipeline_stage", "stage": name, **data},
         )
+        if self.sdk_run is not None:
+            with self.sdk_run.step(name):
+                pass
 
-    def model_call(self, purpose: str, model: str, usage: dict[str, int]) -> None:
+    def model_call(
+        self, purpose: str, model: str, usage: dict[str, int], error: str | None = None
+    ) -> None:
         self.step += 1
         self.writer.write(
             step=self.step,
@@ -210,8 +248,18 @@ class _Run:
                 "purpose": purpose,
                 "model": model,
                 "model_usage": usage,
+                **({"error": error} if error else {}),
             },
         )
+        if self.sdk_run is not None:
+            with self.sdk_run.step(purpose) as step:
+                step.record_tool(
+                    BOUNDARY_LLM,
+                    inputs={"purpose": purpose, "model": model},
+                    outputs=usage,
+                    status="error" if error else "ok",
+                    error=error,
+                )
 
     def tool(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
         self.step += 1
@@ -234,7 +282,32 @@ class _Run:
             ts_virtual=self.clock.now(),
             detail={"phase": "tool_result", "error": result["error"], "data": result["data"]},
         )
+        if self.sdk_run is not None:
+            summary = {k: v for k, v in args.items() if k != "value" and k != "odrl"}
+            with self.sdk_run.step(name) as step:
+                step.record_tool(
+                    name,
+                    inputs=summary,
+                    outputs={k: v for k, v in (result["data"] or {}).items() if k != "value"},
+                    status="error" if result["outcome"] == "error" else "ok",
+                    error=result["error"],
+                )
         return result
+
+    def fault(self, boundary: str) -> dict[str, Any] | None:
+        """Ask the SDK whether a chaos fault fires here; record it in the trace."""
+        if self.sdk_run is None:
+            return None
+        fault = self.sdk_run.maybe_fault(boundary)
+        if fault is not None:
+            self.step += 1
+            self.writer.write(
+                step=self.step,
+                outcome="info",
+                ts_virtual=self.clock.now(),
+                detail={"phase": "fault", "boundary": boundary, "fault": fault},
+            )
+        return fault
 
 
 def _usage_delta(llm: StructuredLlm, before: dict[str, int]) -> dict[str, int]:
@@ -248,6 +321,21 @@ def _usage_delta(llm: StructuredLlm, before: dict[str, int]) -> dict[str, int]:
 def _call(
     run: _Run, llm: StructuredLlm, purpose: str, model: str, fn: Any, *args: Any, **kw: Any
 ) -> Any:
+    """One model call at the ``llm`` boundary.
+
+    A ``timeout_after_commit`` fault models a reply lost after the model
+    produced it: the call is billed, its result discarded, and the call is
+    retried exactly once.
+    """
+    fault = run.fault(BOUNDARY_LLM)
+    if fault is not None and fault.get("kind") == "timeout_after_commit":
+        before = llm.usage.as_dict()
+        try:
+            fn(*args, **kw)
+        finally:
+            if llm.usage.calls > before["calls"]:
+                run.model_call(purpose, model, _usage_delta(llm, before),
+                               error="TimeoutError: reply lost after commit; retrying once")  # fmt: skip
     before = llm.usage.as_dict()
     try:
         return fn(*args, **kw)
@@ -256,11 +344,62 @@ def _call(
             run.model_call(purpose, model, _usage_delta(llm, before))
 
 
+def _hold(draft: PolicyDraft, alert: str) -> None:
+    """Withdraw auto-publication: the draft waits for a human."""
+    draft.alerts.append(alert)
+    draft.auto_publish = False
+    if draft.status == "ready":
+        draft.status = "needs_review"
+
+
+def _publish(
+    run: _Run, ledger: Ledger, record: str, doc: dict[str, Any], draft: PolicyDraft
+) -> int:
+    """Validate, freshness-check and write ``doc`` once; return committed saves.
+
+    The record is re-read right before the write (``check_then_act``): if its
+    version moved since the first read, another writer got there first and
+    the draft is held instead of overwriting their edit. A lost write
+    acknowledgement is resolved by reading the record back, never by blindly
+    writing again.
+    """
+    check = run.tool(VALIDATE_ODRL, {"odrl": copy.deepcopy(doc)})
+    if check["outcome"] != "success" or not check["data"].get("valid"):
+        _hold(draft, "publish: validate_odrl rejected the compiled document")
+        return 0
+    read = run.tool(SAVE_ODRL, {"op": "read", "record": record})
+    version = read["data"].get("version") if read["outcome"] == "success" else None
+    fault = run.fault(BOUNDARY_STORE)
+    if fault is not None and fault.get("kind") == "concurrent_update":
+        updates = fault.get("updates")
+        ledger.kv_apply_concurrent(record, dict(updates) if isinstance(updates, dict) else {})
+    fresh = run.tool(SAVE_ODRL, {"op": "read", "record": record})
+    fresh_version = fresh["data"].get("version") if fresh["outcome"] == "success" else None
+    if fresh_version != version:
+        _hold(draft, f"publish: E_CONCURRENT_UPDATE record {record!r} moved from version "
+                     f"{version} to {fresh_version} since it was read; not overwritten")  # fmt: skip
+        return 0
+    write = run.tool(
+        SAVE_ODRL,
+        {"op": "write", "record": record, "value": copy.deepcopy(doc),
+         "expected_version": fresh_version},
+    )  # fmt: skip
+    saves = 0 if write["outcome"] == "error" else 1
+    if fault is not None and fault.get("kind") == "timeout_after_commit":
+        confirm = run.tool(SAVE_ODRL, {"op": "read", "record": record})
+        stored = (confirm["data"] or {}).get("value") if confirm["outcome"] == "success" else None
+        if stored != doc:
+            _hold(draft, "publish: write acknowledgement lost and the record does not hold "
+                         "this draft; not retried")  # fmt: skip
+    return saves
+
+
 def convert(
     text: str,
     extractor: Extractor,
     run: _Run | None = None,
     source_meta: dict[str, Any] | None = None,
+    grounder: Grounder | None = None,
 ) -> tuple[PolicyDraft, dict[str, Any] | None]:
     """Run the semantic stages on ``text``; return the draft and compiled doc.
 
@@ -268,6 +407,7 @@ def convert(
     tool registry). ``run`` is optional so the stages can be unit-tested.
     """
     llm = extractor.llm
+    grounder = grounder or Grounder()
 
     def stage(name: str, **data: Any) -> None:
         if run is not None:
@@ -337,6 +477,9 @@ def convert(
                     valid, shacl_errors = validate_odrl(doc)
                     stage("verify", valid=valid, errors=shacl_errors)
                     violations.extend(f"shacl: {err}" for err in shacl_errors)
+                findings = analyze(grounded)
+                stage("reason", ok=findings.ok, findings=findings.messages())
+                violations.extend(findings.messages())
             current = grounded
         if not violations or repairs >= MAX_REPAIRS:
             break
@@ -362,14 +505,22 @@ def convert(
     # Shrink-only fallback: an ungrounded or target-less permission is dropped
     # (narrows the grant); prohibitions and obligations are kept (a
     # restriction never disappears silently).
+    final, gate = grounder.ground(final, source)
+    injected = {i.rule_index for i in gate.issues if i.code == INJECTED_GRANT}
+    injected_rules = {id(r) for n, r in enumerate(final.rules) if n in injected}
+
     def _droppable(rule: RuleIR) -> bool:
-        return rule.modality == "permission" and (not _is_grounded(rule) or not rule.target)
+        if rule.modality != "permission":
+            return False
+        return id(rule) in injected_rules or not _is_grounded(rule) or not rule.target
 
     dropped = [r.model_dump(mode="json") for r in final.rules if _droppable(r)]
     if dropped:
         kept = [r for r in final.rules if not _droppable(r)]
         final = final.model_copy(update={"rules": kept})
         stage("ground", dropped_ungrounded_permissions=len(dropped))
+        final, gate = grounder.ground(final, source)
+    stage("ground", gate=gate.codes())
 
     ir_dump = final.model_dump(mode="json")
     ambiguities = [a.model_dump(mode="json") for a in final.ambiguities]
@@ -392,11 +543,15 @@ def convert(
         stage("draft", status=draft.status)
         return draft, None
     valid, errors = validate_odrl(doc)
-    needs_review = bool(ambiguities or assumptions or dropped or rejected)
+    findings = analyze(final)
+    stage("reason", ok=findings.ok, findings=findings.messages())
+    alerts = gate.messages() + findings.messages()
+    needs_review = bool(ambiguities or assumptions or dropped or rejected or alerts)
     status = "failed" if not valid else ("needs_review" if needs_review else "ready")
     draft = PolicyDraft(
         status, doc, ir_dump, valid, errors, ambiguities, assumptions, dropped, repairs,
-        rejected, route,
+        rejected, route, grounding=gate.as_dict(), reasoning=findings.as_dict(),
+        alerts=alerts, auto_publish=status == "ready",
     )  # fmt: skip
     stage("draft", status=status)
     return draft, doc if valid else None
@@ -415,16 +570,20 @@ def run_conversion(
     strong_model: str | None = None,
     llm_config: Any = None,
     llm: StructuredLlm | None = None,
+    sdk: AgentCrash | None = None,
+    request_id: str | None = None,
+    grounder: Grounder | None = None,
     **_ignored: Any,
 ) -> dict[str, Any]:
     """Convert the scenario's NL document; write trace + state snapshot.
 
     Returns the same summary keys the ReAct loop returned (``run_id``,
-    ``steps``, ``status``, ``saves``, ``model_calls``, ...) plus ``draft``.
-    ``policy`` no longer changes conversion behaviour: validation, freshness
-    and save-once are built into the stages. It still feeds ``run_id``.
+    ``steps``, ``status``, ``saves``, ``model_calls``, ...) plus ``draft``
+    and ``sdk`` (SDK run id, chain verdict, sidecar path, faults fired).
+    ``policy`` does not change conversion behaviour (validation, freshness
+    and save-once are built in); it feeds ``run_id`` and the strict trace
+    self-check. ``request_id`` ties the HTTP request to this trace.
     """
-    del policy
     if model in ("fake", "stub"):
         raise PipelineError("offline stub/fake adapters were removed; use a live model id")
     if llm is None:
@@ -432,7 +591,6 @@ def run_conversion(
 
         llm = StructuredLlm.from_config(llm_config or LlmConfig.from_env())
     extractor = Extractor(llm, ModelRoute(fast=model, strong=strong_model or model))
-
     rng = random.Random(seed)
     clock = VirtualClock()
     ledger = Ledger()
@@ -445,79 +603,98 @@ def run_conversion(
     doc_id, text, fixture, label = _source_text(scenario)
     ledger.record_doc(doc_id, fixture, label)
     record = _record_key(scenario)
-
+    if grounder is None:
+        trusted = env.get("trusted_parties")
+        grounder = Grounder(
+            trusted_parties=[str(p) for p in trusted] if trusted is not None else None
+        )
+    sdk = sdk or default_sdk()
+    sdk_run = sdk.run(WORKFLOW)
     writer = TraceWriter(run_id, scenario_id, trace_path)
-    run = _Run(writer, registry, clock)
+    run = _Run(writer, registry, clock, sdk_run)
     saves = 0
     status = "completed"
+    sdk_report: dict[str, Any] = {}
     try:
-        writer.write(
-            step=0,
-            outcome="info",
-            ts_virtual=clock.now(),
-            detail={
-                "phase": "run_start",
-                "task": str(scenario.get("task", "")),
-                "seed": seed,
-                "model": model,
-                "adapter": "pipeline",
-                "plan": PIPELINE_ID,
-                "stages": list(STAGES),
-                "doc_id": doc_id,
-                "untrusted_source": True,
-            },
-        )
-        try:
-            meta = {
-                "doc_id": doc_id,
-                "text": text,
-                "bytes": len(text.encode("utf-8")),
-                "source": fixture,
-                "label": label,
-                "untrusted_source": True,
-            }
-            draft, doc = convert(text, extractor, run, meta)
-        except LlmError as exc:
-            raise PipelineError(str(exc)) from exc
-        if doc is not None:
-            check = run.tool(VALIDATE_ODRL, {"odrl": copy.deepcopy(doc)})
-            if check["outcome"] == "success" and check["data"].get("valid"):
-                read = run.tool(SAVE_ODRL, {"op": "read", "record": record})
-                version = read["data"].get("version") if read["outcome"] == "success" else None
-                write = run.tool(
-                    SAVE_ODRL,
-                    {
-                        "op": "write",
-                        "record": record,
-                        "value": copy.deepcopy(doc),
-                        "expected_version": version,
-                    },
-                )
-                if write["outcome"] != "error":
-                    saves += 1
-        if draft.status == "failed":
-            status = "failed"
-        snapshot = ledger.snapshot(run_id)
-        writer.write(
-            step=run.step,
-            outcome="info",
-            ts_virtual=clock.now(),
-            detail={
-                "phase": "run_end",
-                "status": status,
-                "draft_status": draft.status,
-                "tool_calls": run.tool_calls,
-                "saves": saves,
-                "model_calls": llm.usage.calls,
-                "ledger_hash": snapshot["ledger_hash"],
-                "draft": draft.as_dict(),
-            },
-        )
-        if state_path is not None:
-            with open(state_path, "w", encoding="utf-8") as fh:
-                fh.write(json.dumps(snapshot, sort_keys=True, separators=(",", ":")) + "\n")
+        with sdk_run:
+            writer.write(
+                step=0,
+                outcome="info",
+                ts_virtual=clock.now(),
+                detail={
+                    "phase": "run_start",
+                    "task": str(scenario.get("task", "")),
+                    "seed": seed,
+                    "model": model,
+                    "adapter": "pipeline",
+                    "plan": PIPELINE_ID,
+                    "stages": list(STAGES),
+                    "doc_id": doc_id,
+                    "untrusted_source": True,
+                    "request_id": request_id,
+                },
+            )
+            # Link the SDK run to this trace (the SDK id is random, so it stays
+            # out of the byte-deterministic trace; the SDK side carries both).
+            with sdk_run.step("trace_link") as link:
+                link.record_tool("trace", inputs={"trace_run_id": run_id, "scenario": scenario_id,
+                                                  "request_id": request_id})  # fmt: skip
+            source = sdk_run.intercept_output(BOUNDARY_SOURCE, {"text": text, "doc_id": doc_id})
+            poisoned = isinstance(source, dict) and bool(source.get("poisoned"))
+            if poisoned:
+                text = str(source.get("text", ""))
+            try:
+                meta = {
+                    "doc_id": doc_id,
+                    "text": text,
+                    "bytes": len(text.encode("utf-8")),
+                    "source": fixture,
+                    "label": label,
+                    "untrusted_source": True,
+                    **({"poisoned_by_fault": True} if poisoned else {}),
+                }
+                draft, doc = convert(text, extractor, run, meta, grounder)
+            except LlmError as exc:
+                raise PipelineError(str(exc)) from exc
+            if doc is not None and draft.auto_publish:
+                saves = _publish(run, ledger, record, doc, draft)
+            if draft.status == "failed":
+                status = "failed"
+            snapshot = ledger.snapshot(run_id)
+            writer.write(
+                step=run.step,
+                outcome="info",
+                ts_virtual=clock.now(),
+                detail={
+                    "phase": "run_end",
+                    "status": status,
+                    "draft_status": draft.status,
+                    "tool_calls": run.tool_calls,
+                    "saves": saves,
+                    "model_calls": llm.usage.calls,
+                    "ledger_hash": snapshot["ledger_hash"],
+                    "draft": draft.as_dict(),
+                    "request_id": request_id,
+                },
+            )
+            if state_path is not None:
+                with open(state_path, "w", encoding="utf-8") as fh:
+                    fh.write(json.dumps(snapshot, sort_keys=True, separators=(",", ":")) + "\n")
     finally:
         writer.close()
+        sdk_report = finish(sdk, sdk_run, trace_path)
+    if state_path is not None:
+        # strict.py promoted: the trace this run wrote must satisfy the legacy
+        # envelope rules (shape, hash chain, run_id, ledger_hash) or the run
+        # is reported as corrupt instead of judged.
+        strict_validate(
+            load_trace_events(trace_path),
+            scenario=scenario,
+            scenario_text=scenario_text,
+            policy_text=policy_text,
+            policy=policy,
+            state=load_state_snapshot(state_path),
+        )
     usage = llm.usage.as_dict()
     return {
         "run_id": run_id,
@@ -533,4 +710,6 @@ def run_conversion(
         "trace_path": trace_path,
         "state_path": state_path,
         "draft": draft.as_dict(),
+        "request_id": request_id,
+        "sdk": {k: v for k, v in sdk_report.items() if k != "events"},
     }
