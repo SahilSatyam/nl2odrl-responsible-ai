@@ -45,6 +45,8 @@ Phases 2 and 3 run in parallel after Phase 1 lands. No Phase 5 work starts befor
 
 ### 0.1 Dependency boundary fix (P0)
 
+**Status: ✅ Done.** `agentcrash-core>=0.4.0,<0.5.0` pinned; `agentcrash.db` and `reference_patch_for` imports gone; nl2odrl owns `odrl_agent/db.py` and `odrl_agent/remediation.py`.
+
 - Pin `agentcrash-core>=0.4.0,<0.5.0` in `pyproject.toml` (`>=0.2.0` unbounded is the ImportError vector).
 - Remove `from agentcrash import db as db_module` from `odrl_agent/web.py:32` (+ use at `:519`) and `reference_patch_for` imports from `odrl_agent/web.py:33-37` and `odrl_agent/cli.py:34-44`.
 - Move ownership home: converted policies, tenants, billing, API keys live **100% in `nl2odrl`** (own SQLite tables / SQLAlchemy models). `agentcrash-core` keeps only trace/verification (`TraceWriter`, control-plane `/v1/*` ingestion).
@@ -54,6 +56,8 @@ Phases 2 and 3 run in parallel after Phase 1 lands. No Phase 5 work starts befor
 
 ### 0.2 Kill global mutation (P0, security)
 
+**Status: ✅ Done.** No `os.environ` writes or `urlopen` patching remain in `web.py`; `_scripted_transport` is an injected transport; SSRF guard in `odrl_agent/netguard.py`.
+
 - `POST /api/settings` (`web.py:918-945`): stop writing `LLAMA_BASE_URL` / `LLAMA_API_KEY` into process `os.environ`. Replace with immutable per-server config + per-request client injection (constructor-injected HTTP client into `LlamaAdapter`).
 - Confine `_scripted_transport` (`web.py:382-406`, patch/restore at `:418-425`, `:471-481`) to tests only. Production `run_and_store` never touches `urllib.request.urlopen` or `os.environ` globals.
 - Add SSRF guard: validate `base_url` against allowlist (scheme + host), reject `169.254.169.254` / link-local / internal DNS.
@@ -61,15 +65,17 @@ Phases 2 and 3 run in parallel after Phase 1 lands. No Phase 5 work starts befor
 
 ### 0.3 Dead-code sweep + doc honesty
 
+**Status: ✅ Done.** Dead diagnose branches removed from `cli.py`; `strict_validate` promoted into `pipeline.py`; README test count updated (663 passed, 1 skipped). Minor leftover: README line ~47 still says "SDK instrumentation is planned" while a later section describes it as shipped.
+
 - Delete `cli.py:599-607` dead diagnose branches or gate them behind existing scenario names; wire the live `odrl` branch at `:611` to real scenario discovery.
 - Decide `strict.py`: either promote `strict_validate` into the Phase 1 pipeline (recommended — envelope + hash-chain + `ledger_hash` checks) or delete it. No more dead validators.
 - Update `README.md` (claims "182 tests", "built on agentcrash-core SDK instrumentation" — both stale) and `verifiers.py` private import (`agentcrash._registry` → public registry export added in Phase 2).
 
 ### Phase 0 exit gate
 
-- [ ] Fresh `pip install -e .` resolves `agentcrash-core 0.4.x`; `import odrl_agent.web`, `import odrl_agent.cli` succeed.
-- [ ] Full suite green; collection count recorded (currently 189, not 182).
-- [ ] **Baseline v0 frozen**: current inline pipeline run over a fixed 50-case sample with recorded model ID, prompt-pack hash, commit SHA, latency/cost. This number is the "before" for every later claim.
+- [x] Fresh `pip install -e .` resolves `agentcrash-core 0.4.x`; `import odrl_agent.web`, `import odrl_agent.cli` succeed. (Pin in `pyproject.toml`; clean-venv install not re-run for this check.)
+- [x] Full suite green; collection count recorded (README: 663 passed, 1 skipped; not re-run for this check).
+- [x] **Baseline v0 frozen** (`benchmarks/baseline_v0_cases.json`, `baseline_v0_results.json`): current inline pipeline run over a fixed 50-case sample with recorded model ID, prompt-pack hash, commit SHA, latency/cost. This number is the "before" for every later claim.
 
 ---
 
@@ -78,6 +84,8 @@ Phases 2 and 3 run in parallel after Phase 1 lands. No Phase 5 work starts befor
 **Goal:** retire the ReAct loop. The LLM extracts meaning; code owns syntax, identity, and persistence.
 
 ### 1.1 `PolicyIR` — the contract between uncertainty and determinism (P0)
+
+**Status: ✅ Done** (`odrl_agent/ir.py`).
 
 New `odrl_agent/ir.py` (Pydantic v2, strict):
 
@@ -89,6 +97,8 @@ New `odrl_agent/ir.py` (Pydantic v2, strict):
 
 ### 1.2 Constrained extractor (P1)
 
+**Status: ✅ Done** (`odrl_agent/extractor.py`, `odrl_agent/llm.py`, httpx client). Model routing (fast vs strong) not verified.
+
 New `odrl_agent/extractor.py`, replacing `adapter.py:run_react_loop` as the conversion entry:
 
 - Single structured-output call per clause group: `response_format: {type: "json_schema", schema: PolicyIR}` via `httpx`-based OpenAI-compatible client (new `odrl_agent/llm.py`; retires raw `urllib` in `LlamaAdapter`).
@@ -99,6 +109,8 @@ New `odrl_agent/extractor.py`, replacing `adapter.py:run_react_loop` as the conv
 
 ### 1.3 Deterministic ODRL 2.2 compiler (P0)
 
+**Status: ✅ Done** (`odrl_agent/compiler.py`, `schemas/odrl-2.2-shapes.ttl`, bundled `schemas/odrl-2.2.jsonld`).
+
 New `odrl_agent/compiler.py` (pure Python, zero LLM calls):
 
 - `compile_ir(policy_ir) -> (json_ld, rdf_graph)`: maps IR nodes to W3C ODRL 2.2 JSON-LD with proper **IRIs** (`odrl:use`, catalog URIs for parties/assets), typed literals (`xsd:dateTime`, `xsd:duration`, `xsd:integer`), `@context`, `permission`/`prohibition`/`obligation`/`duty`/`constraint`/`refinement`.
@@ -107,6 +119,8 @@ New `odrl_agent/compiler.py` (pure Python, zero LLM calls):
 - Round-trip property tests: `IR → JSON-LD → rdflib parse → SHACL validate` for every modality; JSON-LD key-order/blank-node-insensitive comparison.
 
 ### 1.4 Pipeline orchestrator + bounded repair (P1)
+
+**Status: ✅ Done** (`odrl_agent/pipeline.py`; `run_react_loop` retired from `adapter.py`).
 
 New `odrl_agent/pipeline.py`:
 
@@ -117,9 +131,9 @@ New `odrl_agent/pipeline.py`:
 
 ### Phase 1 exit gate
 
-- [ ] 100% SHACL pass on the regression set **by construction** (no prompt persuasion).
-- [ ] Median ≤2 LLM calls/conversion (vs 5–7 today); P95 simple <4s.
-- [ ] `prohibition`/`duty`/`constraint` cases validate — the current 6-field blind spot is gone.
+- [x] 100% SHACL pass on the regression set **by construction** (no prompt persuasion). (Baseline v1: `shacl_pass_rate` 1.0 on 240 cases.)
+- [ ] Median ≤2 LLM calls/conversion (vs 5–7 today); P95 simple <4s. (Not verified.)
+- [x] `prohibition`/`duty`/`constraint` cases validate — the current 6-field blind spot is gone.
 
 ---
 
@@ -129,6 +143,8 @@ New `odrl_agent/pipeline.py`:
 
 ### 2.1 Entity grounding + least-privilege gate (P1)
 
+**Status: ✅ Done** (`odrl_agent/grounder.py`). Quality is not at target: Baseline v1 `tier5_false_permission_rate` is 0.1667.
+
 New `odrl_agent/grounder.py` + pluggable `EntityCatalog`:
 
 - Resolve `assignee`/`assigner`/`target` against the catalog (URI resolution, ISO-8601 date/duration normalization). Unknown entities → `UNGROUNDED_PRINCIPAL`, blocked from auto-approval.
@@ -136,6 +152,8 @@ New `odrl_agent/grounder.py` + pluggable `EntityCatalog`:
 - Research basis: Sep 2026 authorship-hazard result (untrusted LLM never holds publishing authority) + shrink-only compilation.
 
 ### 2.2 Symbolic conflict & satisfiability engine (P2 → promoted early)
+
+**Status: ✅ Done** (`odrl_agent/reasoning.py`, Z3). Quality is not at target: Baseline v1 `conflict_escape_rate` is 0.0833.
 
 New `odrl_agent/reasoning.py`:
 
@@ -146,11 +164,15 @@ New `odrl_agent/reasoning.py`:
 
 ### 2.3 Draft-vs-publish HITL gate (P1)
 
+**Status: ✅ Done** (`odrl_agent/publish.py`, `/api/drafts`, `/api/runs/{key}/publish`, Review tab in `App.tsx`, new verifiers `OdrlShaclValid`/`NoDeonticConflict`/`GroundedPrincipals`/`ExactlyOncePublish`).
+
 - Pipeline outputs `PolicyDraft` (ODRL JSON-LD + IR provenance + verification report + ambiguity/conflict alerts). Publishing to the durable store requires **Approve & Publish**.
 - Auto-publish allowed only when: zero ambiguities, zero conflicts, 100% grounded entities, full SHACL pass. Everything else queues for human review in React Studio (new review screen: side-by-side NL spans ↔ rules, approve/reject/edit + reason).
 - New verifiers in `odrl_agent/verifiers.py`: `OdrlShaclValid`, `NoDeonticConflict`, `GroundedPrincipals`, `ExactlyOncePublish` (replacing `OdrlValid`/`NoAttackerGrant`/`ExactlyOnceSave`).
 
 ### 2.4 AgentCrash SDK adoption (P1)
+
+**Status: ✅ Done** (`odrl_agent/instrument.py` uses `AgentCrash.run()`, `run.step()`, `run.maybe_fault()`; `odrl_agent/chaos.py` fuzzes fault schedules; `strict_validate` promoted into the pipeline). Old `OdrlValid`/`NoAttackerGrant`/`ExactlyOnceSave` verifiers are still registered alongside the new ones.
 
 - Instrument pipeline boundaries with `AgentCrash(WorkflowConfig(...))`, `ac.run()`, `run.step()`, `run.maybe_fault()` — replacing direct `TraceWriter`/`Ledger` coupling (`adapter.py:26-27,530`, `tools.py:19`).
 - `agentcrash-core` exposes public `register_verifier`, `Verdict`, `Verifier` from top-level `agentcrash` (no more `agentcrash._registry` private import); nl2odrl verifiers consume `agentcrash.verifiers.tool_results()` for schema-agnostic events.
@@ -159,15 +181,17 @@ New `odrl_agent/reasoning.py`:
 
 ### Phase 2 exit gate
 
-- [ ] 0 undetected conflicts / unsatisfiable ranges on the reasoning test-suite.
-- [ ] Prompt-injection battery with arbitrary principal names (never just `"attacker-client"`): 0 auto-published over-permissions.
-- [ ] `agentcrash check --fuzz` green on live-workflow chaos schedules.
+- [ ] 0 undetected conflicts / unsatisfiable ranges on the reasoning test-suite. (Benchmark `conflict_escape_rate` 0.0833, not 0.)
+- [ ] Prompt-injection battery with arbitrary principal names (never just `"attacker-client"`): 0 auto-published over-permissions. (Baseline v1 `false_auto_publish_rate` 0.0167.)
+- [ ] `agentcrash check --fuzz` green on live-workflow chaos schedules. (`chaos.py` exists; green run not verified.)
 
 ---
 
 ## Phase 3 — Service hardening (Weeks 6–8, parallel with Phase 2)
 
 **Goal:** production-servable API. No behavior change to the pipeline; the server stops being the demo bottleneck.
+
+**Status: ✅ Implemented** (`odrl_agent/app.py` FastAPI/Uvicorn; bounded queue with `Retry-After` and TTL eviction in `web.py`; SSE stream at `text/event-stream`; `X-Request-ID`, JSON request logs and Prometheus `/api/metrics` via `observability.py`; httpOnly session cookie; Review tab; Dockerfile runs `odrl-host serve`). Exit-gate items below were not verified.
 
 - FastAPI + Uvicorn (`odrl_agent/web.py` rewrite): async workers, per-tenant config injection (kills the `os.environ` mutation), OpenAPI schema generation.
 - Async run queue replaces `RunRegistry` daemon threads + `MAX_ACTIVE_RUNS=2` hard cap: bounded worker pool, backpressure with honest `429 + Retry-After`, bounded `_runs` store (TTL + eviction — current dict grows unbounded).
@@ -217,7 +241,7 @@ New `odrl_agent/reasoning.py`:
 ### Phase 4 exit gate
 
 - [x] Benchmark published with version + grouping manifest (`benchmarks/v1/`, 240 cases, `odrl_agent/bench/`).
-- [ ] Baseline v1 numbers recorded: needs one live run (`python -m odrl_agent.bench run --mode live --freeze benchmarks/v1/baseline_v1.json`).
+- [x] Baseline v1 numbers recorded: `benchmarks/v1/baseline_v1.json` (live run, `muse-spark-1.3`, 240 cases). Note: it misses several production gates (checkpoint F1 0.8974 vs ≥0.92, constraint F1 0.6364 vs ≥0.90, false permission rate 5.4% vs <1%, ambiguity recall 0.0 vs ≥0.90).
 - [x] Gates enforced in CI: offline gates per PR (`ci.yml`), live gates nightly and on prompt/model/pin changes (`bench-live.yml`).
 
 ---
