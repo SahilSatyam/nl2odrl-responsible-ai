@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re
 from datetime import date, datetime
-from typing import Annotated, Literal, Union
+from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -315,5 +315,79 @@ class PolicyIR(_Model):
 
 
 def ir_json_schema() -> dict:
-    """JSON Schema of :class:`PolicyIR` (the ``response_format`` payload)."""
+    """JSON Schema of :class:`PolicyIR` (pinned by the snapshot test)."""
     return PolicyIR.model_json_schema()
+
+
+def _unroll(node: Any, defs: dict[str, Any], stack: tuple[str, ...], limit: int) -> Any:
+    """Inline ``$ref``s; a definition may nest at most ``limit`` times.
+
+    Returns ``None`` for a branch that would exceed the limit; ``anyOf``/
+    ``oneOf`` drop such branches, so the deepest logical constraint only
+    admits atomic children.
+    """
+    if isinstance(node, list):
+        return [_unroll(item, defs, stack, limit) for item in node]
+    if not isinstance(node, dict):
+        return node
+    ref = node.get("$ref")
+    if isinstance(ref, str) and ref.startswith("#/$defs/"):
+        name = ref.removeprefix("#/$defs/")
+        if stack.count(name) >= limit:
+            return None
+        resolved = _unroll(defs[name], defs, (*stack, name), limit)
+        extra = {k: v for k, v in node.items() if k != "$ref"}
+        return {**resolved, **extra} if resolved is not None else None
+    out: dict[str, Any] = {}
+    for key, value in node.items():
+        if key in ("$defs", "discriminator"):
+            continue
+        if key in ("anyOf", "oneOf"):
+            branches = [b for b in (_unroll(v, defs, stack, limit) for v in value) if b is not None]
+            if not branches:
+                return None
+            out[key] = branches
+            continue
+        child = _unroll(value, defs, stack, limit)
+        if child is None:
+            if key == "items":
+                return None
+            continue
+        out[key] = child
+    return out
+
+
+#: Logical-constraint levels the wire schema admits. api.meta.ai caps schema
+#: nesting at 10 levels, which leaves room for one logical level (``and``/
+#: ``or`` over atomic constraints). Deeper trees remain valid IR.
+WIRE_LOGICAL_DEPTH = 1
+
+
+def schema_depth(node: Any) -> int:
+    """Nesting depth of a JSON Schema, counting object/array schema levels."""
+    if isinstance(node, list):
+        return max((schema_depth(n) for n in node), default=0)
+    if not isinstance(node, dict):
+        return 0
+    here = 1 if node.get("type") in ("object", "array") else 0
+    children = []
+    for key in ("properties",):
+        children.extend((node.get(key) or {}).values())
+    for key in ("items", "additionalProperties"):
+        if isinstance(node.get(key), dict):
+            children.append(node[key])
+    for key in ("anyOf", "oneOf", "allOf"):
+        children.extend(node.get(key) or [])
+    return here + max((schema_depth(c) for c in children), default=0)
+
+
+def wire_schema(logical_depth: int = WIRE_LOGICAL_DEPTH) -> dict:
+    """Non-recursive ``response_format`` schema sent to the model.
+
+    Some OpenAI-compatible providers reject recursive or deeply nested JSON
+    Schemas. This is :func:`ir_json_schema` with every ``$ref`` inlined and
+    logical constraints unrolled to ``logical_depth`` levels; the reply is
+    still validated against the full :class:`PolicyIR`.
+    """
+    schema = ir_json_schema()
+    return _unroll(schema, schema.get("$defs", {}), (), logical_depth)

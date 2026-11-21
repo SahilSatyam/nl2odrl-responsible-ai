@@ -78,6 +78,26 @@ def test_satisfiable_constraints_pass(constraints: list) -> None:
     assert codes(rule("permission", "read", constraints=constraints)) == []
 
 
+def _nodes(constraints: list) -> list:
+    return PolicyIR.model_validate(
+        {"rules": [rule("permission", "read", constraints=constraints)]}).rules[0].constraints
+
+
+def test_satisfiable_is_thread_safe() -> None:
+    """Z3's global context crashed ('unreachable') under 4 concurrent benchmark workers."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    jobs = [(_nodes(cs), False) for cs in UNSAT] + [(_nodes(cs), True) for cs in SAT]
+
+    def work(job: tuple) -> bool:
+        nodes, expected = job
+        return satisfiable(nodes) is expected
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        outcomes = list(pool.map(work, jobs * 15))
+    assert all(outcomes)
+
+
 def test_unsatisfiable_duty_is_detected() -> None:
     duty = {"action": "compensate", "constraints": [c("payAmount", "lt", "0", "decimal")]}
     assert codes(rule("permission", "read", duties=[duty])) == [UNSATISFIABLE]

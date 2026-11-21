@@ -24,6 +24,7 @@ unsatisfiable set relation but never reports a false one.
 from __future__ import annotations
 
 import re
+import threading
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, date, datetime
 from functools import lru_cache
@@ -173,8 +174,18 @@ class _Encoder:
         return z3.And(*[self.node(n) for n in nodes]) if nodes else z3.BoolVal(True)
 
 
-def satisfiable(*constraint_lists: list) -> bool:
-    """True when the conjunction of every list's constraints can hold."""
+#: Z3's default context is process-global and not thread-safe: concurrent
+#: expression building crashes with "ASSERTION VIOLATION ... unreachable" or an
+#: access violation (seen with 4 benchmark workers, and possible under the
+#: threaded service). Every Z3 object is created inside ``satisfiable``, so one
+#: lock covers it, provided the objects are also *freed* under the lock: their
+#: destructors call ``Z3_dec_ref`` on the same global context.
+_Z3_LOCK = threading.Lock()
+
+
+def _solve(constraint_lists: tuple[list, ...]) -> bool:
+    # All Z3 wrappers are locals here, so they are freed when this returns,
+    # i.e. while the caller still holds ``_Z3_LOCK``.
     enc = _Encoder()
     formula = z3.And(*[enc.all(nodes) for nodes in constraint_lists])
     solver = z3.Solver()
@@ -182,6 +193,12 @@ def satisfiable(*constraint_lists: list) -> bool:
     solver.add(formula, *enc.axioms)
     # ``unknown`` (timeout) is treated as satisfiable: never invent a conflict.
     return solver.check() != z3.unsat
+
+
+def satisfiable(*constraint_lists: list) -> bool:
+    """True when the conjunction of every list's constraints can hold."""
+    with _Z3_LOCK:
+        return _solve(constraint_lists)
 
 
 @dataclass

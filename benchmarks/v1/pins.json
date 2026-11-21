@@ -1,0 +1,7 @@
+{
+ "model": "muse-spark-1.3",
+ "extractor_prompt_pack_sha": "e250987b0efac22d",
+ "ir_schema_sha": "436343a3c1be7393",
+ "wire_schema_sha": "779024d189de4d51",
+ "ir_version": "1.0"
+}

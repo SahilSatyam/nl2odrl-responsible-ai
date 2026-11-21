@@ -17,7 +17,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError
 
-from odrl_agent.ir import ACTIONS, LEFT_OPERANDS, OPERATORS, PolicyIR, ir_json_schema
+from odrl_agent.ir import ACTIONS, LEFT_OPERANDS, OPERATORS, PolicyIR, wire_schema
 from odrl_agent.llm import StructuredLlm
 
 DEFAULT_MODEL = "muse-spark-1.3"
@@ -131,7 +131,7 @@ class Extractor:
     def __init__(self, llm: StructuredLlm, route: ModelRoute | None = None) -> None:
         self.llm = llm
         self.route = route or ModelRoute()
-        self._schema = ir_json_schema()
+        self._schema = wire_schema()
 
     def decompose(self, text: str) -> list[str]:
         """One fast-model call that splits complex text into clause groups.
