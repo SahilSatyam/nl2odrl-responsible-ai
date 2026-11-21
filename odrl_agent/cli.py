@@ -41,7 +41,6 @@ from agentcrash.policy import (
     load_policy,
     validate_patch_data,
 )
-from odrl_agent.remediation import reference_patch_for
 from agentcrash.tracer import compute_run_id
 from agentcrash.verifiers import (
     TraceCorruptError,
@@ -60,6 +59,7 @@ from odrl_agent.adapter import (
     run_react_loop,
 )
 from odrl_agent.dspy_opt import PackRejectedError, load_pack
+from odrl_agent.remediation import reference_patch_for
 from odrl_agent.tools import PARSE_POLICY, SAVE_ODRL, render_untrusted
 
 

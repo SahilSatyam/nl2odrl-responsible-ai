@@ -29,12 +29,10 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from odrl_agent import db as db_module
 from agentcrash.policy import (
     PolicyRejectedError,
     validate_patch_data,
 )
-from odrl_agent.remediation import reference_patch_for
 from agentcrash.tracer import compute_run_id, verify_chain
 from agentcrash.verifiers import (
     TraceCorruptError,
@@ -44,6 +42,7 @@ from agentcrash.verifiers import (
     run_verifiers,
 )
 
+from odrl_agent import db as db_module
 from odrl_agent.adapter import (
     DEFAULT_MODEL,
     LLAMA_KEY_ENV,
@@ -53,10 +52,12 @@ from odrl_agent.adapter import (
     ModelNotConfiguredError,
     run_react_loop,
 )
+from odrl_agent.netguard import UnsafeBaseUrlError, validate_base_url
 from odrl_agent.odrl import (
     contains_attacker_grant,
     validate_odrl_subset,
 )
+from odrl_agent.remediation import reference_patch_for
 
 INLINE_DOC_ID = "pasted-request-1"
 
@@ -925,7 +926,10 @@ def apply_model_settings(body: Any) -> dict[str, Any]:
             raise ConvertError("base_url must be a non-empty string")
         if not base_url.strip().startswith(("http://", "https://")):
             raise ConvertError("base_url must start with http:// or https://")
-        os.environ[LLAMA_URL_ENV] = base_url.strip().rstrip("/")
+        try:
+            os.environ[LLAMA_URL_ENV] = validate_base_url(base_url)
+        except UnsafeBaseUrlError as exc:
+            raise ConvertError(str(exc)) from exc
     if "api_key" in body:
         api_key = body["api_key"]
         if not isinstance(api_key, str) or not api_key.strip():
