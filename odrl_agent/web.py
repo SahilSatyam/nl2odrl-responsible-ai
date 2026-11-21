@@ -1,30 +1,23 @@
-"""Loopback web API for interactive NL-to-ODRL conversion, backed by SQLite.
+"""Service core for NL2ODRL Studio: run queue, storage, keys, tenant settings.
 
-Endpoints (same server that serves ``ui/`` statically):
-
-- ``POST /api/convert`` with JSON ``{nl_text,
-  policy_variant, seed, max_steps}`` starts a live agent run in a
-  background thread and returns ``{run_key, run_id, status}``.
-- ``GET /api/runs`` lists recorded runs (filters: scenario, verdict,
-  status, limit); ``GET /api/runs/<run_key>`` returns one full snapshot.
-- ``GET /api/odrl`` lists NL-to-ODRL pairs for Policy Studio.
-
-Finished runs are recorded in ``agentcrash.db`` (stdlib sqlite3); the
-trace JSONL files remain the immutable artifact layer.
+The HTTP layer is :mod:`odrl_agent.app` (FastAPI on Uvicorn); this module
+holds what it calls: :class:`RunRegistry` (bounded worker pool + queue with
+honest ``Retry-After``, TTL/size-bounded run memory), ``run_and_store``
+(executes one conversion and records it in ``agentcrash.db``), API-key
+issue/revoke/list, per-tenant :class:`ServerSettings`, and the tenant-scoped
+list queries. Finished runs are recorded in SQLite; the trace JSONL files
+remain the immutable artifact layer.
 """
 
 from __future__ import annotations
 
+import collections
 import copy
-import functools
-import hmac
-import http.server
 import json
+import math
 import os
 import threading
 import time
-import urllib.parse
-import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -54,6 +47,11 @@ from odrl_agent.adapter import (
     ModelNotConfiguredError,
 )
 from odrl_agent.netguard import UnsafeBaseUrlError, validate_base_url
+from odrl_agent.observability import (
+    METRICS,
+    configure_logging,
+    log_event,
+)
 from odrl_agent.odrl import (
     contains_attacker_grant,
     validate_odrl,
@@ -72,7 +70,16 @@ NAIVE_POLICY = "policies/default.yaml"
 FIXED_POLICY = "policies/fixed-odrl-convert.yaml"
 
 MAX_NL_CHARS = 4000
-MAX_ACTIVE_RUNS = 2
+#: Run-queue defaults; each is overridable by env (NL2ODRL_WORKERS,
+#: NL2ODRL_QUEUE_DEPTH, NL2ODRL_RUN_TTL seconds, NL2ODRL_MAX_RETAINED).
+DEFAULT_WORKERS = 4
+DEFAULT_QUEUE_DEPTH = 16
+DEFAULT_RUN_TTL = 900
+DEFAULT_MAX_RETAINED = 256
+#: SSE stream limits: poll interval, heartbeat and hard cap per stream.
+SSE_POLL_SECONDS = 0.25
+SSE_HEARTBEAT_SECONDS = 15.0
+SSE_MAX_SECONDS = 600.0
 
 #: Comma-separated product API keys. The gate is off only while no keys
 #: exist anywhere (local single-user mode). Env keys or `odrl-host keys
@@ -103,43 +110,9 @@ def _key_state(conn: Any) -> tuple[list[str], set[str], bool]:
     return env_keys, valid, bool(env_keys) or bool(rows)
 
 
-def _request_state(
-    handler: http.server.BaseHTTPRequestHandler,
-) -> tuple[list[str], set[str], bool]:
-    conn = handler._db()  # type: ignore[attr-defined]
-    try:
-        return _key_state(conn)
-    finally:
-        conn.close()
-
-
-def _presented(handler: http.server.BaseHTTPRequestHandler) -> str:
-    auth = handler.headers.get("Authorization", "")
-    if not auth.startswith("Bearer "):
-        return ""
-    return auth[len("Bearer ") :].strip()
-
-
-def _key_fingerprint(handler: http.server.BaseHTTPRequestHandler) -> str:
-    """Attribution id: sha256 prefix of the presented key, or 'local'."""
-    _env_keys, _valid, gate_on = _request_state(handler)
-    if not gate_on:
-        return "local"
-    presented = _presented(handler)
-    return _fp(presented) if presented else "unknown"
-
-
-def _authorized(handler: http.server.BaseHTTPRequestHandler) -> bool:
-    """True when the gate is off or a valid Bearer key was presented."""
-    env_keys, valid, gate_on = _request_state(handler)
-    if not gate_on:
-        return True
-    presented = _presented(handler)
-    if not presented:
-        return False
-    if any(hmac.compare_digest(presented, k) for k in env_keys):
-        return True
-    return _fp(presented) in valid
+def key_state(conn: Any) -> tuple[list[str], set[str], bool]:
+    """Public alias used by the FastAPI app (env keys, live fps, gate-on)."""
+    return _key_state(conn)
 
 
 class ConvertError(ValueError):
@@ -321,8 +294,19 @@ def _snapshot_from_parts(
         "chain_ok": chain_ok,
         "wall_seconds": wall_seconds,
         "error": error,
+        "draft": _draft_from(events),
+        "request_id": spec.get("request_id"),
         "_virtual_ms": virtual_ms,
     }
+
+
+def _draft_from(events: list[dict[str, Any]]) -> dict[str, Any] | None:
+    for event in reversed(events):
+        detail = event.get("detail") or {}
+        if detail.get("phase") == "run_end":
+            draft = detail.get("draft")
+            return draft if isinstance(draft, dict) else None
+    return None
 
 
 def _record_snapshot(
@@ -417,7 +401,7 @@ def run_and_store(
             transport=_scripted_transport(actions),
         )
     else:
-        llm_config = SETTINGS.config()
+        llm_config = SETTINGS.config(spec.get("tenant", "local"))
     try:
         Path(spec["trace_path"]).parent.mkdir(parents=True, exist_ok=True)
         Path(spec["state_path"]).parent.mkdir(parents=True, exist_ok=True)
@@ -430,6 +414,7 @@ def run_and_store(
             scenario_text=spec["scenario_text"],
             policy_text=spec["policy_text"],
             llm_config=llm_config,
+            request_id=spec.get("request_id"),
         )
     except ModelNotConfiguredError as exc:
         events = read_events(spec["trace_path"])
@@ -745,49 +730,202 @@ def _usage_rows(conn: Any, key_fp: str | None) -> list[dict[str, Any]]:
     return [{"key_fp": r.pop("fp"), **r} for r in rows]
 
 
-class RunRegistry:
-    """Track background convert runs; at most MAX_ACTIVE_RUNS at once."""
+class BusyError(ConvertError):
+    """Run queue is full; ``retry_after`` is an honest estimate in seconds."""
 
-    def __init__(self, root: Path, out_dir: Path | None = None) -> None:
+    def __init__(self, message: str, retry_after: int) -> None:
+        super().__init__(message)
+        self.retry_after = retry_after
+
+
+def _env_int(name: str, default: int, low: int, high: int) -> int:
+    try:
+        value = int(os.environ.get(name, default))
+    except ValueError:
+        value = default
+    return max(low, min(high, value))
+
+
+class RunRegistry:
+    """Bounded worker pool + queue for background convert runs.
+
+    ``workers`` runs execute at once; up to ``queue_depth`` more wait in FIFO
+    order. Beyond that ``start`` raises :class:`BusyError` with a
+    ``Retry-After`` estimate from the mean run time. Finished records stay in
+    memory for ``ttl`` seconds (at most ``max_retained`` of them); after that
+    :meth:`snapshot` serves the run from the database, so memory stays bounded
+    however many runs the server has seen.
+    """
+
+    def __init__(
+        self,
+        root: Path,
+        out_dir: Path | None = None,
+        *,
+        workers: int | None = None,
+        queue_depth: int | None = None,
+        ttl: float | None = None,
+        max_retained: int | None = None,
+    ) -> None:
         self._root = root
         self._out_dir = out_dir
         self._lock = threading.Lock()
         self._runs: dict[str, dict[str, Any]] = {}
+        self._queue: collections.deque[str] = collections.deque()
         self._seq = 0
         self._active = 0
+        self.workers = workers or _env_int("NL2ODRL_WORKERS", DEFAULT_WORKERS, 1, 64)
+        self.queue_depth = (
+            queue_depth if queue_depth is not None
+            else _env_int("NL2ODRL_QUEUE_DEPTH", DEFAULT_QUEUE_DEPTH, 0, 1024)
+        )  # fmt: skip
+        self.ttl = ttl if ttl is not None else float(
+            _env_int("NL2ODRL_RUN_TTL", DEFAULT_RUN_TTL, 1, 86400)
+        )
+        self.max_retained = max_retained or _env_int(
+            "NL2ODRL_MAX_RETAINED", DEFAULT_MAX_RETAINED, 1, 100000
+        )
+        self._mean_seconds = 10.0  # EWMA of run time; seeds Retry-After
 
-    def start(
-        self, nl_text: str, variant: str, seed: int, max_steps: int, tenant: str = "local"
-    ) -> dict[str, Any]:
-        """Launch a run in a background thread; return its public record."""
+    # ---- bookkeeping (call with the lock held) ---------------------------
+    def _gauges(self) -> None:
+        METRICS.set("nl2odrl_runs_active", self._active)
+        METRICS.set("nl2odrl_runs_queued", len(self._queue))
+        METRICS.set("nl2odrl_runs_retained", len(self._runs))
+
+    def _evict(self) -> None:
+        now = time.monotonic()
+        finished = [
+            (rec["finished_at"], key)
+            for key, rec in self._runs.items()
+            if rec.get("finished_at") is not None
+        ]
+        finished.sort()
+        expired = [key for at, key in finished if now - at > self.ttl]
+        overflow = len(finished) - len(expired) - self.max_retained
+        if overflow > 0:
+            keep = [key for _at, key in finished if key not in set(expired)]
+            expired.extend(keep[:overflow])
+        for key in expired:
+            self._runs.pop(key, None)
+        if expired:
+            METRICS.inc("nl2odrl_runs_evicted_total", len(expired))
+
+    def _retry_after(self) -> int:
+        waiting = len(self._queue) + 1
+        return max(1, math.ceil(self._mean_seconds * waiting / self.workers))
+
+    @property
+    def active(self) -> int:
         with self._lock:
-            if self._active >= MAX_ACTIVE_RUNS:
-                raise ConvertError("a conversion is already running; try again shortly")
+            return self._active
+
+    @property
+    def queued(self) -> int:
+        with self._lock:
+            return len(self._queue)
+
+    def retained(self) -> int:
+        with self._lock:
+            self._evict()
+            return len(self._runs)
+
+    # ---- lifecycle -------------------------------------------------------
+    def start(
+        self,
+        nl_text: str,
+        variant: str,
+        seed: int,
+        max_steps: int,
+        tenant: str = "local",
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Run now if a worker is free, else queue; return the public record."""
+
+        def full() -> bool:
+            return self._active >= self.workers and len(self._queue) >= self.queue_depth
+
+        def reject() -> BusyError:
+            METRICS.inc("nl2odrl_runs_rejected_total")
+            retry = self._retry_after()
+            return BusyError(
+                f"{self._active} conversions running and {len(self._queue)} queued; "
+                f"retry in about {retry}s",
+                retry,
+            )
+
+        with self._lock:
+            self._evict()
+            if full():
+                raise reject()
             self._seq += 1
             attempt = self._seq
-            self._active += 1
         spec = build_inline_run(
             nl_text, variant, seed, max_steps, self._root, attempt, self._out_dir,
             tenant=tenant,
         )
+        spec["request_id"] = request_id
         run_key = f"{spec['run_id']}-{attempt}"
-        record: dict[str, Any] = {
-            "run_key": run_key,
-            "status": "running",
-            "spec": spec,
-            "started_at": time.monotonic(),
-            "snapshot": None,
-        }
+        now = time.monotonic()
         with self._lock:
-            self._runs[run_key] = record
-        thread = threading.Thread(target=self._execute, args=(run_key, spec), daemon=True)
-        thread.start()
-        return {"run_key": run_key, "run_id": spec["run_id"], "status": "running"}
+            # Re-check: another start may have taken the last seat meanwhile.
+            if full():
+                raise reject()
+            run_now = self._active < self.workers
+            status = "running" if run_now else "queued"
+            self._runs[run_key] = {
+                "run_key": run_key,
+                "status": status,
+                "spec": spec,
+                "request_id": request_id,
+                "queued_at": now,
+                "started_at": now if run_now else None,
+                "finished_at": None,
+                "snapshot": None,
+            }
+            if run_now:
+                self._active += 1
+            else:
+                self._queue.append(run_key)
+            self._gauges()
+        log_event("run_" + status, run_key=run_key, request_id=request_id,
+                  tenant=tenant[:12], trace_path=spec["trace_path"])  # fmt: skip
+        if run_now:
+            METRICS.observe("nl2odrl_queue_wait_seconds", 0.0)
+            threading.Thread(target=self._worker, args=(run_key,), daemon=True).start()
+        return {"run_key": run_key, "run_id": spec["run_id"], "status": status}
 
-    def _execute(self, run_key: str, spec: dict[str, Any]) -> None:
+    def _worker(self, run_key: str) -> None:
+        """Execute ``run_key``, then keep draining the queue on this thread."""
+        current: str | None = run_key
+        while current is not None:
+            self._execute(current)
+            with self._lock:
+                current = None
+                while self._queue:
+                    candidate = self._queue.popleft()
+                    record = self._runs.get(candidate)
+                    if record is not None:
+                        current = candidate
+                        record["status"] = "running"
+                        record["started_at"] = time.monotonic()
+                        METRICS.observe(
+                            "nl2odrl_queue_wait_seconds",
+                            record["started_at"] - record["queued_at"],
+                        )
+                        break
+                if current is None:
+                    self._active -= 1
+                self._gauges()
+
+    def _execute(self, run_key: str) -> None:
+        with self._lock:
+            record = self._runs[run_key]
+            spec = record["spec"]
+            started = record["started_at"] or time.monotonic()
         try:
             snap = run_and_store(spec, run_key)
-        except Exception as exc:  # noqa: BLE001 - record, never drop a run
+        except Exception as exc:
             snap = _public_snapshot(
                 _snapshot_from_parts(
                     run_key,
@@ -801,23 +939,36 @@ class RunRegistry:
                     {"code": "E_RUN", "hint": f"{type(exc).__name__}: {exc}"},
                 )
             )
+        elapsed = time.monotonic() - started
+        usage = snap.get("usage_total") or {}
+        for kind in ("prompt_tokens", "completion_tokens"):
+            if usage.get(kind):
+                METRICS.inc("nl2odrl_model_tokens_total", float(usage[kind]), kind=kind)
+        if snap.get("model_calls"):
+            METRICS.inc("nl2odrl_model_calls_total", float(snap["model_calls"]))
+        METRICS.observe("nl2odrl_run_duration_seconds", elapsed)
+        METRICS.inc("nl2odrl_runs_finished_total", status=str(snap.get("status")))
         with self._lock:
-            record = self._runs[run_key]
             record["status"] = snap["status"]
             record["snapshot"] = snap
-            self._active -= 1
+            record["finished_at"] = time.monotonic()
+            self._mean_seconds = 0.8 * self._mean_seconds + 0.2 * max(elapsed, 0.1)
+        log_event("run_finished", run_key=run_key, request_id=record.get("request_id"),
+                  status=snap.get("status"), seconds=round(elapsed, 3))  # fmt: skip
 
     def snapshot(self, run_key: str) -> dict[str, Any] | None:
-        """Live snapshot while running, DB snapshot once finished."""
+        """Live snapshot while queued/running, retained or DB snapshot once finished."""
         with self._lock:
+            self._evict()
             record = self._runs.get(run_key)
-        if record is not None and record["status"] == "running":
+        if record is not None and record["status"] in ("running", "queued"):
             spec = record["spec"]
-            events = read_events(spec["trace_path"])
+            events = read_events(spec["trace_path"]) if record["status"] == "running" else []
             usage_total, model_calls = sum_usage(events)
+            begun = record["started_at"] or record["queued_at"]
             return {
                 "run_key": run_key,
-                "status": "running",
+                "status": record["status"],
                 "tenant": spec.get("tenant", "local"),
                 "spec": {
                     "scenario_id": spec["scenario_id"],
@@ -834,7 +985,7 @@ class RunRegistry:
                 "patch": None,
                 "saves": summarize_saves(events),
                 "chain_ok": None,
-                "wall_seconds": time.monotonic() - record["started_at"],
+                "wall_seconds": time.monotonic() - begun,
                 "error": None,
             }
         if record is not None and record["snapshot"] is not None:
@@ -849,11 +1000,11 @@ class RunRegistry:
             conn.close()
 
     def wait(self, run_key: str, timeout: float = 120.0) -> dict[str, Any] | None:
-        """Block until a run leaves 'running' (test helper); else None."""
+        """Block until a run leaves 'queued'/'running' (test helper); else None."""
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             snapshot = self.snapshot(run_key)
-            if snapshot is None or snapshot["status"] != "running":
+            if snapshot is None or snapshot["status"] not in ("running", "queued"):
                 return snapshot
             time.sleep(0.05)
         return self.snapshot(run_key)
@@ -886,27 +1037,29 @@ def _query_flags(query: dict[str, list[str]]) -> dict[str, Any]:
 
 
 class ServerSettings:
-    """Live-model settings held in memory, never written to ``os.environ``.
+    """Live-model settings held in memory per tenant, never in ``os.environ``.
 
-    Values set through the API override the process environment, which stays
-    the read-only startup default. Reads return an immutable :class:`LlmConfig`.
+    Each tenant (API-key fingerprint, or ``local`` with the gate off) has its
+    own overrides, so one tenant can never change the endpoint or key another
+    tenant's conversions use. The process environment is the read-only
+    deployment default for every tenant.
     """
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._over: dict[str, Any] = {}
+        self._over: dict[str, dict[str, Any]] = {}
 
     def reset(self) -> None:
         with self._lock:
             self._over.clear()
 
-    def update(self, **values: Any) -> None:
+    def update(self, tenant: str = "local", **values: Any) -> None:
         with self._lock:
-            self._over.update(values)
+            self._over.setdefault(tenant, {}).update(values)
 
-    def config(self) -> LlmConfig:
+    def config(self, tenant: str = "local") -> LlmConfig:
         with self._lock:
-            over = dict(self._over)
+            over = dict(self._over.get(tenant, {}))
         env = LlmConfig.from_env()
         return LlmConfig(
             base_url=over.get("base_url", env.base_url),
@@ -915,32 +1068,33 @@ class ServerSettings:
             max_tokens=int(over.get("max_tokens", env.max_tokens)),
         )
 
-    def raw(self, name: str, env_name: str) -> str:
+    def raw(self, name: str, env_name: str, tenant: str = "local") -> str:
         with self._lock:
-            if name in self._over:
-                return str(self._over[name])
+            over = self._over.get(tenant, {})
+            if name in over:
+                return str(over[name])
         return os.environ.get(env_name, "").strip()
 
 
 SETTINGS = ServerSettings()
 
 
-def model_status() -> dict[str, Any]:
-    """Report live-model wiring without ever revealing the key."""
-    base_url = SETTINGS.raw("base_url", LLAMA_URL_ENV)
-    key_set = bool(SETTINGS.raw("api_key", LLAMA_KEY_ENV))
+def model_status(tenant: str = "local") -> dict[str, Any]:
+    """Report this tenant's live-model wiring without ever revealing the key."""
+    base_url = SETTINGS.raw("base_url", LLAMA_URL_ENV, tenant)
+    key_set = bool(SETTINGS.raw("api_key", LLAMA_KEY_ENV, tenant))
     return {
         "model": DEFAULT_MODEL,
         "base_url": base_url,
         "api_key_set": key_set,
         "configured": bool(base_url and key_set),
-        "timeout_s": SETTINGS.raw("timeout_s", LLAMA_TIMEOUT_ENV),
-        "max_tokens": SETTINGS.raw("max_tokens", LLAMA_MAX_TOKENS_ENV),
+        "timeout_s": SETTINGS.raw("timeout_s", LLAMA_TIMEOUT_ENV, tenant),
+        "max_tokens": SETTINGS.raw("max_tokens", LLAMA_MAX_TOKENS_ENV, tenant),
     }
 
 
-def apply_model_settings(body: Any) -> dict[str, Any]:
-    """Store live-model settings in server memory (not in ``os.environ``)."""
+def apply_model_settings(body: Any, tenant: str = "local") -> dict[str, Any]:
+    """Store this tenant's live-model settings in server memory (not ``os.environ``)."""
     if not isinstance(body, dict):
         raise ConvertError("request body must be a JSON object")
     staged: dict[str, Any] = {}
@@ -967,151 +1121,22 @@ def apply_model_settings(body: Any) -> dict[str, Any]:
             if not lo <= float(value) <= hi:
                 raise ConvertError(f"{name} must be a number in {lo}..{hi}")
             staged[name] = value
-    SETTINGS.update(**staged)
-    return model_status()
-
-class ConvertHandler(http.server.SimpleHTTPRequestHandler):
-    """Serve ui/ statically plus the convert/runs/odrl/settings API."""
-
-    registry: RunRegistry | None = None
-
-    def log_message(self, fmt: str, *args: Any) -> None:
-        pass
-
-    def _send_json(self, payload: dict[str, Any], code: int = 200) -> None:
-        body = json.dumps(payload, sort_keys=True).encode("utf-8")
-        self.send_response(code)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def _db(self) -> Any:
-        assert ConvertHandler.registry is not None
-        return _db_conn(ConvertHandler.registry._root, ConvertHandler.registry._out_dir)
-
-    def _read_json_body(self) -> tuple[dict[str, Any] | None, Any]:
-        """Return (body, None) or (None, error payload) for a JSON POST."""
-        try:
-            length = int(self.headers.get("Content-Length", "0"))
-        except ValueError:
-            length = 0
-        if length <= 0 or length > 65536:
-            return None, {"error": "E_CONFIG", "hint": "body must be 1..65536 bytes"}
-        try:
-            return json.loads(self.rfile.read(length).decode("utf-8")), None
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            return None, {"error": "E_CONFIG", "hint": "body must be JSON"}
-
-    def do_POST(self) -> None:
-        parsed = urllib.parse.urlparse(self.path)
-        if not _authorized(self):
-            self._send_json(
-                {"error": "E_AUTH", "hint": "valid Bearer API key required"}, 401
-            )
-            return
-        if parsed.path == "/api/settings":
-            body, error = self._read_json_body()
-            if error is not None:
-                self._send_json(error, 400)
-                return
-            try:
-                self._send_json(apply_model_settings(body))
-            except ConvertError as exc:
-                self._send_json({"error": "E_CONFIG", "hint": str(exc)}, 400)
-            return
-        if parsed.path != "/api/convert":
-            self._send_json({"error": "E_CONFIG", "hint": "unknown endpoint"}, 404)
-            return
-        assert ConvertHandler.registry is not None
-        body, error = self._read_json_body()
-        if error is not None:
-            self._send_json(error, 400)
-            return
-        try:
-            nl_text, variant, seed, max_steps = validate_convert(body)
-        except ConvertError as exc:
-            self._send_json({"error": "E_CONFIG", "hint": str(exc)}, 400)
-            return
-        try:
-            record = ConvertHandler.registry.start(
-                nl_text, variant, seed, max_steps, tenant=_key_fingerprint(self)
-            )
-        except ConvertError as exc:
-            self._send_json({"error": "E_BUSY", "hint": str(exc)}, 429)
-            return
-        self._send_json(record)
-
-    def do_GET(self) -> None:
-        parsed = urllib.parse.urlparse(self.path)
-        if parsed.path.startswith("/api/") and not _authorized(self):
-            self._send_json(
-                {"error": "E_AUTH", "hint": "valid Bearer API key required"}, 401
-            )
-            return
-        if parsed.path == "/api/settings":
-            self._send_json(model_status())
-            return
-        if parsed.path == "/api/usage":
-            conn = self._db()
-            try:
-                caller_fp = _key_fingerprint(self)
-                rows = _usage_rows(
-                    conn, None if caller_fp == "local" else caller_fp
-                )
-            finally:
-                conn.close()
-            self._send_json({"usage": rows})
-            return
-        caller_fp = _key_fingerprint(self)
-        caller = None if caller_fp == "local" else caller_fp
-        if parsed.path == "/api/runs":
-            flags = _query_flags(urllib.parse.parse_qs(parsed.query))
-            conn = self._db()
-            try:
-                runs = _list_runs(conn, flags, caller)
-            finally:
-                conn.close()
-            self._send_json({"runs": runs})
-            return
-        if parsed.path.startswith("/api/runs/"):
-            assert ConvertHandler.registry is not None
-            run_key = parsed.path[len("/api/runs/") :]
-            snapshot = ConvertHandler.registry.snapshot(run_key)
-            if snapshot is None or (
-                caller is not None and snapshot.get("tenant") != caller
-            ):
-                self._send_json({"error": "E_CONFIG", "hint": "unknown run_key"}, 404)
-                return
-            self._send_json(snapshot)
-            return
-        if parsed.path == "/api/odrl":
-            flags = _query_flags(urllib.parse.parse_qs(parsed.query))
-            conn = self._db()
-            try:
-                pairs = _list_pairs(conn, flags, caller)
-            finally:
-                conn.close()
-            self._send_json({"pairs": pairs})
-            return
-        super().do_GET()
-
+    SETTINGS.update(tenant, **staged)
+    return model_status(tenant)
 
 def serve_ui(port: int, bind: str, ui_dir: Path) -> int:
-    """Serve the UI directory plus the API; migrate the DB; block on Ctrl+C."""
+    """Serve the UI and the API with Uvicorn (FastAPI app); block on Ctrl+C."""
+    import uvicorn
     from agentcrash.cli import EXIT_OK
+
+    from odrl_agent.app import create_app
 
     root = ui_dir.parent
     conn = _db_conn(root)
     conn.close()
-    handler = functools.partial(ConvertHandler, directory=str(ui_dir))
-    ConvertHandler.registry = RunRegistry(root)
-    server = http.server.ThreadingHTTPServer((bind, port), handler)
-    print(f"AgentCrash UI: http://{bind}:{port}/ (serving {ui_dir}, Ctrl+C to stop)")
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        server.server_close()
+    configure_logging()
+    app = create_app(root, ui_dir=ui_dir)
+    print(f"NL2ODRL Studio: http://{bind}:{port}/ (serving {ui_dir}, Ctrl+C to stop)")
+    uvicorn.run(app, host=bind, port=port, log_level="warning", access_log=False,
+                proxy_headers=False)  # fmt: skip
     return EXIT_OK

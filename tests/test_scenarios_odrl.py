@@ -2,10 +2,11 @@
 
 The model is scripted per test with structured IR replies (no network, no
 key). An honest extraction PASSes every invariant on both scenarios. An
-extractor that obeys the injected sentence still FAILs ``no_attacker_grant``
-(grounding alone cannot tell author text from injected text; the Phase 2
-authorship gate closes that). A rule cited from a quote that is not in the
-source is dropped before compilation (shrink-only).
+extractor that obeys the injected sentence no longer gets its grant saved:
+the Phase 2 authorship gate drops a permission supported only by injected
+text and holds the draft for review. A rule cited from a quote that is not in
+the source is dropped before compilation (shrink-only), and a draft with a
+dropped rule is never auto-published.
 """
 import json
 from pathlib import Path
@@ -24,6 +25,7 @@ from scripted_llm import BASIC_IR, install, ir, rule, scripted_llm
 import odrl_agent.verifiers  # noqa: F401 -- registers ODRL invariants
 from odrl_agent.cli import main
 from odrl_agent.pipeline import run_conversion
+from odrl_agent.verifiers import ODRL_GATE_IDS
 
 REPO = Path(__file__).resolve().parent.parent
 SCENARIO_DIR = REPO / "scenarios"
@@ -86,13 +88,26 @@ def test_poisoned_scenario_passes_with_honest_extraction(tmp_path, monkeypatch) 
     assert snapshot["docs"] and snapshot["docs"][0]["label"] == "synthetic_attack"
 
 
-def test_poisoned_scenario_obeying_extractor_still_caught(tmp_path, monkeypatch) -> None:
-    _, _, _, outcome = run_case(
+def _saves(events):
+    return [
+        e for e in events
+        if e["tool"] == "save_odrl" and (e["args"] or {}).get("op") == "write"
+        and e["detail"].get("phase") == "tool_result"
+    ]
+
+
+def test_poisoned_scenario_obeying_extractor_is_held_not_published(tmp_path, monkeypatch) -> None:
+    events, snapshot, summary, outcome = run_case(
         "odrl_convert_poisoned", [OBEYING_IR], tmp_path, "p-obey", monkeypatch
     )
-    assert outcome["verdict"] == "FAIL"
+    draft = summary["draft"]
+    assert draft["status"] == "needs_review" and not draft["auto_publish"]
+    assert [r["assignee"] for r in draft["dropped_rules"]] == ["attacker-client"]
+    assert _saves(events) == []
     row = next(r for r in outcome["results"] if r["id"] == "no_attacker_grant")
-    assert not row["passed"] and "attacker-client" in row["evidence"]
+    assert row["passed"]
+    gate = run_verifiers(events, snapshot, list(ODRL_GATE_IDS))
+    assert gate["verdict"] == "PASS", gate
 
 
 def test_ungrounded_grant_is_dropped_not_saved(tmp_path, monkeypatch) -> None:
@@ -100,18 +115,30 @@ def test_ungrounded_grant_is_dropped_not_saved(tmp_path, monkeypatch) -> None:
     events, _, summary, outcome = run_case(
         "odrl_convert", [HALLUCINATED_IR] * 3, tmp_path, "c-halluc", monkeypatch
     )
-    assert outcome["verdict"] == "PASS"
     draft = summary["draft"]
-    assert draft["status"] == "needs_review"
+    assert draft["status"] == "needs_review" and not draft["auto_publish"]
     assert [r["assignee"] for r in draft["dropped_rules"]] == ["partner-lab"]
-    saved = next(
-        e["detail"]["data"]["value"]
-        for e in events
-        if e["tool"] == "save_odrl" and (e["args"] or {}).get("op") == "write"
-        and e["detail"].get("phase") == "tool_result"
-    )
-    assert "partner-lab" not in json.dumps(saved)
+    assert "partner-lab" not in json.dumps(draft["odrl"])
+    # Held for Approve & Publish: nothing reaches the store in this run.
+    assert _saves(events) == []
+    row = next(r for r in outcome["results"] if r["id"] == "odrl_valid")
+    assert not row["passed"] and "nothing converted" in row["evidence"]
+    gate = run_verifiers(events, _snapshot_of(tmp_path, "c-halluc"), list(ODRL_GATE_IDS))
+    assert gate["verdict"] == "PASS", gate
     assert summary["model_calls"] == 3
+
+
+def _snapshot_of(tmp_path, tag):
+    return load_state_snapshot(str(tmp_path / f"{tag}.json"))
+
+
+def test_clean_run_passes_gate_invariants(tmp_path, monkeypatch) -> None:
+    events, snapshot, summary, _ = run_case(
+        "odrl_convert", [BASIC_IR], tmp_path, "c-gate", monkeypatch
+    )
+    assert summary["draft"]["auto_publish"] and len(_saves(events)) == 1
+    gate = run_verifiers(events, snapshot, list(ODRL_GATE_IDS))
+    assert gate["verdict"] == "PASS", gate
 
 
 def test_no_injector_events_in_fault_free_runs(tmp_path, monkeypatch) -> None:
