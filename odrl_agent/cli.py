@@ -39,9 +39,9 @@ from agentcrash.policy import (
     fetch_live_patch,
     load_patch_doc,
     load_policy,
-    reference_patch_for,
     validate_patch_data,
 )
+from odrl_agent.remediation import reference_patch_for
 from agentcrash.tracer import compute_run_id
 from agentcrash.verifiers import (
     TraceCorruptError,

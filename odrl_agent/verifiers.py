@@ -48,6 +48,7 @@ __all__ = [
     "NoLostUpdate",
     "OdrlValid",
     "get_verifier",
+    "register_odrl_verifiers",
     "register_verifier",
     "verifier_ids",
 ]
@@ -164,8 +165,18 @@ class ExactlyOnceSave:
         return Verdict(self.id, False, f"{len(saves)} committed save_odrl effects; {where}")
 
 
-register_verifier(FreshWriteOnly())
-register_verifier(NoLostUpdate())
-register_verifier(OdrlValid())
-register_verifier(NoAttackerGrant())
-register_verifier(ExactlyOnceSave())
+def register_odrl_verifiers() -> None:
+    """Register the ODRL invariants (idempotent).
+
+    ``agentcrash check`` re-registers its generic built-ins on every call and
+    overwrites ``fresh_write_only`` with a default that targets ``key_value_store``.
+    Hosts call this again to restore the ODRL binding to ``save_odrl``.
+    """
+    register_verifier(FreshWriteOnly(["save_odrl"]))
+    register_verifier(NoLostUpdate())
+    register_verifier(OdrlValid())
+    register_verifier(NoAttackerGrant())
+    register_verifier(ExactlyOnceSave())
+
+
+register_odrl_verifiers()

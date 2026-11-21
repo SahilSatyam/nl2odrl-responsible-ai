@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agentcrash import db as db_module
+from odrl_agent import db as db_module
 from odrl_agent import web as web_mod
 from odrl_agent.cli import main as cli_main
 

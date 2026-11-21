@@ -29,12 +29,12 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from agentcrash import db as db_module
+from odrl_agent import db as db_module
 from agentcrash.policy import (
     PolicyRejectedError,
-    reference_patch_for,
     validate_patch_data,
 )
+from odrl_agent.remediation import reference_patch_for
 from agentcrash.tracer import compute_run_id, verify_chain
 from agentcrash.verifiers import (
     TraceCorruptError,
