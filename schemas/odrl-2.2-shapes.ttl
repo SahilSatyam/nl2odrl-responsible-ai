@@ -31,7 +31,7 @@ ex:ActionTerms rdf:value (
 ex:PolicyShape a sh:NodeShape ;
     sh:targetClass odrl:Set, odrl:Offer, odrl:Agreement ;
     sh:nodeKind sh:IRI ;
-    sh:message "policy must be an IRI-identified odrl:Set, odrl:Offer or odrl:Agreement" ;
+    sh:message "policy must be an IRI-identified odrl:Set, odrl:Offer or odrl:Agreement with at least one rule" ;
     sh:or (
         [ sh:path odrl:permission ; sh:minCount 1 ]
         [ sh:path odrl:prohibition ; sh:minCount 1 ]
@@ -50,18 +50,6 @@ ex:PolicyShape a sh:NodeShape ;
     sh:property [
         sh:path odrl:assignee ; sh:maxCount 1 ; sh:nodeKind sh:IRI ;
         sh:message "assignee must be a single IRI" ;
-    ] ;
-    sh:property [
-        sh:path odrl:permission ; sh:class odrl:Permission ;
-        sh:message "permission values must be typed odrl:Permission nodes" ;
-    ] ;
-    sh:property [
-        sh:path odrl:prohibition ; sh:class odrl:Prohibition ;
-        sh:message "prohibition values must be typed odrl:Prohibition nodes" ;
-    ] ;
-    sh:property [
-        sh:path odrl:obligation ; sh:class odrl:Duty ;
-        sh:message "obligation values must be typed odrl:Duty nodes" ;
     ] .
 
 ex:OfferShape a sh:NodeShape ;
@@ -94,9 +82,11 @@ ex:HasAssignee a sh:NodeShape ;
     sh:property [ sh:path odrl:assignee ; sh:minCount 1 ] .
 
 # ---- rules ------------------------------------------------------------------
+# Rules are identified by the property that points at them (ODRL 2.2 does not
+# require an explicit rdf:type on a rule).
 
 ex:RuleShape a sh:NodeShape ;
-    sh:targetClass odrl:Permission, odrl:Prohibition ;
+    sh:targetObjectsOf odrl:permission, odrl:prohibition ;
     sh:property [
         sh:path odrl:action ;
         sh:minCount 1 ;
@@ -117,21 +107,10 @@ ex:RuleShape a sh:NodeShape ;
     sh:property [
         sh:path odrl:assigner ; sh:maxCount 1 ; sh:nodeKind sh:IRI ;
         sh:message "assigner must be a single IRI" ;
-    ] ;
-    sh:property [
-        sh:path odrl:constraint ;
-        sh:node ex:ConstraintValueShape ;
-        sh:message "constraint must be a typed odrl:Constraint or odrl:LogicalConstraint" ;
-    ] ;
-    sh:property [
-        sh:path odrl:duty ;
-        sh:class odrl:Duty ;
-        sh:node ex:DutyShape ;
-        sh:message "duty must be a valid odrl:Duty" ;
     ] .
 
 ex:ProhibitionShape a sh:NodeShape ;
-    sh:targetClass odrl:Prohibition ;
+    sh:targetObjectsOf odrl:prohibition ;
     sh:property [
         sh:path odrl:duty ; sh:maxCount 0 ;
         sh:message "a prohibition cannot carry a duty" ;
@@ -161,14 +140,13 @@ ex:ActionValueShape a sh:NodeShape ;
             odrl:attribute odrl:compensate odrl:delete odrl:ensureExclusivity odrl:include
             odrl:inform odrl:nextPolicy odrl:obtainConsent odrl:reviewPolicy odrl:uninstall
             odrl:watermark ) ] ;
-          sh:property [
-            sh:path odrl:refinement ; sh:minCount 1 ; sh:node ex:ConstraintValueShape ] ]
+          sh:property [ sh:path odrl:refinement ; sh:minCount 1 ] ]
     ) .
 
 # ---- duties -----------------------------------------------------------------
 
 ex:DutyShape a sh:NodeShape ;
-    sh:targetClass odrl:Duty ;
+    sh:targetObjectsOf odrl:duty, odrl:obligation ;
     sh:property [
         sh:path odrl:action ; sh:minCount 1 ; sh:maxCount 1 ;
         sh:node ex:ActionValueShape ;
@@ -181,10 +159,6 @@ ex:DutyShape a sh:NodeShape ;
     sh:property [
         sh:path odrl:assignee ; sh:maxCount 1 ; sh:nodeKind sh:IRI ;
         sh:message "duty assignee must be a single IRI" ;
-    ] ;
-    sh:property [
-        sh:path odrl:constraint ; sh:node ex:ConstraintValueShape ;
-        sh:message "duty constraint must be a typed odrl:Constraint or odrl:LogicalConstraint" ;
     ] .
 
 # A policy-level obligation names the party who must act.
@@ -196,13 +170,21 @@ ex:ObligationShape a sh:NodeShape ;
     ] .
 
 # ---- constraints ------------------------------------------------------------
+# A constraint is identified by the property that points at it (constraint,
+# refinement, and/or/xone, andSequence members), so third-party documents that
+# omit "type": "Constraint" still validate. Literal datatypes are enforced at
+# the IR layer (odrl_agent.ir), where the compiler types every value.
 
 ex:ConstraintValueShape a sh:NodeShape ;
-    sh:message "value must be a typed odrl:Constraint or odrl:LogicalConstraint" ;
-    sh:or ( [ sh:class odrl:Constraint ] [ sh:class odrl:LogicalConstraint ] ) .
+    sh:message "constraint must be atomic (leftOperand/operator/rightOperand) or logical (and/or/xone/andSequence)" ;
+    sh:xone ( ex:AtomicConstraintShape ex:LogicalConstraintShape ) .
 
-ex:ConstraintShape a sh:NodeShape ;
-    sh:targetClass odrl:Constraint ;
+ex:ConstraintTargetShape a sh:NodeShape ;
+    sh:targetObjectsOf odrl:constraint, odrl:refinement, odrl:and, odrl:or, odrl:xone ;
+    sh:node ex:ConstraintValueShape ;
+    sh:message "constraint must be atomic (leftOperand/operator/rightOperand) or logical (and/or/xone/andSequence)" .
+
+ex:AtomicConstraintShape a sh:NodeShape ;
     sh:property [
         sh:path odrl:leftOperand ; sh:minCount 1 ; sh:maxCount 1 ;
         sh:nodeKind sh:IRI ;
@@ -216,7 +198,6 @@ ex:ConstraintShape a sh:NodeShape ;
             odrl:spatialCoordinates odrl:systemDevice odrl:timeInterval odrl:unitOfCount
             odrl:version odrl:virtualLocation
         ) ;
-        sh:message "constraint needs one leftOperand from the ODRL 2.2 vocabulary" ;
     ] ;
     sh:property [
         sh:path odrl:operator ; sh:minCount 1 ; sh:maxCount 1 ;
@@ -225,32 +206,31 @@ ex:ConstraintShape a sh:NodeShape ;
             odrl:eq odrl:gt odrl:gteq odrl:lt odrl:lteq odrl:neq odrl:isA odrl:hasPart
             odrl:isPartOf odrl:isAllOf odrl:isAnyOf odrl:isNoneOf
         ) ;
-        sh:message "constraint needs one operator from the ODRL 2.2 vocabulary" ;
     ] ;
-    sh:property [
-        sh:path odrl:rightOperand ; sh:minCount 1 ; sh:maxCount 1 ;
-        sh:message "constraint needs exactly one rightOperand" ;
-    ] ;
-    sh:message "ordering operators (gt, gteq, lt, lteq) need an ordered typed rightOperand" ;
-    sh:or (
-        [ sh:property [ sh:path odrl:operator ; sh:in (
-            odrl:eq odrl:neq odrl:isA odrl:hasPart odrl:isPartOf odrl:isAllOf odrl:isAnyOf
-            odrl:isNoneOf ) ] ]
-        [ sh:property [ sh:path odrl:rightOperand ; sh:datatype xsd:integer ] ]
-        [ sh:property [ sh:path odrl:rightOperand ; sh:datatype xsd:decimal ] ]
-        [ sh:property [ sh:path odrl:rightOperand ; sh:datatype xsd:date ] ]
-        [ sh:property [ sh:path odrl:rightOperand ; sh:datatype xsd:dateTime ] ]
-        [ sh:property [ sh:path odrl:rightOperand ; sh:datatype xsd:duration ] ]
-    ) .
+    sh:property [ sh:path odrl:rightOperand ; sh:minCount 1 ] .
 
 ex:LogicalConstraintShape a sh:NodeShape ;
-    sh:targetClass odrl:LogicalConstraint ;
-    sh:message "a logical constraint needs exactly one of and/or/xone/andSequence over 2+ constraints" ;
     sh:xone (
-        [ sh:property [ sh:path odrl:and ; sh:minCount 2 ; sh:node ex:ConstraintValueShape ] ]
-        [ sh:property [ sh:path odrl:or ; sh:minCount 2 ; sh:node ex:ConstraintValueShape ] ]
-        [ sh:property [ sh:path odrl:xone ; sh:minCount 2 ; sh:node ex:ConstraintValueShape ] ]
+        [ sh:property [ sh:path odrl:and ; sh:minCount 2 ] ]
+        [ sh:property [ sh:path odrl:or ; sh:minCount 2 ] ]
+        [ sh:property [ sh:path odrl:xone ; sh:minCount 2 ] ]
         [ sh:property [
             sh:path ( odrl:andSequence [ sh:zeroOrMorePath rdf:rest ] rdf:first ) ;
-            sh:minCount 2 ; sh:node ex:ConstraintValueShape ] ]
+            sh:minCount 2 ; sh:node ex:AtomicOrLogicalShape ] ]
     ) .
+
+# Members of an andSequence list (rdf:List items are not reachable by a target).
+ex:AtomicOrLogicalShape a sh:NodeShape ;
+    sh:or (
+        [ sh:property [ sh:path odrl:leftOperand ; sh:minCount 1 ] ]
+        [ sh:property [ sh:path odrl:and ; sh:minCount 1 ] ]
+        [ sh:property [ sh:path odrl:or ; sh:minCount 1 ] ]
+        [ sh:property [ sh:path odrl:xone ; sh:minCount 1 ] ]
+        [ sh:property [ sh:path odrl:andSequence ; sh:minCount 1 ] ]
+    ) .
+
+# Atomic checks with precise messages for every typed constraint node.
+ex:TypedConstraintShape a sh:NodeShape ;
+    sh:targetClass odrl:Constraint ;
+    sh:node ex:AtomicConstraintShape ;
+    sh:message "odrl:Constraint needs one ODRL 2.2 leftOperand, one ODRL 2.2 operator and a rightOperand" .

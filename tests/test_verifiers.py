@@ -173,7 +173,7 @@ def test_exactly_once_negative_zero_saves() -> None:
 def test_odrl_valid_positive() -> None:
     verdict = get_verifier("odrl_valid").check([save_result(4, VALID_ODRL)], odrl_state())
     assert verdict.passed is True
-    assert "odrl-subset-frozen-v1" in verdict.evidence
+    assert "odrl-2.2-shapes-v1" in verdict.evidence
 
 
 def test_odrl_valid_negative_sloppy_save() -> None:

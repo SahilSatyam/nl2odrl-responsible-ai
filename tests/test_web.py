@@ -44,84 +44,54 @@ def test_build_inline_run_composes_scenario_and_policy(tmp_path) -> None:
     assert first["policy_file"] == "policies/default.yaml"
     assert first["faults"] == []
     assert first["scenario"]["environment"]["nl_docs"][0]["text"] == "Allow X."
-    assert "author the ODRL" in first["scenario"]["task"]
     fixed = build_inline_run("Allow X.", "fixed", 42, 12, root, 1, tmp_path)
     assert fixed["policy_file"] == "policies/fixed-odrl-convert.yaml"
 
 
-SLOPPY_DOC = {
-    "@context": "http://www.w3.org/ns/odrl.jsonld",
-    "type": "Offer",
-    "uid": "urn:odrl:policy:dataset-7",
-    "permission": [{"action": "use", "assignee": "research-team"}],
+INLINE_TEXT = "Allow the research team to use dataset-7. Sharing it outside the team is forbidden."
+INLINE_IR = {
+    "analysis": "one grant, one prohibition",
+    "policy_type": "Set",
+    "rules": [
+        {
+            "modality": "permission",
+            "action": "use",
+            "target": "dataset-7",
+            "assignee": "research-team",
+            "source_spans": [{"quote": "Allow the research team to use dataset-7"}],
+        },
+        {
+            "modality": "prohibition",
+            "action": "distribute",
+            "target": "dataset-7",
+            "source_spans": [{"quote": "Sharing it outside the team is forbidden"}],
+        },
+    ],
 }
 
 
-def _scripted(monkeypatch, actions):
-    import json
-    import urllib.request
-
-    class _FakeResponse:
-        def __init__(self, payload):
-            self._payload = payload
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *exc):
-            return False
-
-        def read(self):
-            return json.dumps(self._payload).encode("utf-8")
-
-    state = {"i": 0}
-
-    def _fake_urlopen(request, timeout=None):
-        idx = state["i"]
-        action = actions[idx] if idx < len(actions) else {"type": "done", "reason": "end"}
-        state["i"] += 1
-        return _FakeResponse({"choices": [{"message": {"content": json.dumps(action)}}]})
-
-    monkeypatch.setenv("LLAMA_API_KEY", "test-key")
-    monkeypatch.setenv("LLAMA_BASE_URL", "https://llama.example/v1")
-    monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen)
-
-
-def _sloppy_naive_actions():
-    parse = {"type": "call", "tool": "parse_policy", "args": {"doc_id": "pasted-request-1"}}
-    write = {
-        "type": "call",
-        "tool": "save_odrl",
-        "args": {"op": "write", "record": "odrl-policy-1", "value": SLOPPY_DOC},
-    }
-    return [parse, write, {"type": "done", "reason": "saved"}]
-
-
-def test_convert_flow_reports_verdict_and_patch(monkeypatch, tmp_path) -> None:
+def test_convert_flow_reports_verdict_and_draft(monkeypatch, tmp_path) -> None:
     from pathlib import Path
 
+    from scripted_llm import USAGE, install
+
     monkeypatch.chdir(Path(__file__).resolve().parent.parent)
-    _scripted(monkeypatch, _sloppy_naive_actions())
+    # COMPLEX route: one decompose call, then one extract call.
+    install(monkeypatch, [{"clauses": INLINE_TEXT.split(". ")}, INLINE_IR])
     root = Path(__file__).resolve().parent.parent
     registry = RunRegistry(root, out_dir=tmp_path)
-    started = registry.start("Allow the team to use dataset-7.", "naive", 42, 12)
+    started = registry.start(INLINE_TEXT, "naive", 42, 12)
     assert started["status"] == "running"
     done = registry.wait(started["run_key"], timeout=30.0)
     assert done is not None and done["status"] == "done"
-    assert done["verdict"]["verdict"] == "FAIL"
-    assert {r["id"] for r in done["verdict"]["results"] if not r["passed"]} >= {
-        "odrl_valid",
-    }
-    assert done["patch"] is not None
-    assert done["patch"]["patch"]["rules"], "reference patch must carry rules"
+    assert done["verdict"]["verdict"] == "PASS"
+    assert done["patch"] is None
     assert done["chain_ok"] is True
-    assert done["model_calls"] == 0
-    assert done["usage_total"] == {
-        "prompt_tokens": 0,
-        "completion_tokens": 0,
-        "total_tokens": 0,
-    }
-    assert len(done["events"]) > 4
+    assert done["model_calls"] == 2
+    assert done["usage_total"] == {k: 2 * v for k, v in USAGE.items()}
+    (save,) = done["saves"]
+    assert save["valid"] is True and save["errors"] == []
+    assert [r["action"] for r in save["value"]["prohibition"]] == ["distribute"]
     assert all(e.get("injector_event") is None for e in done["events"])
 
 

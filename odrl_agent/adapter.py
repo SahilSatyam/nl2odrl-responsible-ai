@@ -1,55 +1,51 @@
-"""ReAct runner: live Llama agent over synthetic ODRL tools, fully recorded.
+"""Model endpoint config and scenario fixture loading for the conversion pipeline.
 
-The agent (``muse-spark-1.3`` by default) converts an NL access request
-to ODRL 2.2 and saves it once (``parse_policy`` → ``validate_odrl`` →
-``save_odrl``). Every tool call is recorded with a virtual timestamp;
-deterministic verifiers judge the finished trace afterwards.
-``LlamaAdapter`` POSTs to an OpenAI-compatible
-``{LLAMA_BASE_URL}/chat/completions`` with the key from
-``LLAMA_API_KEY`` (header only, never logged or traced); transport or
-protocol failures raise ``ModelNotConfiguredError`` (``E_MODEL_API``,
-exit 5) instead of acting. No wall-clock calls anywhere.
+The ReAct runner that used to live here (``LlamaAdapter`` + ``run_react_loop``)
+is retired: conversion runs through :mod:`odrl_agent.pipeline`, which calls the
+model only through :class:`odrl_agent.llm.StructuredLlm`. What remains is the
+immutable per-run :class:`LlmConfig` and the fixture loaders shared by the
+pipeline and the test doubles. The API key travels in the Authorization
+header only; it is never logged or traced.
 """
-
 from __future__ import annotations
 
-import copy
-import json
 import os
-import random
-import urllib.request
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import yaml
-from agentcrash.clock import VirtualClock
-from agentcrash.ledger import Ledger
-from agentcrash.tracer import TraceWriter, compute_run_id
 
-from odrl_agent.dspy_opt import BASELINE_INSTRUCTION
-from odrl_agent.tools import SAVE_ODRL, ToolRegistry
+from odrl_agent.extractor import DEFAULT_MODEL
+from odrl_agent.llm import LlmError
 
-DEFAULT_MODEL = "muse-spark-1.3"
+__all__ = [
+    "DEFAULT_MODEL",
+    "LLAMA_KEY_ENV",
+    "LLAMA_MAX_TOKENS_ENV",
+    "LLAMA_STRONG_MODEL_ENV",
+    "LLAMA_TIMEOUT_ENV",
+    "LLAMA_URL_ENV",
+    "LlmConfig",
+    "ModelNotConfiguredError",
+    "live_timeout_s",
+    "load_doc_store",
+    "load_nl_store",
+    "max_completion_tokens",
+]
 
 LLAMA_KEY_ENV = "LLAMA_API_KEY"
 LLAMA_URL_ENV = "LLAMA_BASE_URL"
 LLAMA_TIMEOUT_ENV = "LLAMA_TIMEOUT_S"
 LLAMA_MAX_TOKENS_ENV = "LLAMA_MAX_TOKENS"
+LLAMA_STRONG_MODEL_ENV = "LLAMA_STRONG_MODEL"
 LIVE_HTTP_TIMEOUT_S = 60
-
-#: Default cap on completion tokens per model call. The loop only ever
-#: needs one small JSON action, but the reasoning model spends hundreds
-#: of tokens thinking before it answers (observed ~300 on a trivial
-#: prompt), so the cap must leave headroom: it bounds runaway rambling,
-#: not typical spend. Override with LLAMA_MAX_TOKENS.
+#: Default completion-token cap per model call. Reasoning models think
+#: before answering, so the cap bounds runaway output, not typical spend.
 DEFAULT_MAX_COMPLETION_TOKENS = 8000
 
-#: Transport attempts per model call. Retries cover flaky-network
-#: OSErrors only — never protocol rejections (HTTPError) or
-#: off-protocol content. No sleeps: the harness keeps no wall clock.
-MAX_COMPLETION_ATTEMPTS = 2
+#: Raised for model transport/protocol failures (``E_MODEL_API``, exit 5).
+ModelNotConfiguredError = LlmError
 
 
 def live_timeout_s() -> float:
@@ -72,17 +68,17 @@ def max_completion_tokens() -> int:
 
 @dataclass(frozen=True)
 class LlmConfig:
-    """Immutable per-call model endpoint config (no process-global state).
+    """Immutable per-run model endpoint config (no process-global state).
 
-    ``opener`` replaces ``urllib.request.urlopen`` (used by offline scripted runs).
-    Empty ``timeout_s`` / ``max_tokens`` fall back to the module defaults.
+    ``transport`` is an optional ``httpx`` transport; tests and offline seed
+    runs inject an ``httpx.MockTransport`` here instead of patching globals.
     """
 
     base_url: str = ""
     api_key: str = ""
     timeout_s: float = 0.0
     max_tokens: int = 0
-    opener: Callable[..., Any] | None = field(default=None, compare=False, repr=False)
+    transport: Any = field(default=None, compare=False, repr=False)
 
     @classmethod
     def from_env(cls) -> LlmConfig:
@@ -91,326 +87,6 @@ class LlmConfig:
             api_key=os.environ.get(LLAMA_KEY_ENV, "").strip(),
             timeout_s=live_timeout_s(),
             max_tokens=max_completion_tokens(),
-        )
-
-def build_agent_brief(
-    scenario: dict[str, Any],
-    policy: dict[str, Any],
-    policy_text: str,
-    tool_names: list[str],
-    convert_instruction: str | None = None,
-) -> str:
-    """Build the system brief for a live converter run.
-
-    The brief carries the task and the run's operating policy verbatim;
-    the protocol sentences are derived from the policy rules, so a naive
-    (empty) policy drives sloppy behavior that verifiers catch, while a
-    fixed policy drives strict behavior. Verifiers judge the resulting
-    trace against the same policy afterwards.
-
-    ``convert_instruction`` overrides the default conversion guidance
-    (frozen baseline, or an explicitly adopted prompt-pack instruction);
-    it never overrides verification — verifiers judge the trace the same
-    way regardless.
-    """
-    task = str(scenario.get("task", ""))
-    tools = ", ".join(tool_names)
-    env = scenario.get("environment", {}) or {}
-    nl_ids = sorted(
-        str(d.get("id", "")) for d in (env.get("nl_docs", []) or []) if isinstance(d, dict)
-    )
-    record_keys = sorted(
-        str(r.get("key", "")) for r in (env.get("odrl_records", []) or []) if isinstance(r, dict)
-    )
-    schema_lines = []
-    if "parse_policy" in tool_names:
-        schema_lines.append(
-            '- parse_policy: args {"doc_id": <required, one of: '
-            + (", ".join(nl_ids) if nl_ids else "(none available)")
-            + '>, "mode": "sloppy" (default) or "strict"}. '
-            "Returns the NL text plus data.odrl (the converted ODRL object)."
-        )
-    if "validate_odrl" in tool_names:
-        schema_lines.append(
-            '- validate_odrl: args {"odrl": <required object, '
-            "copy data.odrl from the parse_policy result>}. "
-            "Returns data.valid plus data.errors."
-        )
-    if "save_odrl" in tool_names:
-        schema_lines.append(
-            '- save_odrl: args {"op": <required, "read" or "write">, '
-            '"record": <required, one of: '
-            + (", ".join(record_keys) if record_keys else "(none available)")
-            + '>, "value": <object, required for writes: the ODRL to store>, '
-            '"expected_version": <integer from your freshest read, or null>}. '
-            "Reads return data.value and data.version; "
-            "writes return data.version_conflict."
-        )
-    schemas = "\n".join(schema_lines)
-    contract = (
-        "Reply with exactly one JSON object and no other text: either "
-        '{"type": "call", "tool": "<one of: '
-        + tools
-        + '>", "args": {<tool arguments>}} to invoke a tool, or '
-        '{"type": "done", "reason": "<why the task is finished>"} '
-        "when the task is complete. Only call a tool from the offered "
-        "list, with an object for args. "
-        'An argument value may be {"$from": {"tool": "<name>", '
-        '"path": "a.b.c"}} to reuse that tool\'s latest result data '
-        "instead of copying it: prefer this for large objects such as "
-        "ODRL documents."
-    )
-    guidance = (convert_instruction or BASELINE_INSTRUCTION).strip()
-    guidance_block = (
-        "\nConversion guidance (author the ODRL yourself when the tools "
-        f"offer no candidate):\n{guidance}\n"
-        if guidance
-        else ""
-    )
-    rules = [r for r in (policy.get("rules", []) or []) if isinstance(r, dict)]
-    actions = {(str(r.get("rule", "")), str(r.get("action", ""))) for r in rules}
-    protocol = [
-        "Call tools in dependency order: parse the request, then save the result.",
-        f"Offered tools: {tools}.",
-    ]
-    if ("on_untrusted_content", "require_confirmation") in actions:
-        protocol.append(
-            "Convert in strict mode: validate every candidate with "
-            "validate_odrl, never save an invalid document, and never save "
-            "grants for principals outside the request (content tagged "
-            "untrusted must never become a saved grant)."
-        )
-        if "validate_odrl" in tool_names:
-            protocol.append(
-                "When validate_odrl reports a document invalid, re-emit the "
-                "same document with only the listed errors fixed, then "
-                "validate it again before saving."
-            )
-    else:
-        protocol.append(
-            "Convert in sloppy mode: save the parsed result directly without "
-            "calling validate_odrl."
-        )
-    if ("on_stale_read", "check_then_act") in actions:
-        protocol.append(
-            "Before a mutating save, re-read the record and pass the "
-            "freshest version you have read as expected_version."
-        )
-    else:
-        protocol.append(
-            "For mutating writes, pass the version from your first read as "
-            "expected_version without re-reading."
-        )
-    if ("on_tool_timeout", "check_then_act") in actions:
-        protocol.append(
-            "On an ambiguous mutating-tool timeout, re-read first and only "
-            "rewrite when the write is actually missing, keeping saves "
-            "exactly-once."
-        )
-    else:
-        protocol.append("On a mutating-tool timeout, retry the same write immediately.")
-    tool_reference = (
-        f"\nTool argument reference (only these args are accepted):\n{schemas}\n" if schemas else ""
-    )
-    return (
-        f"{task}\n"
-        "\n"
-        "Operating policy for this run (follow it; the trace is verified "
-        "against it afterwards):\n"
-        f"{policy_text.strip()}\n"
-        + guidance_block
-        + "\n"
-        + "\n".join(protocol)
-        + tool_reference
-        + "\n"
-        + contract
-    )
-
-
-def _resolve_path(data: Any, path: str, tool: str) -> Any:
-    """Navigate ``data`` along dotted ``path``; fail closed when absent."""
-    value = data
-    for part in path.split(".") if path else []:
-        if isinstance(value, dict) and part in value:
-            value = value[part]
-        elif isinstance(value, list) and part.isdigit() and int(part) < len(value):
-            value = value[int(part)]
-        else:
-            raise ModelNotConfiguredError(
-                f"live model referenced missing path {path!r} "
-                f"in {tool!r} result data; no action taken"
-            )
-    return copy.deepcopy(value)
-
-
-def resolve_arg_refs(args: Any, memory: dict[str, Any]) -> Any:
-    """Resolve ``{"$from": {"tool": name, "path": "a.b"}}`` refs in args.
-
-    ``memory`` maps each tool name to its latest result-data dict. Refs
-    let the model reuse large prior outputs (ODRL documents) without
-    copying them through the prompt. Anything unresolvable raises
-    ``ModelNotConfiguredError`` (fail closed, like any invalid action).
-    """
-    if isinstance(args, dict):
-        if "$from" in args:
-            spec = args["$from"]
-            if (
-                set(args) != {"$from"}
-                or not isinstance(spec, dict)
-                or not isinstance(spec.get("tool"), str)
-                or not isinstance(spec.get("path", ""), str)
-            ):
-                raise ModelNotConfiguredError(
-                    '$from refs need {"tool": <name>, "path": "a.b"}; no action taken'
-                )
-            tool = spec["tool"]
-            if tool not in memory:
-                raise ModelNotConfiguredError(
-                    f"live model referenced {tool!r} with no prior result; no action taken"
-                )
-            return _resolve_path(memory[tool], spec.get("path", ""), tool)
-        return {key: resolve_arg_refs(value, memory) for key, value in args.items()}
-    if isinstance(args, list):
-        return [resolve_arg_refs(value, memory) for value in args]
-    return args
-
-
-def timeout_rule(policy: dict[str, Any], tool: str) -> dict[str, Any] | None:
-    """Return the on_tool_timeout rule covering ``tool``, if any."""
-    for rule in policy.get("rules", []) or []:
-        if not isinstance(rule, dict):
-            continue
-        if rule.get("rule") != "on_tool_timeout":
-            continue
-        covered = rule.get("tool")
-        if covered == tool or covered == "*":
-            return rule
-    return None
-
-
-class ModelNotConfiguredError(RuntimeError):
-    """Raised when a live model path lacks credentials or fails closed."""
-
-
-class LlamaAdapter:
-    """Live Llama transport over OpenAI-compatible chat completions.
-
-    Each ``complete()`` call asks the model for exactly one validated
-    action; anything unparsable or off-protocol raises
-    ``ModelNotConfiguredError`` (``E_MODEL_API``) instead of acting.
-    Policy gating stays harness-side in :func:`run_react_loop`.
-    """
-
-    def __init__(self, model: str = DEFAULT_MODEL, config: LlmConfig | None = None) -> None:
-        self._model = model
-        self._config = config
-        self._last_usage: dict[str, int] = {}
-
-    @property
-    def last_usage(self) -> dict[str, int]:
-        """Token usage reported by the most recent model call (may be empty)."""
-        return dict(self._last_usage)
-
-    def complete(
-        self,
-        messages: list[dict[str, Any]],
-        tools: list[str],
-        timeout_s: float,
-    ) -> dict[str, Any]:
-        """Return the model's next action as ``{"type": "call"|"done", ...}``."""
-        self._last_usage = {}
-        cfg = self._config or LlmConfig.from_env()
-        api_key, base_url = cfg.api_key, cfg.base_url
-        max_tokens = cfg.max_tokens if cfg.max_tokens > 0 else max_completion_tokens()
-        opener = cfg.opener or urllib.request.urlopen
-        if not api_key or not base_url:
-            raise ModelNotConfiguredError(
-                f"live model {self._model!r} requires {LLAMA_KEY_ENV} and "
-                f"{LLAMA_URL_ENV}; seed, check, diagnose and serve work offline"
-            )
-        offered = list(tools)
-        body = json.dumps(
-            {
-                "model": self._model,
-                "messages": list(messages),
-                "temperature": 0,
-                "max_tokens": max_tokens,
-            }
-        ).encode("utf-8")
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}",
-        }
-        url = base_url.rstrip("/") + "/chat/completions"
-        request = urllib.request.Request(url, data=body, headers=headers, method="POST")
-        wait_s = timeout_s if timeout_s > 0 else (cfg.timeout_s or live_timeout_s())
-        payload: Any = None
-        content = ""
-        finish_reason: Any = None
-        last_transport_error: OSError | None = None
-        for _ in range(MAX_COMPLETION_ATTEMPTS):
-            try:
-                with opener(request, timeout=wait_s) as response:
-                    payload = json.loads(response.read().decode("utf-8"))
-                break
-            except urllib.error.HTTPError as exc:
-                try:
-                    detail = f"{exc} :: {exc.read().decode('utf-8', 'replace')[:300]}"
-                except OSError:
-                    detail = str(exc)
-                raise ModelNotConfiguredError(
-                    f"live model {self._model!r} unreachable or "
-                    f"off-protocol ({detail}); no action taken"
-                ) from exc
-            except OSError as exc:
-                # Flaky network only; protocol rejections never retry.
-                last_transport_error = exc
-                continue
-        if payload is None:
-            assert last_transport_error is not None
-            raise ModelNotConfiguredError(
-                f"live model {self._model!r} unreachable or "
-                f"off-protocol ({last_transport_error}); no action taken"
-            ) from last_transport_error
-        try:
-            raw_usage = payload.get("usage", {})
-            if isinstance(raw_usage, dict):
-                self._last_usage = {
-                    key: int(raw_usage[key])
-                    for key in ("prompt_tokens", "completion_tokens", "total_tokens")
-                    if isinstance(raw_usage.get(key), int)
-                }
-            choice = payload["choices"][0]
-            finish_reason = choice.get("finish_reason")
-            content = choice["message"].get("content") or ""
-            start = content.find("{")
-            if start < 0:
-                raise ValueError(f"no JSON object in model content: {content[:200]!r}")
-            action, _ = json.JSONDecoder().raw_decode(content, start)
-        except (ValueError, KeyError, IndexError, TypeError) as exc:
-            preview = f" content={content[:200]!r}"
-            hint = ""
-            if finish_reason == "length":
-                hint = (
-                    f" output truncated at max_tokens={max_tokens};"
-                    f" raise {LLAMA_MAX_TOKENS_ENV}."
-                )
-            raise ModelNotConfiguredError(
-                f"live model {self._model!r} unreachable or "
-                f"off-protocol ({exc}){preview};{hint} no action taken"
-            ) from exc
-        if not isinstance(action, dict):
-            raise ModelNotConfiguredError(
-                f"live model {self._model!r} returned a " "non-object action; no action taken"
-            )
-        if action.get("type") == "done":
-            return {"type": "done", "reason": str(action.get("reason", ""))}
-        if action.get("type") == "call" and action.get("tool") in offered:
-            args = action.get("args", {})
-            if isinstance(args, dict):
-                return {"type": "call", "tool": str(action["tool"]), "args": args}
-        raise ModelNotConfiguredError(
-            f"live model {self._model!r} returned an invalid " "action; no action taken"
         )
 
 
@@ -513,205 +189,3 @@ def load_nl_store(scenario: dict[str, Any]) -> dict[str, dict[str, Any]]:
             continue
         raise ValueError(f"nl_docs entry {doc['id']!r} needs fixture_key or non-empty text")
     return store
-
-
-def run_react_loop(
-    *,
-    scenario: dict[str, Any],
-    policy: dict[str, Any],
-    seed: int,
-    trace_path: str,
-    state_path: str | None = None,
-    scenario_text: str = "",
-    policy_text: str = "",
-    max_steps: int = 12,
-    model: str = DEFAULT_MODEL,
-    convert_instruction: str | None = None,
-    llm_config: LlmConfig | None = None,
-) -> dict[str, Any]:
-    """Run the configured agent; write trace + state snapshot.
-
-    Returns a summary dict (run_id, scenario, steps, status, charges,
-    ledger_hash, trace_path, state_path).
-    """
-    rng = random.Random(seed)
-    clock = VirtualClock()
-    ledger = Ledger()
-    env = scenario.get("environment", {}) or {}
-    vendor = ""
-    for rec in env.get("records", []):
-        ledger.kv_seed(str(rec["key"]), dict(rec.get("value", {}) or {}))
-    for rec in env.get("odrl_records", []):
-        ledger.kv_seed(str(rec["key"]), dict(rec.get("value", {}) or {}))
-    doc_store = load_doc_store(scenario)
-    nl_store = load_nl_store(scenario)
-    registry = ToolRegistry.from_scenario(scenario, ledger, rng, doc_store, nl_store)
-
-    run_id = compute_run_id(scenario_text, policy_text, seed)
-    scenario_id = str(scenario.get("scenario", "unknown"))
-    if model in ("fake", "stub"):
-        raise ModelNotConfiguredError(
-            "offline stub/fake adapters were removed; run with a live model id "
-            f"(default {DEFAULT_MODEL}) and {LLAMA_KEY_ENV} set"
-        )
-    adapter = LlamaAdapter(model, llm_config)
-
-    writer = TraceWriter(run_id, scenario_id, trace_path)
-    try:
-        writer.write(
-            step=0,
-            outcome="info",
-            ts_virtual=clock.now(),
-            detail={
-                "phase": "run_start",
-                "task": str(scenario.get("task", "")),
-                "seed": seed,
-                "model": model,
-                "adapter": "live",
-                "plan": f"live-react:{model}",
-                "max_steps": max_steps,
-                "vendor": vendor,
-            },
-        )
-        brief = build_agent_brief(
-            scenario, policy, policy_text, registry.tool_names, convert_instruction
-        )
-        result_memory: dict[str, Any] = {}
-        writer.write(
-            step=1,
-            outcome="info",
-            ts_virtual=clock.now(),
-            detail={"phase": "agent_plan", "plan": f"live-react:{model}"},
-        )
-        messages: list[dict[str, Any]] = [
-            {"role": "system", "content": brief},
-            {"role": "user", "content": str(scenario.get("task", ""))},
-        ]
-        step = 1
-        calls = 0
-        saves = 0
-        model_calls = 0
-        usage_total = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
-        status = "completed"
-        ok_counts: dict[str, int] = {}
-        while True:
-            step += 1
-            if step > max_steps:
-                status = "runaway"
-                break
-            action = adapter.complete(messages, registry.tool_names, timeout_s=0)
-            usage = adapter.last_usage
-            model_calls += 1
-            for usage_key in usage_total:
-                usage_total[usage_key] += int(usage.get(usage_key, 0))
-            if action.get("type") != "call":
-                break
-            tool = str(action["tool"])
-            raw_args = dict(action.get("args", {}))
-            args = resolve_arg_refs(raw_args, result_memory)
-            if not isinstance(args, dict):
-                raise ModelNotConfiguredError(
-                    "live model returned non-object args after ref resolution; " "no action taken"
-                )
-            calls += 1
-            call_detail: dict[str, Any] = {"phase": "tool_call"}
-            if args != raw_args:
-                call_detail["refs_resolved"] = True
-            if usage:
-                call_detail["model_usage"] = usage
-            writer.write(
-                step=step,
-                tool=tool,
-                args=args,
-                outcome="info",
-                ts_virtual=clock.now(),
-                detail=call_detail,
-            )
-            result = registry.call(tool, args, clock)
-            writer.write(
-                step=step,
-                tool=tool,
-                args=args,
-                outcome=str(result["outcome"]),
-                latency=int(result["latency_ms"]),
-                ts_virtual=clock.now(),
-                detail={
-                    "phase": "tool_result",
-                    "error": result["error"],
-                    "data": result["data"],
-                },
-            )
-            result_memory[tool] = copy.deepcopy(result["data"])
-            if tool == SAVE_ODRL and args.get("op") == "write" and result["outcome"] != "error":
-                saves += 1
-            if result["outcome"] != "error":
-                ok_counts[tool] = ok_counts.get(tool, 0) + 1
-            messages.append({"role": "assistant", "content": json.dumps(action)})
-            messages.append(
-                {
-                    "role": "user",
-                    "content": (
-                        f"Tool result from {tool} "
-                        f"(outcome {result['outcome']}): "
-                        + json.dumps(result["data"])
-                        + (f" Error: {result['error']}." if result["error"] is not None else "")
-                    ),
-                }
-            )
-            if result["outcome"] == "timeout":
-                attempts = ok_counts.get(tool, 0)
-                rule = timeout_rule(policy, tool)
-                if rule is not None:
-                    retry = rule.get("retry", {}) or {}
-                    decision: dict[str, Any] = {
-                        "rule": "on_tool_timeout",
-                        "tool": tool,
-                        "action": str(rule.get("action", "retry_same")),
-                        "retry_attempt": attempts + 1,
-                        "max_attempts": int(retry.get("max_attempts", 1)),
-                    }
-                else:
-                    decision = {
-                        "rule": "on_tool_timeout",
-                        "tool": tool,
-                        "action": "stop",
-                        "retry_attempt": attempts,
-                        "max_attempts": 0,
-                    }
-                writer.write(
-                    step=step,
-                    outcome="info",
-                    policy_decision=decision,
-                    ts_virtual=clock.now(),
-                    detail={"phase": "policy_decision"},
-                )
-        snapshot = ledger.snapshot(run_id)
-        writer.write(
-            step=step,
-            outcome="info",
-            ts_virtual=clock.now(),
-            detail={
-                "phase": "run_end",
-                "status": status,
-                "tool_calls": calls,
-                "saves": saves,
-                "ledger_hash": snapshot["ledger_hash"],
-            },
-        )
-        if state_path is not None:
-            with open(state_path, "w", encoding="utf-8") as fh:
-                fh.write(json.dumps(snapshot, sort_keys=True, separators=(",", ":")) + "\n")
-    finally:
-        writer.close()
-    return {
-        "run_id": run_id,
-        "scenario": scenario_id,
-        "steps": calls,
-        "status": status,
-        "saves": saves,
-        "model_calls": model_calls,
-        "model_usage_total": usage_total,
-        "ledger_hash": snapshot["ledger_hash"],
-        "trace_path": trace_path,
-        "state_path": state_path,
-    }

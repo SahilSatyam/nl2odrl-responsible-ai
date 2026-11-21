@@ -52,23 +52,19 @@ from odrl_agent.adapter import (
     LLAMA_URL_ENV,
     LlmConfig,
     ModelNotConfiguredError,
-    run_react_loop,
 )
 from odrl_agent.netguard import UnsafeBaseUrlError, validate_base_url
 from odrl_agent.odrl import (
     contains_attacker_grant,
-    validate_odrl_subset,
+    validate_odrl,
 )
+from odrl_agent.pipeline import run_conversion
 from odrl_agent.remediation import reference_patch_for
 
 INLINE_DOC_ID = "pasted-request-1"
 
-INLINE_GUIDANCE = (
-    "\n\nThe request to convert is pasted inline as document "
-    f"'{INLINE_DOC_ID}'. Its parse result carries no candidate ODRL "
-    "(empty object): author the ODRL 2.2 JSON-LD document yourself "
-    "from the request text, then follow the policy protocol below."
-)
+#: Retired with the ReAct loop; the pipeline needs no task guidance.
+INLINE_GUIDANCE = ""
 
 BASE_SCENARIO = "odrl_convert"
 
@@ -276,7 +272,7 @@ def summarize_saves(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if (event.get("args") or {}).get("op") != "write":
             continue
         value = (event.get("detail") or {}).get("data", {}).get("value")
-        valid, errors = validate_odrl_subset(value)
+        valid, errors = validate_odrl(value)
         saves.append(
             {
                 "step": event.get("step"),
@@ -382,31 +378,27 @@ def _record_snapshot(
         conn.close()
 
 
-def _scripted_transport(actions: list[dict[str, Any]]):
-    """Fake urlopen serving canned chat-completions actions (offline runs)."""
+def _scripted_transport(replies: list[dict[str, Any]]) -> Any:
+    """httpx transport serving canned structured replies (offline seed runs only).
 
-    class _FakeResponse:
-        def __init__(self, payload: dict[str, Any]) -> None:
-            self._payload = payload
+    Each reply is a ``PolicyIR``-shaped object returned as one chat
+    completion. Nothing global is patched: the transport is injected into
+    this run's ``LlmConfig``.
+    """
+    import httpx
 
-        def __enter__(self) -> Any:
-            return self
+    queue = list(replies)
 
-        def __exit__(self, *exc: object) -> bool:
-            return False
+    def handler(request: httpx.Request) -> httpx.Response:
+        del request
+        if not queue:
+            return httpx.Response(400, text="scripted replies exhausted")
+        content = json.dumps(queue.pop(0))
+        return httpx.Response(
+            200, json={"choices": [{"message": {"content": content}, "finish_reason": "stop"}]}
+        )
 
-        def read(self) -> bytes:
-            return json.dumps(self._payload).encode("utf-8")
-
-    state = {"i": 0}
-
-    def _fake_urlopen(request: Any, timeout: Any = None) -> Any:
-        idx = state["i"]
-        action = actions[idx] if idx < len(actions) else {"type": "done", "reason": "end"}
-        state["i"] += 1
-        return _FakeResponse({"choices": [{"message": {"content": json.dumps(action)}}]})
-
-    return _fake_urlopen
+    return httpx.MockTransport(handler)
 
 
 def run_and_store(
@@ -422,14 +414,14 @@ def run_and_store(
         llm_config = LlmConfig(
             base_url="https://seed.example/v1",
             api_key="seed-key",
-            opener=_scripted_transport(actions),
+            transport=_scripted_transport(actions),
         )
     else:
         llm_config = SETTINGS.config()
     try:
         Path(spec["trace_path"]).parent.mkdir(parents=True, exist_ok=True)
         Path(spec["state_path"]).parent.mkdir(parents=True, exist_ok=True)
-        run_react_loop(
+        run_conversion(
             scenario=spec["scenario"],
             policy=spec["policy"],
             seed=spec["seed"],
@@ -437,7 +429,6 @@ def run_and_store(
             state_path=spec["state_path"],
             scenario_text=spec["scenario_text"],
             policy_text=spec["policy_text"],
-            max_steps=spec["max_steps"],
             llm_config=llm_config,
         )
     except ModelNotConfiguredError as exc:

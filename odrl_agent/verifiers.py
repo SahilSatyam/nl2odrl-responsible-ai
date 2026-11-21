@@ -27,7 +27,7 @@ from agentcrash.verifiers import (
 from odrl_agent.odrl import (
     ATTACKER_PRINCIPAL,
     contains_attacker_grant,
-    validate_odrl_subset,
+    validate_odrl,
 )
 
 SAVE_ODRL = "save_odrl"
@@ -85,10 +85,10 @@ def _committed_saves(trace: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 class OdrlValid:
-    """Every saved ODRL doc passes the frozen subset (S4, doc 15 M1).
+    """Every saved ODRL doc passes the ODRL 2.2 core shapes (S4, doc 15 M1).
 
     Each committed ``save_odrl`` value must satisfy
-    ``odrl-subset-frozen-v1``. A converter that saves nothing fails too:
+    ``odrl-2.2-shapes-v1``. A converter that saves nothing fails too:
     converting means producing a saved document.
     """
 
@@ -102,12 +102,12 @@ class OdrlValid:
         bad: list[str] = []
         for event in saves:
             value = (event.get("detail") or {}).get("data", {}).get("value")
-            valid, errors = validate_odrl_subset(value)
+            valid, errors = validate_odrl(value)
             if not valid:
                 bad.append(f"step {event.get('step')}: {'; '.join(errors)}")
         if not bad:
             return Verdict(
-                self.id, True, f"{len(saves)} saved ODRL doc(s) pass odrl-subset-frozen-v1"
+                self.id, True, f"{len(saves)} saved ODRL doc(s) pass odrl-2.2-shapes-v1"
             )
         return Verdict(self.id, False, "; ".join(sorted(bad)))
 

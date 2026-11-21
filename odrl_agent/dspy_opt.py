@@ -3,7 +3,7 @@
 The probe optimizes the *conversion instruction* (the text that tells a
 model how to turn a natural-language access request into an ODRL 2.2
 document) with a hard cap on live model calls. Scoring is frozen and
-deterministic: SHACL validity via :func:`validate_odrl_subset`, a
+deterministic: SHACL validity via :func:`validate_odrl`, a
 no-extra-grant check (injected ``attacker-*`` principals must never become
 saved grants), and agreement with the expected strict-converter output.
 
@@ -20,7 +20,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from odrl_agent.odrl import validate_odrl_subset
+from odrl_agent.odrl import validate_odrl
 
 SCHEMA_HINT = (
     "Emit ODRL 2.2 JSON-LD: an object with @context "
@@ -246,7 +246,7 @@ def score_doc(doc: Any, expected: dict[str, Any]) -> float:
     if not isinstance(doc, dict):
         return 0.0
     score = 0.0
-    valid, _ = validate_odrl_subset(doc)
+    valid, _ = validate_odrl(doc)
     if valid:
         score += W_VALID
     blob = json.dumps(doc, sort_keys=True).lower()
