@@ -56,8 +56,8 @@ from odrl_agent import __version__
 from odrl_agent.adapter import (
     DEFAULT_MODEL,
     ModelNotConfiguredError,
-    run_react_loop,
 )
+from odrl_agent.pipeline import run_conversion
 from odrl_agent.dspy_opt import PackRejectedError, load_pack
 from odrl_agent.remediation import reference_patch_for
 from odrl_agent.tools import PARSE_POLICY, SAVE_ODRL, render_untrusted
@@ -130,7 +130,7 @@ def cmd_run(argv: list[str]) -> int:
             "seed": seed,
             "max_steps": max_steps,
             "model": args.model,
-            "adapter": "live (LLAMA_BASE_URL)",
+            "adapter": "pipeline (LLAMA_BASE_URL)",
             "tools": [t.get("name") for t in scenario.get("tools", [])],
             "policy": str(policy_path),
             "instruction_pack": args.instruction_pack,
@@ -149,7 +149,7 @@ def cmd_run(argv: list[str]) -> int:
     try:
         Path(trace_out).parent.mkdir(parents=True, exist_ok=True)
         Path(state_out).parent.mkdir(parents=True, exist_ok=True)
-        summary = run_react_loop(
+        summary = run_conversion(
             scenario=scenario,
             policy=policy,
             seed=seed,
@@ -196,7 +196,7 @@ def cmd_run(argv: list[str]) -> int:
                 f"untrusted_source=true, {span['source']}):"
             )
             print(render_untrusted(span["text"], span["source"]))
-    return EXIT_RUNABORTED if summary["status"] == "runaway" else EXIT_OK
+    return EXIT_RUNABORTED if summary["status"] in ("runaway", "failed") else EXIT_OK
 
 
 def _retrieved_doc_spans(trace_path: str) -> list[dict[str, Any]]:
@@ -207,6 +207,18 @@ def _retrieved_doc_spans(trace_path: str) -> list[dict[str, Any]]:
         return []
     spans: list[dict[str, Any]] = []
     for event in events:
+        detail = event.get("detail", {}) or {}
+        if detail.get("phase") == "pipeline_stage" and detail.get("stage") == "ingest":
+            if "text" in detail:
+                spans.append(
+                    {
+                        "doc_id": detail.get("doc_id", "?"),
+                        "text": str(detail.get("text", "")),
+                        "bytes": detail.get("bytes", 0),
+                        "source": str(detail.get("source", "")),
+                    }
+                )
+            continue
         if event.get("tool") != PARSE_POLICY:
             continue
         if event.get("detail", {}).get("phase") != "tool_result":
@@ -710,7 +722,7 @@ def cmd_replay(argv: list[str]) -> int:
     Path(replay_trace).parent.mkdir(parents=True, exist_ok=True)
     Path(replay_state).parent.mkdir(parents=True, exist_ok=True)
     try:
-        summary = run_react_loop(
+        summary = run_conversion(
             scenario=scenario,
             policy=new_policy,
             seed=seed,
@@ -822,7 +834,7 @@ def _regress_golden(
         trace_out = str(Path(tmp) / "trace.jsonl")
         state_out = str(Path(tmp) / "state.json")
         try:
-            run_react_loop(
+            run_conversion(
                 scenario=scenario,
                 policy=policy,
                 seed=seed,

@@ -1,7 +1,7 @@
 """ODRL agent: NL-to-ODRL policy engine built on the AgentCrash framework.
 
 This is the host application. It owns the agentic loop (``adapter``),
-the synthetic tools (``tools``), ODRL-subset validation (``odrl``),
+the synthetic tools (``tools``), ODRL 2.2 SHACL validation (``odrl``),
 the DSPy prompt probe (``dspy_opt``), the ODRL invariants
 (``verifiers``), the interactive studio server (``web``),
 and the ``odrl-host`` CLI (``cli``).

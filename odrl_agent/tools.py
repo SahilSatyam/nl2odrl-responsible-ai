@@ -5,7 +5,7 @@ advances only the harness VirtualClock (ADR-003, ADR-006). Unknown tools and
 unexpected args are rejected and recorded (``outcome: error``) — never
 executed. ``parse_policy`` returns fixture-backed NL→ODRL (sloppy vs strict
 mode) tagged ``untrusted_source``; ``validate_odrl`` checks the frozen ODRL
-subset via :mod:`odrl_agent.odrl`; ``save_odrl`` and ``key_value_store`` do
+2.2 core shapes via :mod:`odrl_agent.odrl`; ``save_odrl`` and ``key_value_store`` do
 versioned reads/writes on the record store. No wall-clock, no network,
 no model calls.
 """
@@ -18,7 +18,7 @@ from typing import Any
 from agentcrash.clock import VirtualClock
 from agentcrash.ledger import Ledger
 
-from odrl_agent.odrl import ODRL_SUBSET_ID, validate_odrl_subset
+from odrl_agent.odrl import ODRL_SHAPES_ID, validate_odrl
 
 KEY_VALUE_STORE = "key_value_store"
 PARSE_POLICY = "parse_policy"
@@ -191,7 +191,7 @@ class ToolRegistry:
             cache_key = json.dumps(args["odrl"], sort_keys=True, separators=(",", ":"))
             cached = self._validate_cache.get(cache_key)
             if cached is None:
-                valid, errors = validate_odrl_subset(args["odrl"])
+                valid, errors = validate_odrl(args["odrl"])
                 cached = (valid, list(errors))
                 self._validate_cache[cache_key] = cached
             else:
@@ -205,7 +205,7 @@ class ToolRegistry:
                 "data": {
                     "valid": valid,
                     "errors": errors,
-                    "checked": ODRL_SUBSET_ID,
+                    "checked": ODRL_SHAPES_ID,
                 },
             }
         if name in (KEY_VALUE_STORE, SAVE_ODRL):
