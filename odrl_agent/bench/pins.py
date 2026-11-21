@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from odrl_agent import extractor
-from odrl_agent.ir import IR_VERSION, ir_json_schema
+from odrl_agent.ir import IR_VERSION, ir_json_schema, wire_schema
 
 PINS_PATH = Path(__file__).resolve().parents[2] / "benchmarks" / "v1" / "pins.json"
 
@@ -29,6 +29,7 @@ def current() -> dict[str, Any]:
         "model": extractor.DEFAULT_MODEL,
         "extractor_prompt_pack_sha": _sha(pack),
         "ir_schema_sha": _sha(schema),
+        "wire_schema_sha": _sha(json.dumps(wire_schema(), sort_keys=True)),
         "ir_version": IR_VERSION,
     }
 

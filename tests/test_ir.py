@@ -133,3 +133,62 @@ def test_ir_schema_snapshot() -> None:
     stored = json.loads(snapshot.read_text(encoding="utf-8"))
     assert stored["ir_version"] == IR_VERSION
     assert stored["sha256"] == digest, "PolicyIR schema changed: update the snapshot and IR_VERSION"
+
+
+def _depth_of_logical(node, depth=0):
+    """Deepest nesting of logical constraint objects in a JSON Schema."""
+    if isinstance(node, list):
+        return max((_depth_of_logical(n, depth) for n in node), default=depth)
+    if not isinstance(node, dict):
+        return depth
+    here = depth + (1 if node.get("properties", {}).get("kind", {}).get("const") == "logical"
+                    else 0)
+    return max((_depth_of_logical(v, here) for v in node.values()), default=here)
+
+
+def test_wire_schema_is_not_recursive_and_fits_provider_depth_limit() -> None:
+    """api.meta.ai rejects recursive schemas and schemas nested over 10 levels (HTTP 400)."""
+    from odrl_agent.ir import WIRE_LOGICAL_DEPTH, schema_depth, wire_schema
+
+    text = json.dumps(wire_schema())
+    assert "$ref" not in text and "$defs" not in text and "discriminator" not in text
+    assert _depth_of_logical(wire_schema()) == WIRE_LOGICAL_DEPTH == 1
+    assert schema_depth(wire_schema()) <= 10
+    assert schema_depth(wire_schema(2)) > 10  # measured: the provider rejects this one
+
+
+def test_wire_schema_accepts_one_logical_level_ir_accepts_more() -> None:
+    import jsonschema
+
+    from odrl_agent.ir import wire_schema
+
+    flat = {
+        "analysis": "x", "policy_type": "Set",
+        "rules": [{
+            "modality": "permission", "action": "read", "target": "a", "assignee": "p",
+            "source_spans": [{"quote": "p may read a"}],
+            "constraints": [{"kind": "logical", "operator": "or",
+                             "constraints": [_atomic(), _atomic(ro="7")]}],
+        }],
+    }
+    PolicyIR.model_validate(flat)
+    jsonschema.validate(flat, wire_schema())
+    nested = json.loads(json.dumps(flat))
+    nested["rules"][0]["constraints"][0]["constraints"][1] = {
+        "kind": "logical", "operator": "and", "constraints": [_atomic(), _atomic()]}
+    PolicyIR.model_validate(nested)  # still valid IR (e.g. built by hand or repaired)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(nested, wire_schema())
+    jsonschema.validate(nested, wire_schema(2))
+
+
+def test_extractor_sends_the_wire_schema() -> None:
+    from scripted_llm import ir, rule, scripted_llm
+
+    from odrl_agent.extractor import Extractor
+    from odrl_agent.ir import wire_schema
+
+    requests: list = []
+    Extractor(scripted_llm([ir(rule())], requests)).extract("t", None, complex_input=False)
+    sent = requests[0]["response_format"]["json_schema"]["schema"]
+    assert sent == wire_schema()
