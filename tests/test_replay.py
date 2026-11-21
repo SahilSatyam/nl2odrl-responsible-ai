@@ -11,7 +11,7 @@ import urllib.request
 from pathlib import Path
 
 import pytest
-from agentcrash.policy import reference_patch_for
+from odrl_agent.remediation import reference_patch_for
 
 from odrl_agent.cli import main
 

@@ -25,6 +25,9 @@ FIXED_TRACE = TRACE_DIR / "odrl_convert-fixed-seed42.jsonl"
 FIXED_STATE = TRACE_DIR / "odrl_convert-fixed-seed42.state.json"
 
 
+CORE_IDS = {"fresh_write_only": "fresh_write_only:save_odrl"}
+
+
 def scenario_invariants() -> list[str]:
     """Invariant ids declared by the fixture scenario, in order."""
     scenario = yaml.safe_load(SCENARIO_FILE.read_text(encoding="utf-8"))
@@ -35,7 +38,8 @@ def check(trace, state, report, *extra):
     """Run check with explicit invariants; return the exit code."""
     args = ["check", "--trace", str(trace), "--state", str(state)]
     for invariant_id in scenario_invariants():
-        args += ["--invariant", invariant_id]
+        # core `check` needs the store tool named explicitly (agentcrash-core >=0.3)
+        args += ["--invariant", CORE_IDS.get(invariant_id, invariant_id)]
     args += ["--report-out", str(report), *extra]
     return main(args)
 
@@ -60,7 +64,7 @@ def test_naive_report_carries_required_fields(tmp_path) -> None:
     assert set(verdict) >= {"api_version", "run_id", "verdict", "results"}
     rows = {row["id"]: row for row in verdict["results"]}
     assert rows["odrl_valid"]["passed"] is False
-    assert rows["fresh_write_only"]["passed"] is False
+    assert rows["fresh_write_only:save_odrl"]["passed"] is False
     assert rows["exactly_once_save"]["passed"] is True
     assert rows["no_attacker_grant"]["passed"] is True
 
@@ -134,7 +138,7 @@ def test_plugin_flag_registers_host_invariants(tmp_path) -> None:
             str(NAIVE_STATE),
             "--plugin",
             "odrl_agent.verifiers",
-            *[arg for iid in scenario_invariants() for arg in ("--invariant", iid)],
+            *[arg for iid in scenario_invariants() for arg in ("--invariant", CORE_IDS.get(iid, iid))],
             "--report-out",
             str(report),
         ]

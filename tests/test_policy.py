@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from odrl_agent.remediation import reference_patch_for
 from agentcrash.policy import (
     PolicyError,
     PolicyRejectedError,
@@ -14,7 +15,6 @@ from agentcrash.policy import (
     load_policy,
     merge_patch,
     normalize_rule,
-    reference_patch_for,
     validate_patch_data,
     validate_policy_data,
 )
