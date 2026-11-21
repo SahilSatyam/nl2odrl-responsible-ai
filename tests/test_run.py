@@ -9,13 +9,11 @@ key-gated live tests elsewhere.
 
 import json
 import shutil
-import time
 import urllib.request
 from pathlib import Path
 
 import jsonschema
 import pytest
-import yaml
 from agentcrash.clock import VirtualClock
 from agentcrash.ledger import Ledger
 from agentcrash.tracer import compute_run_id, verify_chain

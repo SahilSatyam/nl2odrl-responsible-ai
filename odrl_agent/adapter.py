@@ -18,6 +18,8 @@ import json
 import os
 import random
 import urllib.request
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -67,6 +69,29 @@ def max_completion_tokens() -> int:
         return DEFAULT_MAX_COMPLETION_TOKENS
     return value if value > 0 else DEFAULT_MAX_COMPLETION_TOKENS
 
+
+@dataclass(frozen=True)
+class LlmConfig:
+    """Immutable per-call model endpoint config (no process-global state).
+
+    ``opener`` replaces ``urllib.request.urlopen`` (used by offline scripted runs).
+    Empty ``timeout_s`` / ``max_tokens`` fall back to the module defaults.
+    """
+
+    base_url: str = ""
+    api_key: str = ""
+    timeout_s: float = 0.0
+    max_tokens: int = 0
+    opener: Callable[..., Any] | None = field(default=None, compare=False, repr=False)
+
+    @classmethod
+    def from_env(cls) -> LlmConfig:
+        return cls(
+            base_url=os.environ.get(LLAMA_URL_ENV, "").strip(),
+            api_key=os.environ.get(LLAMA_KEY_ENV, "").strip(),
+            timeout_s=live_timeout_s(),
+            max_tokens=max_completion_tokens(),
+        )
 
 def build_agent_brief(
     scenario: dict[str, Any],
@@ -276,8 +301,9 @@ class LlamaAdapter:
     Policy gating stays harness-side in :func:`run_react_loop`.
     """
 
-    def __init__(self, model: str = DEFAULT_MODEL) -> None:
+    def __init__(self, model: str = DEFAULT_MODEL, config: LlmConfig | None = None) -> None:
         self._model = model
+        self._config = config
         self._last_usage: dict[str, int] = {}
 
     @property
@@ -293,8 +319,10 @@ class LlamaAdapter:
     ) -> dict[str, Any]:
         """Return the model's next action as ``{"type": "call"|"done", ...}``."""
         self._last_usage = {}
-        api_key = os.environ.get(LLAMA_KEY_ENV, "").strip()
-        base_url = os.environ.get(LLAMA_URL_ENV, "").strip()
+        cfg = self._config or LlmConfig.from_env()
+        api_key, base_url = cfg.api_key, cfg.base_url
+        max_tokens = cfg.max_tokens if cfg.max_tokens > 0 else max_completion_tokens()
+        opener = cfg.opener or urllib.request.urlopen
         if not api_key or not base_url:
             raise ModelNotConfiguredError(
                 f"live model {self._model!r} requires {LLAMA_KEY_ENV} and "
@@ -306,7 +334,7 @@ class LlamaAdapter:
                 "model": self._model,
                 "messages": list(messages),
                 "temperature": 0,
-                "max_tokens": max_completion_tokens(),
+                "max_tokens": max_tokens,
             }
         ).encode("utf-8")
         headers = {
@@ -315,14 +343,14 @@ class LlamaAdapter:
         }
         url = base_url.rstrip("/") + "/chat/completions"
         request = urllib.request.Request(url, data=body, headers=headers, method="POST")
-        wait_s = timeout_s if timeout_s > 0 else live_timeout_s()
+        wait_s = timeout_s if timeout_s > 0 else (cfg.timeout_s or live_timeout_s())
         payload: Any = None
         content = ""
         finish_reason: Any = None
         last_transport_error: OSError | None = None
         for _ in range(MAX_COMPLETION_ATTEMPTS):
             try:
-                with urllib.request.urlopen(request, timeout=wait_s) as response:
+                with opener(request, timeout=wait_s) as response:
                     payload = json.loads(response.read().decode("utf-8"))
                 break
             except urllib.error.HTTPError as exc:
@@ -364,7 +392,7 @@ class LlamaAdapter:
             hint = ""
             if finish_reason == "length":
                 hint = (
-                    f" output truncated at max_tokens={max_completion_tokens()};"
+                    f" output truncated at max_tokens={max_tokens};"
                     f" raise {LLAMA_MAX_TOKENS_ENV}."
                 )
             raise ModelNotConfiguredError(
@@ -499,6 +527,7 @@ def run_react_loop(
     max_steps: int = 12,
     model: str = DEFAULT_MODEL,
     convert_instruction: str | None = None,
+    llm_config: LlmConfig | None = None,
 ) -> dict[str, Any]:
     """Run the configured agent; write trace + state snapshot.
 
@@ -525,7 +554,7 @@ def run_react_loop(
             "offline stub/fake adapters were removed; run with a live model id "
             f"(default {DEFAULT_MODEL}) and {LLAMA_KEY_ENV} set"
         )
-    adapter = LlamaAdapter(model)
+    adapter = LlamaAdapter(model, llm_config)
 
     writer = TraceWriter(run_id, scenario_id, trace_path)
     try:
