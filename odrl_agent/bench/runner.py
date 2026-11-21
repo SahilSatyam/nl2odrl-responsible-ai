@@ -65,14 +65,31 @@ def _git_sha() -> str:
         return "unknown"
 
 
+ENFORCE_MODES = ("all", "regression")
+
+
 def report(results: list[dict[str, Any]], *, mode: str, model: str,
-           baseline: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Metrics, gate rows and an identity block that makes the run reproducible."""
+           baseline: dict[str, Any] | None = None, enforce: str = "all") -> dict[str, Any]:
+    """Metrics, gate rows and an identity block that makes the run reproducible.
+
+    ``enforce="all"`` fails on any gate. ``enforce="regression"`` (plan section 4.3,
+    per-PR live check) fails only on the baseline comparison; the absolute gates are
+    still computed and listed with ``enforced: False`` so the report stays honest.
+    """
+    if enforce not in ENFORCE_MODES:
+        raise ValueError(f"enforce must be one of {ENFORCE_MODES}")
+    if enforce == "regression" and baseline is None:
+        raise ValueError("enforce='regression' needs a baseline to compare against")
     live = mode == "live"
     overall = metrics.compute(results)
     rows = gates.evaluate(overall, live=live)
+    for row in rows:
+        row["enforced"] = enforce == "all"
     if baseline is not None:
-        rows += gates.regressions(overall, baseline["metrics"])
+        regress = gates.regressions(overall, baseline["metrics"])
+        for row in regress:
+            row["enforced"] = True
+        rows += regress
     manifest = json.loads((generate.BENCH_DIR / "manifest.json").read_text("utf-8"))
     return {
         "benchmark_version": manifest["version"],
@@ -84,7 +101,8 @@ def report(results: list[dict[str, Any]], *, mode: str, model: str,
         "metrics": overall,
         "tiers": metrics.by_tier(results),
         "gates": rows,
-        "passed": not gates.failed(rows),
+        "enforce": enforce,
+        "passed": not gates.failed([r for r in rows if r["enforced"]]),
         "total_tokens": sum(r["tokens"] for r in results),
         "failures": [
             {"id": r["case"]["id"], "tier": r["case"]["tier"], "status": r["draft"]["status"],

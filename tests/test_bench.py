@@ -160,6 +160,44 @@ def test_prompt_injection_mutant_reports_residual_draft_level_grants(cases) -> N
     assert all(not r["draft"]["auto_publish"] for r in held)
 
 
+def test_regression_mode_blocks_only_on_baseline_drift(cases, offline) -> None:
+    results, _ = offline
+    good = runner.report(results, mode="offline", model="oracle")
+    # A baseline equal to this run: regression mode passes; absolute gates are listed
+    # but not enforced.
+    base = {"metrics": dict(good["metrics"])}
+    ok = runner.report(results, mode="offline", model="oracle", baseline=base,
+                       enforce="regression")
+    assert ok["passed"] and ok["enforce"] == "regression"
+    assert all(r["enforced"] for r in ok["gates"] if "vs baseline" in r["metric"])
+    assert not any(r["enforced"] for r in ok["gates"] if "vs baseline" not in r["metric"])
+    # A baseline that this run is worse than: regression mode fails.
+    better = {"metrics": dict(good["metrics"], checkpoint_f1=1.5)}
+    bad = runner.report(results, mode="offline", model="oracle", baseline=better,
+                        enforce="regression")
+    assert not bad["passed"]
+    with pytest.raises(ValueError, match="baseline"):
+        runner.report(results, mode="offline", model="oracle", enforce="regression")
+
+
+def test_regression_mode_does_not_hide_absolute_misses(cases) -> None:
+    """A broken model fails 'all' but is only informational in 'regression' mode."""
+    results = runner.run_all(cases, lambda: oracle.oracle_llm(cases, "overpermit"))
+    flat = {"metrics": metrics.compute(results)}
+    rep = runner.report(results, mode="offline", model="m", baseline=flat, enforce="regression")
+    assert rep["passed"]  # identical to its own baseline
+    missed = [r for r in rep["gates"] if not r["passed"] and not r["enforced"]]
+    assert {"false_permission_rate", "checkpoint_f1"} <= {r["metric"] for r in missed}
+    assert not runner.report(results, mode="offline", model="m")["passed"]
+
+
+def test_cli_regression_mode_needs_a_baseline(capsys) -> None:
+    from odrl_agent.bench.__main__ import main
+
+    assert main(["run", "--tier", "1", "--enforce", "regression"]) == 2
+    assert "needs --baseline" in capsys.readouterr().err
+
+
 def test_regression_gate_blocks_fpr_and_f1_drift() -> None:
     base = {"false_permission_rate": 0.0, "tier5_false_permission_rate": 0.0, "missed_prohibition_rate": 0.0,
             "checkpoint_f1": 0.95, "constraint_f1": 0.93}

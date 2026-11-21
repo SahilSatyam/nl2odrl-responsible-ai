@@ -11,7 +11,10 @@ from odrl_agent.bench import generate, oracle, pins, runner
 
 def _print_gates(rep: dict) -> None:
     for row in rep["gates"]:
-        mark = "ok  " if row["passed"] else "FAIL"
+        if not row.get("enforced", True):
+            mark = "info" if row["passed"] else "MISS"  # reported, not blocking
+        else:
+            mark = "ok  " if row["passed"] else "FAIL"
         base = f" (baseline {row['baseline']})" if "baseline" in row else ""
         print(f"{mark} {row['metric']:<42} {row['value']!s:<10} {row['rule']}{base}")
 
@@ -31,6 +34,8 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--limit", type=int, default=0)
     run.add_argument("--workers", type=int, default=1)
     run.add_argument("--baseline", help="frozen baseline report to compare against")
+    run.add_argument("--enforce", choices=runner.ENFORCE_MODES, default="all",
+                     help="'regression' fails only on the baseline comparison (needs --baseline)")
     run.add_argument("--out", help="write the JSON report here")
     run.add_argument("--freeze", help="live only: write this run as the frozen baseline")
     args = ap.parse_args(argv)
@@ -80,7 +85,11 @@ def main(argv: list[str] | None = None) -> int:
         results = runner.run_all(cases, lambda: StructuredLlm.from_config(config), model=model,
                                  workers=args.workers)
     baseline = json.loads(Path(args.baseline).read_text("utf-8")) if args.baseline else None
-    rep = runner.report(results, mode=args.mode, model=model, baseline=baseline)
+    if args.enforce == "regression" and baseline is None:
+        print("--enforce regression needs --baseline", file=sys.stderr)
+        return 2
+    rep = runner.report(results, mode=args.mode, model=model, baseline=baseline,
+                        enforce=args.enforce)
     _print_gates(rep)
     if args.out:
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
