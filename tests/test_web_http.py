@@ -247,7 +247,7 @@ def test_issued_key_gates_http(monkeypatch, tmp_path) -> None:
     monkeypatch.chdir(REPO)
     server, port, _real_urlopen = _server(monkeypatch, tmp_path)
     try:
-        from agentcrash import db as db_module
+        from odrl_agent import db as db_module
         from odrl_agent import web
 
         db_conn = db_module.connect(tmp_path / "agentcrash.db")

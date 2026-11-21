@@ -60,7 +60,9 @@ def core_check(trace, state, report) -> int:
     scenario = yaml.safe_load(SCENARIO_FILE.read_text(encoding="utf-8"))
     args = ["check", "--trace", str(trace), "--state", str(state)]
     for item in scenario.get("invariants", []):
-        args += ["--invariant", item["id"] if isinstance(item, dict) else item]
+        iid = item["id"] if isinstance(item, dict) else item
+        # core `check` needs the store tool named explicitly (agentcrash-core >=0.3)
+        args += ["--invariant", "fresh_write_only:save_odrl" if iid == "fresh_write_only" else iid]
     args += ["--report-out", str(report)]
     return core_main(args)
 
@@ -72,7 +74,7 @@ def test_recorded_naive_trace_fails_check(tmp_path) -> None:
     verdict = json.loads(report.read_text(encoding="utf-8"))
     assert verdict["verdict"] == "FAIL"
     failed = {row["id"] for row in verdict["results"] if not row["passed"]}
-    assert {"odrl_valid", "fresh_write_only"} <= failed
+    assert {"odrl_valid", "fresh_write_only:save_odrl"} <= failed
 
 
 def test_recorded_fixed_trace_passes_check(tmp_path) -> None:
