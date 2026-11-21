@@ -23,6 +23,7 @@ __all__ = [
     "DEFAULT_MODEL",
     "LLAMA_KEY_ENV",
     "LLAMA_MAX_TOKENS_ENV",
+    "LLAMA_MODEL_ENV",
     "LLAMA_STRONG_MODEL_ENV",
     "LLAMA_TIMEOUT_ENV",
     "LLAMA_URL_ENV",
@@ -32,12 +33,15 @@ __all__ = [
     "load_doc_store",
     "load_nl_store",
     "max_completion_tokens",
+    "model_from_env",
+    "strong_model_from_env",
 ]
 
 LLAMA_KEY_ENV = "LLAMA_API_KEY"
 LLAMA_URL_ENV = "LLAMA_BASE_URL"
 LLAMA_TIMEOUT_ENV = "LLAMA_TIMEOUT_S"
 LLAMA_MAX_TOKENS_ENV = "LLAMA_MAX_TOKENS"
+LLAMA_MODEL_ENV = "LLAMA_MODEL"
 LLAMA_STRONG_MODEL_ENV = "LLAMA_STRONG_MODEL"
 LIVE_HTTP_TIMEOUT_S = 60
 #: Default completion-token cap per model call. Reasoning models think
@@ -66,6 +70,16 @@ def max_completion_tokens() -> int:
     return value if value > 0 else DEFAULT_MAX_COMPLETION_TOKENS
 
 
+def model_from_env() -> str:
+    """Model id for every call (``LLAMA_MODEL``, else the built-in default)."""
+    return os.environ.get(LLAMA_MODEL_ENV, "").strip() or DEFAULT_MODEL
+
+
+def strong_model_from_env() -> str:
+    """Optional stronger model for complex extracts and repairs ("" = same model)."""
+    return os.environ.get(LLAMA_STRONG_MODEL_ENV, "").strip()
+
+
 @dataclass(frozen=True)
 class LlmConfig:
     """Immutable per-run model endpoint config (no process-global state).
@@ -78,6 +92,8 @@ class LlmConfig:
     api_key: str = ""
     timeout_s: float = 0.0
     max_tokens: int = 0
+    model: str = DEFAULT_MODEL
+    strong_model: str = ""
     transport: Any = field(default=None, compare=False, repr=False)
 
     @classmethod
@@ -87,6 +103,8 @@ class LlmConfig:
             api_key=os.environ.get(LLAMA_KEY_ENV, "").strip(),
             timeout_s=live_timeout_s(),
             max_tokens=max_completion_tokens(),
+            model=model_from_env(),
+            strong_model=strong_model_from_env(),
         )
 
 

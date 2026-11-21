@@ -41,6 +41,8 @@ from odrl_agent.adapter import (
     DEFAULT_MODEL,
     LLAMA_KEY_ENV,
     LLAMA_MAX_TOKENS_ENV,
+    LLAMA_MODEL_ENV,
+    LLAMA_STRONG_MODEL_ENV,
     LLAMA_TIMEOUT_ENV,
     LLAMA_URL_ENV,
     LlmConfig,
@@ -385,6 +387,21 @@ def _scripted_transport(replies: list[dict[str, Any]]) -> Any:
     return httpx.MockTransport(handler)
 
 
+def _model_error_hint(exc: Exception) -> str:
+    """User-facing hint that matches the failure instead of always blaming setup."""
+    from odrl_agent.llm import LlmNotConfiguredError
+
+    text = str(exc)
+    if isinstance(exc, LlmNotConfiguredError):
+        return f"{text}. Set the base URL, model and API key in Model setup."
+    if "truncated at max_tokens" in text:
+        return f"{text}. Raise 'Max output tokens' in Model setup."
+    if "rejected the request" in text:
+        return (f"{text}. Check the model id, and that the endpoint supports "
+                "JSON-schema structured output.")
+    return f"{text}. Check the model settings."
+
+
 def run_and_store(
     spec: dict[str, Any],
     run_key: str,
@@ -414,6 +431,8 @@ def run_and_store(
             scenario_text=spec["scenario_text"],
             policy_text=spec["policy_text"],
             llm_config=llm_config,
+            model=llm_config.model or DEFAULT_MODEL,
+            strong_model=llm_config.strong_model or None,
             request_id=spec.get("request_id"),
         )
     except ModelNotConfiguredError as exc:
@@ -427,7 +446,7 @@ def run_and_store(
             None,
             None,
             time.monotonic() - started,
-            {"code": "E_MODEL_API", "hint": f"{exc}. Set the model key and URL."},
+            {"code": "E_MODEL_API", "hint": _model_error_hint(exc)},
         )
         snap["ledger_hash"] = None
         _record_snapshot(spec["db_path"], run_key, snap, spec)
@@ -1066,6 +1085,8 @@ class ServerSettings:
             api_key=over.get("api_key", env.api_key),
             timeout_s=float(over.get("timeout_s", env.timeout_s)),
             max_tokens=int(over.get("max_tokens", env.max_tokens)),
+            model=str(over.get("model", env.model)),
+            strong_model=str(over.get("strong_model", env.strong_model)),
         )
 
     def raw(self, name: str, env_name: str, tenant: str = "local") -> str:
@@ -1084,7 +1105,8 @@ def model_status(tenant: str = "local") -> dict[str, Any]:
     base_url = SETTINGS.raw("base_url", LLAMA_URL_ENV, tenant)
     key_set = bool(SETTINGS.raw("api_key", LLAMA_KEY_ENV, tenant))
     return {
-        "model": DEFAULT_MODEL,
+        "model": SETTINGS.raw("model", LLAMA_MODEL_ENV, tenant) or DEFAULT_MODEL,
+        "strong_model": SETTINGS.raw("strong_model", LLAMA_STRONG_MODEL_ENV, tenant),
         "base_url": base_url,
         "api_key_set": key_set,
         "configured": bool(base_url and key_set),
@@ -1113,6 +1135,19 @@ def apply_model_settings(body: Any, tenant: str = "local") -> dict[str, Any]:
         if not isinstance(api_key, str) or not api_key.strip():
             raise ConvertError("api_key must be a non-empty string")
         staged["api_key"] = api_key.strip()
+    for name, required in (("model", True), ("strong_model", False)):
+        if name in body:
+            value = body[name]
+            if not isinstance(value, str):
+                raise ConvertError(f"{name} must be a string")
+            value = value.strip()
+            if required and not value:
+                raise ConvertError(f"{name} must be a non-empty string")
+            if len(value) > 200 or any(ch.isspace() or not ch.isprintable() for ch in value):
+                raise ConvertError(f"{name} must be a model id without spaces (max 200 chars)")
+            if value in ("fake", "stub"):
+                raise ConvertError(f"{name} must be a live model id")
+            staged[name] = value
     for name, lo, hi in (("timeout_s", 1, 600), ("max_tokens", 1, 128000)):
         if name in body:
             value = body[name]

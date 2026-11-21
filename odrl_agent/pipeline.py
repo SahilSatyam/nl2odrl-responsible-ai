@@ -52,6 +52,13 @@ from odrl_agent.tools import SAVE_ODRL, VALIDATE_ODRL, ToolRegistry
 
 PIPELINE_ID = "pipeline/v1"
 MAX_REPAIRS = 2
+#: Sent once when the model returns no rules and flags no ambiguity.
+EMPTY_EXTRACT_NOTE = (
+    "Your previous reply had an empty \"rules\" list and no ambiguities. Encode every "
+    "permission, prohibition and obligation the source states as an entry in \"rules\", "
+    "each with verbatim source_spans. If the text truly states no rule, return an empty "
+    "\"rules\" list with an \"ambiguities\" entry that explains why."
+)
 STAGES = (
     "ingest", "decompose", "extract", "ground", "compile", "verify", "reason", "repair", "draft",
 )  # fmt: skip
@@ -445,6 +452,24 @@ def convert(
         complex_input=complex_input,
     )
     stage("extract", schema_errors=result.errors, rules=len(result.ir.rules) if result.ir else 0)
+    if result.ir is not None and not result.ir.rules and not result.ir.ambiguities:
+        # An empty IR with no ambiguity is an unexplained miss, not a decision.
+        # Re-extract once; the shrink-only repair loop cannot add rules.
+        result = call(
+            "extract",
+            route_models.strong,
+            extractor.extract,
+            source,
+            clauses,
+            complex_input=complex_input,
+            retry_note=EMPTY_EXTRACT_NOTE,
+        )
+        stage(
+            "extract",
+            retry="empty_rules",
+            schema_errors=result.errors,
+            rules=len(result.ir.rules) if result.ir else 0,
+        )
 
     best: PolicyIR | None = None  # last IR that passed schema validation
     current: PolicyIR | None = result.ir
@@ -603,11 +628,14 @@ def run_conversion(
     """
     if model in ("fake", "stub"):
         raise PipelineError("offline stub/fake adapters were removed; use a live model id")
-    if llm is None:
+    if llm_config is None and llm is None:
         from odrl_agent.adapter import LlmConfig
 
-        llm = StructuredLlm.from_config(llm_config or LlmConfig.from_env())
-    extractor = Extractor(llm, ModelRoute(fast=model, strong=strong_model or model))
+        llm_config = LlmConfig.from_env()
+    if llm is None:
+        llm = StructuredLlm.from_config(llm_config)
+    strong = strong_model or str(getattr(llm_config, "strong_model", "") or "") or model
+    extractor = Extractor(llm, ModelRoute(fast=model, strong=strong))
     rng = random.Random(seed)
     clock = VirtualClock()
     ledger = Ledger()

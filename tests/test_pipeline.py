@@ -209,6 +209,20 @@ def test_no_rules_draft_compiles_nothing() -> None:
     assert calls == 1 and draft.status == "no_rules" and doc is None
 
 
+def test_unexplained_empty_extract_is_retried_once() -> None:
+    requests: list = []
+    empty = {"analysis": "describes rules but lists none", "rules": []}
+    draft, doc, calls = run(TEXT, [empty, ir(rule())], requests)
+    assert calls == 2 and draft.status == "ready" and doc is not None
+    assert "empty \"rules\" list" in requests[1]["messages"][-1]["content"]
+
+
+def test_empty_extract_retry_is_bounded() -> None:
+    empty = {"analysis": "nothing", "rules": []}
+    draft, doc, calls = run(TEXT, [empty] * 3)
+    assert calls == 2 and draft.status == "no_rules" and doc is None
+
+
 def test_empty_input_makes_no_call() -> None:
     draft, doc, calls = run("   ", [])
     assert calls == 0 and draft.status == "failed" and doc is None
