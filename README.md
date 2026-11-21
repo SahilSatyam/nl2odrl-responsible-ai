@@ -128,13 +128,18 @@ suite work **with no key**. Only live model calls need one:
 | `odrl-host run` (live pipeline conversion) | `check` via `agentcrash`, `diagnose`, `serve` |
 | `odrl-host optimize-prompts` (live DSPy probe; refuses without a key) | `agentcrash check --plugin odrl_agent.verifiers`, PII scan, full pytest, frozen golden traces |
 
-Any OpenAI-compatible `{LLAMA_BASE_URL}/chat/completions` endpoint
-works (default model is `muse-spark-1.3`):
+Any OpenAI-compatible `{LLAMA_BASE_URL}/chat/completions` endpoint that
+supports JSON-schema structured output works, with any model id. In the
+Studio, open **Model setup** and enter the base URL, model and API key
+(optionally a stronger model and an output-token cap); these are held in
+server memory per tenant. The environment sets the defaults:
 
 ```bash
 export LLAMA_API_KEY=<your-key>      # header only, never logged or traced
 export LLAMA_BASE_URL=<your-endpoint>/v1
-# optional tuning (defaults shown):
+export LLAMA_MODEL=<model-id>        # default: muse-spark-1.3
+# optional (defaults shown):
+# export LLAMA_STRONG_MODEL=         # complex extracts + repairs; empty = LLAMA_MODEL
 # export LLAMA_TIMEOUT_S=60
 # export LLAMA_MAX_TOKENS=8000
 ```

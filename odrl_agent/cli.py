@@ -54,8 +54,8 @@ from agentcrash.verifiers import (
 import odrl_agent.verifiers  # noqa: F401 -- registers ODRL invariants
 from odrl_agent import __version__
 from odrl_agent.adapter import (
-    DEFAULT_MODEL,
     ModelNotConfiguredError,
+    model_from_env,
 )
 from odrl_agent.pipeline import run_conversion
 from odrl_agent.dspy_opt import PackRejectedError, load_pack
@@ -67,7 +67,7 @@ def cmd_run(argv: list[str]) -> int:
     """Execute `odrl-host run` (exit 0 completed, 2 usage/config, 5 runaway)."""
     parser = argparse.ArgumentParser(prog="odrl-host run")
     parser.add_argument("--scenario", required=True)
-    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--model", default=model_from_env())
     parser.add_argument("--policy", default=None)
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--max-steps", type=int, default=None)
@@ -373,7 +373,7 @@ def cmd_optimize_prompts(argv: list[str]) -> int:
         write_pack,
     )
 
-    model = args.model or DEFAULT_MODEL
+    model = args.model or model_from_env()
     api_key = os.environ.get(LLAMA_KEY_ENV, "").strip()
     api_base = os.environ.get(LLAMA_URL_ENV, "").strip()
     if not api_key or not api_base:
@@ -513,7 +513,7 @@ def cmd_diagnose(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="odrl-host diagnose")
     parser.add_argument("--trace", required=True)
     parser.add_argument("--output", required=True)
-    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--model", default=model_from_env())
     parser.add_argument("--max-rules", type=int, default=1)
     parser.add_argument("--state", default=None)
     parser.add_argument("--scenario", default=None)
@@ -684,7 +684,7 @@ def cmd_replay(argv: list[str]) -> int:
     parser.add_argument("--patch", default=None)
     parser.add_argument("--scenario", default=None)
     parser.add_argument("--state", default=None)
-    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--model", default=model_from_env())
     parser.add_argument("--max-steps", type=int, default=None)
     parser.add_argument("--trace-out", default=None)
     parser.add_argument("--state-out", default=None)

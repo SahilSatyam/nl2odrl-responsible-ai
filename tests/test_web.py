@@ -114,6 +114,62 @@ def test_model_settings_round_trip(monkeypatch) -> None:
         apply_model_settings(["nope"])
 
 
+def test_model_id_is_configurable(monkeypatch) -> None:
+    monkeypatch.delenv("LLAMA_MODEL", raising=False)
+    monkeypatch.delenv("LLAMA_STRONG_MODEL", raising=False)
+    assert model_status()["model"] == "muse-spark-1.3"
+    assert model_status()["strong_model"] == ""
+    monkeypatch.setenv("LLAMA_MODEL", "env-model")
+    assert model_status()["model"] == "env-model"
+    status = apply_model_settings({"model": " gpt-4o ", "strong_model": "o3"})
+    assert status["model"] == "gpt-4o" and status["strong_model"] == "o3"
+    from odrl_agent.web import SETTINGS
+
+    cfg = SETTINGS.config()
+    assert cfg.model == "gpt-4o" and cfg.strong_model == "o3"
+    assert apply_model_settings({"strong_model": ""})["strong_model"] == ""
+    for bad in ({"model": ""}, {"model": "two words"}, {"model": 5}, {"model": "stub"},
+                {"model": "x" * 201}, {"strong_model": 1}):
+        with pytest.raises(ConvertError):
+            apply_model_settings(bad)
+
+
+def test_convert_uses_the_configured_models(monkeypatch, tmp_path) -> None:
+    from pathlib import Path
+
+    from scripted_llm import install, ir, rule
+
+    root = Path(__file__).resolve().parent.parent
+    monkeypatch.chdir(root)
+    text = "Allow the research team to use dataset-7. They must not distribute it."
+    replies = [
+        {"clauses": ["Allow the research team to use dataset-7.", "They must not distribute it."]},
+        ir(rule(), rule(action="distribute", assignee=None, modality="prohibition",
+                        quote="They must not distribute it")),
+    ]
+    requests: list = []
+    install(monkeypatch, replies, requests)
+    apply_model_settings({"model": "gpt-test", "strong_model": "gpt-strong"})
+    registry = RunRegistry(root, out_dir=tmp_path)
+    started = registry.start(text, "fixed", 42, 12)
+    done = registry.wait(started["run_key"], timeout=30.0)
+    assert done is not None and done["status"] == "done", done
+    # decompose runs on the configured model, extract on the stronger one.
+    assert [r["model"] for r in requests] == ["gpt-test", "gpt-strong"]
+
+
+def test_model_error_hints_match_the_failure() -> None:
+    from odrl_agent.llm import LlmError, LlmNotConfiguredError
+    from odrl_agent.web import _model_error_hint
+
+    assert "Model setup" in _model_error_hint(LlmNotConfiguredError("no key"))
+    assert "Max output tokens" in _model_error_hint(
+        LlmError("model 'm' output truncated at max_tokens=8000"))
+    assert "structured output" in _model_error_hint(
+        LlmError("model 'm' rejected the request (HTTP 400: bad)"))
+    assert "API key" not in _model_error_hint(LlmError("model 'm' returned non-JSON body"))
+
+
 def test_convert_without_model_key_reports_error(monkeypatch, tmp_path) -> None:
     from pathlib import Path as _P
 

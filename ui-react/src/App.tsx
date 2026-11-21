@@ -94,31 +94,47 @@ function PoliciesView({ onOpenRun }: { onOpenRun: (k: string) => void }) {
 
 function ModelSetupDialog({ initial, onClose, onSaved }: { initial: ModelSettings | null; onClose: () => void; onSaved: (s: ModelSettings) => void }) {
   const [baseUrl, setBaseUrl] = useState(initial?.base_url || '');
+  const [model, setModel] = useState(initial?.model || '');
+  const [strongModel, setStrongModel] = useState(initial?.strong_model || '');
+  const [maxTokens, setMaxTokens] = useState(initial?.max_tokens || '');
   const [apiKey, setApiKey] = useState('');
   const [studioKey, setStudioKey] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const keyReady = Boolean(apiKey.trim() || initial?.api_key_set);
+  const tokens = maxTokens.trim() ? Number(maxTokens.trim()) : undefined;
+  const tokensOk = tokens === undefined || (Number.isInteger(tokens) && tokens >= 1 && tokens <= 128000);
   const save = useCallback(async () => {
     setSaving(true); setError('');
     try {
       if (studioKey.trim()) await api.login(studioKey.trim());
-      const s = await api.saveSettings({ base_url: baseUrl.trim(), api_key: apiKey.trim() });
+      const s = await api.saveSettings({
+        base_url: baseUrl.trim(),
+        model: model.trim(),
+        strong_model: strongModel.trim(),
+        ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
+        ...(tokens !== undefined ? { max_tokens: tokens } : {}),
+      });
       onSaved(s);
       onClose();
     } catch (e) { setError(e instanceof Error ? e.message : 'save failed'); }
     finally { setSaving(false); }
-  }, [baseUrl, apiKey, studioKey, onSaved, onClose]);
+  }, [baseUrl, model, strongModel, apiKey, tokens, studioKey, onSaved, onClose]);
   return (
     <div className="overlay" onClick={onClose} role="presentation">
       <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="setup-title" onClick={(e) => e.stopPropagation()}>
         <h2 id="setup-title">Model setup</h2>
         <p className="status">Live conversion calls your OpenAI-compatible chat endpoint. The key is kept in the server process only, never traced or returned.</p>
-        <label className="field">Base URL<input type="text" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://…/v1" inputMode="url" /></label>
+        <label className="field">Base URL<input type="text" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://api.openai.com/v1" inputMode="url" /></label>
+        <label className="field">Model<input type="text" value={model} onChange={(e) => setModel(e.target.value)} placeholder="e.g. gpt-4o, llama-3.3-70b, muse-spark-1.3" autoComplete="off" spellCheck={false} /></label>
         <label className="field">API key<input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder={initial?.api_key_set ? 'Saved — enter a new key to replace it' : 'Paste the key'} autoComplete="off" /></label>
+        <label className="field">Stronger model (optional; used for complex policies and repairs)<input type="text" value={strongModel} onChange={(e) => setStrongModel(e.target.value)} placeholder="Leave empty to use the model above" autoComplete="off" spellCheck={false} /></label>
+        <label className="field">Max output tokens per call (optional, 1–128000)<input type="text" value={maxTokens} onChange={(e) => setMaxTokens(e.target.value)} placeholder="8000" inputMode="numeric" /></label>
+        <p className="status">The endpoint must speak the OpenAI chat-completions API and support JSON-schema structured output.</p>
         <label className="field">Studio API key (signs you in with a secure cookie; never stored in the browser)<input type="password" value={studioKey} onChange={(e) => setStudioKey(e.target.value)} placeholder="Leave empty on a local server" autoComplete="off" /></label>
         {error ? <p className="status" role="alert">{error}</p> : null}
         <div className="row">
-          <button className="btn primary" disabled={saving || !baseUrl.trim() || !apiKey.trim()} onClick={save}>{saving ? 'Saving…' : 'Save'}</button>
+          <button className="btn primary" disabled={saving || !baseUrl.trim() || !model.trim() || !keyReady || !tokensOk} onClick={save}>{saving ? 'Saving…' : 'Save'}</button>
           <button className="btn" onClick={onClose}>Cancel</button>
         </div>
       </div>
@@ -411,7 +427,7 @@ export default function App() {
       </aside>
       <div className="topbar"><span className="crumb">Data governance · {titles[tab]}</span><span className="spacer" />
         <button className="btn" style={{ minHeight: 28, fontSize: 12 }} onClick={openSetup} title={settings?.base_url ? `Model endpoint: ${settings.base_url}` : 'Configure the live model'}>
-          <span className={`pill ${settings?.configured ? 'pass' : 'warn'}`}>{settings ? (settings.configured ? 'Model ready' : 'Model setup needed') : 'Model status…'}</span>
+          <span className={`pill ${settings?.configured ? 'pass' : 'warn'}`}>{settings ? (settings.configured ? `Model: ${settings.model}` : 'Model setup needed') : 'Model status…'}</span>
         </button>
       </div>
       <div className="sheet-wrap"><main className="sheet">

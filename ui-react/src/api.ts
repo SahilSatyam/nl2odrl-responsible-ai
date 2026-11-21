@@ -30,7 +30,8 @@ export interface TraceEvent { step: number; tool?: string; outcome?: string; arg
 export interface VerdictRow { id: string; passed: boolean; evidence: string }
 export interface SaveRow { step: number; value: unknown; valid: boolean; errors: string[]; attacker: boolean }
 export interface OdrlPair { run_key: string; nl_text: string; nl_label: string; scenario_id: string; policy_variant: string; doc: unknown; valid: boolean; attacker: boolean; outcome?: string }
-export interface ModelSettings { model: string; base_url: string; api_key_set: boolean; configured: boolean; timeout_s: string; max_tokens: string }
+export interface ModelSettings { model: string; strong_model: string; base_url: string; api_key_set: boolean; configured: boolean; timeout_s: string; max_tokens: string }
+export interface ModelSettingsUpdate { base_url: string; model: string; strong_model: string; api_key?: string; max_tokens?: number }
 export interface DraftRow { run_key: string; created_at: string; nl_text: string; decision: string | null; draft: Draft }
 export interface Session { key_fp: string; via: 'local' | 'cookie' | 'bearer'; expires_in?: number | null }
 
@@ -81,7 +82,7 @@ export const api = {
     return json<Decision & { published: boolean; odrl?: unknown }>(`/api/runs/${encodeURIComponent(runKey)}/publish`, post(body));
   },
   settings() { return json<ModelSettings>('/api/settings'); },
-  saveSettings(payload: { base_url: string; api_key: string }) { return json<ModelSettings>('/api/settings', post(payload)); },
+  saveSettings(payload: ModelSettingsUpdate) { return json<ModelSettings>('/api/settings', post(payload)); },
 };
 
 /**

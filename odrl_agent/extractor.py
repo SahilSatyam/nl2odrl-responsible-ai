@@ -155,16 +155,22 @@ class Extractor:
         kept = [c.strip() for c in clauses if c.strip() and c.strip() in text]
         return kept or split_sentences(text)
 
-    def extract(self, text: str, clauses: list[str] | None, *, complex_input: bool) -> ExtractResult:
+    def extract(
+        self,
+        text: str,
+        clauses: list[str] | None,
+        *,
+        complex_input: bool,
+        retry_note: str | None = None,
+    ) -> ExtractResult:
         model = self.route.strong if complex_input else self.route.fast
-        raw = self.llm.complete_json(
-            model=model,
-            messages=[
-                {"role": "system", "content": _system_prompt()},
-                {"role": "user", "content": _source_block(text, clauses)},
-            ],
-            schema=self._schema,
-        )
+        messages = [
+            {"role": "system", "content": _system_prompt()},
+            {"role": "user", "content": _source_block(text, clauses)},
+        ]
+        if retry_note:
+            messages.append({"role": "user", "content": retry_note})
+        raw = self.llm.complete_json(model=model, messages=messages, schema=self._schema)
         ir, errors = parse_ir(raw)
         return ExtractResult(ir, raw, errors, model)
 
