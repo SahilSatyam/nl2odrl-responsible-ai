@@ -28,3 +28,4 @@ node_modules/
 .archify/**/*.finalize*.json
 .archify/**/*.delivery*.json
 .archify/**/*.browser-check.json
+.archify/**/visual-check/
