@@ -97,41 +97,12 @@ compiler (`compiler.py`), stages (`pipeline.py`), tools and persistence all live
 
 ### One run, end to end
 
-```mermaid
-sequenceDiagram
-    actor U as Reviewer
-    participant S as Studio UI
-    participant A as FastAPI app
-    participant P as Pipeline
-    participant M as LLM (untrusted)
-    participant C as Checks<br/>grounding, SHACL, Z3
-    participant G as Publish gate
-    participant D as SQLite
-    U->>S: paste policy text
-    S->>A: POST /api/convert
-    A-->>S: run key
-    S->>A: GET /api/runs/{key}/events (SSE)
-    A->>P: start from queue
-    P->>M: extract PolicyIR
-    M-->>P: PolicyIR JSON
-    P->>C: ground, compile, SHACL, Z3
-    C-->>P: violations
-    opt violations (repair ≤ 2, shrink-only)
-        P->>M: repair
-        M-->>P: narrower PolicyIR
-    end
-    P->>D: save run, trace, ODRL
-    P->>G: draft + findings
-    G->>D: publish if clean, else hold
-    A-->>S: SSE: status, trace, end
-    U->>S: open Review tab
-    S->>A: GET /api/drafts
-    S->>A: POST /api/runs/{key}/publish
-    A->>G: approve, edit or reject + reason
-    G->>D: record decision
-```
+<a href="https://htmlpreview.github.io/?https://github.com/SahilSatyam/nl2odrl-responsible-ai/blob/develop/docs/assets/sequence-interactive.html">
+  <img src="docs/assets/sequence.png" alt="Sequence of one conversion: Studio submits, pipeline extracts and checks, publish gate publishes or holds, reviewer decides" width="100%">
+</a>
 
-<sub>Interactive version: [`docs/assets/sequence-interactive.html`](https://htmlpreview.github.io/?https://github.com/SahilSatyam/nl2odrl-responsible-ai/blob/develop/docs/assets/sequence-interactive.html).</sub>
+<sub>Click the diagram for the interactive version. The source file is
+[`docs/assets/sequence-interactive.html`](docs/assets/sequence-interactive.html); open it locally if the hosted preview is unavailable.</sub>
 
 The pipeline also flags drafts for review when the source text is vague about
 dates or numbers, when one clause says "always" and another "never", or when the
