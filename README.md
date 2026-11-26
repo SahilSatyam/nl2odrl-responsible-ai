@@ -10,7 +10,6 @@ Natural-language access rules in. Verified W3C ODRL 2.2 out. Every run leaves a 
 [![ODRL 2.2](https://img.shields.io/badge/W3C-ODRL%202.2-005A9C.svg)](https://www.w3.org/TR/odrl-model/)
 [![SHACL](https://img.shields.io/badge/validation-SHACL%20%2B%20Z3-6f42c1.svg)](#grounding-reasoning-and-the-publish-gate)
 [![FastAPI](https://img.shields.io/badge/API-FastAPI-009688.svg)](#service)
-[![Tests](https://img.shields.io/badge/tests-663%20passing-brightgreen.svg)](#test)
 
 [Quick start](#quick-start) · [Architecture](#architecture) · [How it works](#how-it-works) · [Safety model](#safety-model) · [Service](#service) · [CLI](#commands)
 
@@ -46,7 +45,7 @@ A median conversion is one model call. Multi-clause inputs get one extra decompo
 | Layer | Components | Code |
 |---|---|---|
 | Studio | React UI built into `ui/`, served by the API | `ui-react/`, `ui/` |
-| Service | FastAPI on Uvicorn, auth, run registry with worker pool and queue, SQLite | `odrl_agent/app.py`, `auth.py`, `db.py` |
+| Service | FastAPI on Uvicorn (single-user, no login), run registry with worker pool and queue, SQLite | `odrl_agent/app.py`, `web.py`, `db.py` |
 | Pipeline | Extract → ground → compile → SHACL → repair → save | `odrl_agent/pipeline.py` |
 | Deterministic core | Grounder, compiler, SHACL, Z3 reasoning (no model calls) | `grounder.py`, `compiler.py`, `reasoning.py` |
 | Governance | Publish gate with human-in-the-loop hold | `publish.py` |
@@ -96,7 +95,10 @@ The framework never owns the pipeline. The IR (`ir.py`), extractor (`extractor.p
 compiler (`compiler.py`), stages (`pipeline.py`), tools and persistence all live in `odrl_agent/`.
 `agentcrash-core` supplies hash-chained traces and deterministic verification.
 
-### The failure it catches
+The pipeline also flags drafts for review when the source text is vague about
+dates or numbers, when one clause says "always" and another "never", or when the
+model dropped a grant or denial that the text states. A model reply cut off at the
+token limit is retried once, then degrades to a held draft instead of an error.
 
 ## Benchmark and release gates (Phase 4)
 
@@ -225,7 +227,7 @@ Model settings are held in server memory via `POST /api/settings`
 
 ```bash
 export PYTHONPATH=.
-python -m pytest        # 685 passed, 1 skipped (live-model only)
+python -m pytest        # live-model tests are skipped without a key
 ```
 
 CI runs the suite on Python 3.11 to 3.13, the chaos gate (`odrl-host chaos`), and the PII guardrail

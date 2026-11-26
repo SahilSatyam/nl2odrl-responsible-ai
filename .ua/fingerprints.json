@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
-  "gitCommitHash": "ecdf1fe27b66c834b37dcb81e773f89bdae10ba3",
-  "generatedAt": "2026-11-21T15:51:19.603Z",
+  "gitCommitHash": "b3e869959b6330627ccee30587206aee2f69059c",
+  "generatedAt": "2026-11-26T10:35:40.800Z",
   "files": {
     ".dockerignore": {
       "filePath": ".dockerignore",
@@ -15,7 +15,7 @@
     },
     ".github/workflows/bench-live.yml": {
       "filePath": ".github/workflows/bench-live.yml",
-      "contentHash": "ce509d67f9ec0a8ec48408817a1fa2ac7448832dad0bb554671a2c1965264eb2",
+      "contentHash": "aff0475ee02c32e110de92a561ff3f973eda97ef234e316751ae55d70430ae49",
       "functions": [],
       "classes": [],
       "imports": [],
@@ -45,32 +45,42 @@
     },
     "README.md": {
       "filePath": "README.md",
-      "contentHash": "dd587cc4674ebf838c237ade8adc361c2e44a42e043c2f4d4a0f9dc74b01d2ee",
+      "contentHash": "7b4024f2dfa1d3021dc02ca6925809ec88363e9d8bdd3f0ff2c7cb6b31093387",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 270,
+      "totalLines": 258,
       "hasStructuralAnalysis": false
     },
     "docker-compose.yml": {
       "filePath": "docker-compose.yml",
-      "contentHash": "4c3dec99b127cbd802fdd03fa1767dac0f99ab6bd3c5a656539d8637470b4f60",
+      "contentHash": "8917a759c85f640298f0a09e8d0e9b91cb278c2cfdd7c05c4724433ea9a3f0a7",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 41,
+      "totalLines": 37,
       "hasStructuralAnalysis": false
     },
     "docs/NL2ODRL-SOTA-Implementation-Plan.md": {
       "filePath": "docs/NL2ODRL-SOTA-Implementation-Plan.md",
-      "contentHash": "6d7d766bc4e157a434fc10cc5db1fef375f831280bc578904af61632423a57c7",
+      "contentHash": "1175812524dc08770d917bd945e2aa58c60073d00bd263d4d840d949ba57f3c1",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 277,
+      "totalLines": 282,
+      "hasStructuralAnalysis": false
+    },
+    "docs/assets/architecture-interactive.html": {
+      "filePath": "docs/assets/architecture-interactive.html",
+      "contentHash": "63fbbd8a1cd617adf43a50a126b5a0dc2ff558a5be01e6f44a93dacf0a52bfb6",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 15032,
       "hasStructuralAnalysis": false
     },
     "odrl_agent/__init__.py": {
@@ -85,7 +95,7 @@
     },
     "odrl_agent/adapter.py": {
       "filePath": "odrl_agent/adapter.py",
-      "contentHash": "ffc8ea01605f8e4edaa92b46e14cfab832d62678e89f1d5f95a1c5c348ea3ef9",
+      "contentHash": "6352c7b29da0a7bf6075ba66ef28060d73e9edd42e8ef62936fc8972daaf2463",
       "functions": [
         {
           "name": "live_timeout_s",
@@ -189,12 +199,12 @@
         "load_doc_store",
         "load_nl_store"
       ],
-      "totalLines": 192,
+      "totalLines": 194,
       "hasStructuralAnalysis": true
     },
     "odrl_agent/app.py": {
       "filePath": "odrl_agent/app.py",
-      "contentHash": "ca2abe15421907f1ff3cca2f23caa2d29f4f86a3b6b004b09873c51176812a16",
+      "contentHash": "3035b299ad1e9310c7220063dfd2ac4ac410d4b71894fe69fbc49d4e500bfee7",
       "functions": [
         {
           "name": "create_app",
@@ -202,12 +212,11 @@
             "root",
             "ui_dir",
             "out_dir",
-            "registry",
-            "sessions"
+            "registry"
           ],
           "returnType": "FastAPI",
           "exported": true,
-          "lineCount": 309
+          "lineCount": 247
         },
         {
           "name": "_query",
@@ -244,12 +253,6 @@
           ]
         },
         {
-          "source": "os",
-          "specifiers": [
-            "os"
-          ]
-        },
-        {
           "source": "time",
           "specifiers": [
             "time"
@@ -270,7 +273,6 @@
         {
           "source": "fastapi",
           "specifiers": [
-            "Depends",
             "FastAPI",
             "Request"
           ]
@@ -309,19 +311,6 @@
           ]
         },
         {
-          "source": "odrl_agent.auth",
-          "specifiers": [
-            "SESSION_COOKIE",
-            "SESSIONS",
-            "Principal",
-            "SessionStore",
-            "authenticate",
-            "csrf_ok",
-            "fingerprint",
-            "key_is_valid"
-          ]
-        },
-        {
           "source": "odrl_agent.observability",
           "specifiers": [
             "METRICS",
@@ -342,178 +331,12 @@
         "create_app",
         "_query"
       ],
-      "totalLines": 390,
-      "hasStructuralAnalysis": true
-    },
-    "odrl_agent/auth.py": {
-      "filePath": "odrl_agent/auth.py",
-      "contentHash": "38176de1eb92c3e167dc88994cb8ac9ae7e897c67d2c97ae367c6f39472887ba",
-      "functions": [
-        {
-          "name": "fingerprint",
-          "params": [
-            "raw"
-          ],
-          "returnType": "str",
-          "exported": true,
-          "lineCount": 3
-        },
-        {
-          "name": "bearer",
-          "params": [
-            "headers"
-          ],
-          "returnType": "str",
-          "exported": true,
-          "lineCount": 5
-        },
-        {
-          "name": "key_is_valid",
-          "params": [
-            "presented",
-            "env_keys",
-            "valid_fps"
-          ],
-          "returnType": "bool",
-          "exported": true,
-          "lineCount": 6
-        },
-        {
-          "name": "live_fingerprints",
-          "params": [
-            "env_keys",
-            "valid_fps"
-          ],
-          "returnType": "set[str]",
-          "exported": true,
-          "lineCount": 2
-        },
-        {
-          "name": "authenticate",
-          "params": [
-            "headers",
-            "cookies",
-            "key_state",
-            "sessions"
-          ],
-          "returnType": "Principal | None",
-          "exported": true,
-          "lineCount": 19
-        },
-        {
-          "name": "csrf_ok",
-          "params": [
-            "method",
-            "principal",
-            "headers"
-          ],
-          "returnType": "bool",
-          "exported": true,
-          "lineCount": 6
-        }
-      ],
-      "classes": [
-        {
-          "name": "Principal",
-          "methods": [
-            "tenant",
-            "scope"
-          ],
-          "properties": [
-            "fp",
-            "via"
-          ],
-          "exported": true,
-          "lineCount": 14
-        },
-        {
-          "name": "SessionStore",
-          "methods": [
-            "__init__",
-            "_prune",
-            "create",
-            "lookup",
-            "revoke",
-            "clear",
-            "__len__"
-          ],
-          "properties": [],
-          "exported": true,
-          "lineCount": 49
-        }
-      ],
-      "imports": [
-        {
-          "source": "hashlib",
-          "specifiers": [
-            "hashlib"
-          ]
-        },
-        {
-          "source": "hmac",
-          "specifiers": [
-            "hmac"
-          ]
-        },
-        {
-          "source": "os",
-          "specifiers": [
-            "os"
-          ]
-        },
-        {
-          "source": "secrets",
-          "specifiers": [
-            "secrets"
-          ]
-        },
-        {
-          "source": "threading",
-          "specifiers": [
-            "threading"
-          ]
-        },
-        {
-          "source": "time",
-          "specifiers": [
-            "time"
-          ]
-        },
-        {
-          "source": "collections.abc",
-          "specifiers": [
-            "Mapping"
-          ]
-        },
-        {
-          "source": "dataclasses",
-          "specifiers": [
-            "dataclass"
-          ]
-        },
-        {
-          "source": "typing",
-          "specifiers": [
-            "Any"
-          ]
-        }
-      ],
-      "exports": [
-        "fingerprint",
-        "bearer",
-        "key_is_valid",
-        "live_fingerprints",
-        "Principal",
-        "SessionStore",
-        "authenticate",
-        "csrf_ok"
-      ],
-      "totalLines": 159,
+      "totalLines": 318,
       "hasStructuralAnalysis": true
     },
     "odrl_agent/bench/__init__.py": {
       "filePath": "odrl_agent/bench/__init__.py",
-      "contentHash": "f6fc627df4aea88f5d8a3717f9f5d687e279ceebdbc319ca7361a3717ac9b2c3",
+      "contentHash": "863c10bcda7418816f776726aff359be2eabd6102287b924555a8b2e74e9761b",
       "functions": [],
       "classes": [],
       "imports": [],
@@ -523,7 +346,7 @@
     },
     "odrl_agent/bench/__main__.py": {
       "filePath": "odrl_agent/bench/__main__.py",
-      "contentHash": "a47970ab6e5629cb863efd1d3511063c02960f7c1df3742b036d9e926d1d31dc",
+      "contentHash": "678664932b723b6ebdd9b8c7088e6fc90129c151494974265d847cb321640c2c",
       "functions": [
         {
           "name": "_print_gates",
@@ -589,7 +412,7 @@
     },
     "odrl_agent/bench/evaluator.py": {
       "filePath": "odrl_agent/bench/evaluator.py",
-      "contentHash": "e5d8f789819eedef483f74fcf647daacf0ec05287b464bd5fbb8bdd0b06be248",
+      "contentHash": "b59b7c127ed36cbea1cd28b729e40e1eb06abe3ea3b44e0d312c5540617e654b",
       "functions": [
         {
           "name": "name_key",
@@ -726,7 +549,7 @@
     },
     "odrl_agent/bench/gates.py": {
       "filePath": "odrl_agent/bench/gates.py",
-      "contentHash": "ca9630bdb813b66cb96a2327ffe808d49fde75888143e6f374be8fe5f8058cf7",
+      "contentHash": "3e1075fb6ecdc9bc7ca812be5e67c1a181e329ddad6c19fe75e2d7a075caf716",
       "functions": [
         {
           "name": "evaluate",
@@ -777,7 +600,7 @@
     },
     "odrl_agent/bench/generate.py": {
       "filePath": "odrl_agent/bench/generate.py",
-      "contentHash": "e6a45a710a63f7f3843ef12974f842e8227bff3390e930ad35efc2d70f2cd15e",
+      "contentHash": "ebe89e0ff85d1739cb3a9a954e2a0871e79a8936756ae31ee4e0f96b0545d753",
       "functions": [
         {
           "name": "_name",
@@ -988,7 +811,7 @@
     },
     "odrl_agent/bench/metrics.py": {
       "filePath": "odrl_agent/bench/metrics.py",
-      "contentHash": "2236dde85f5afa70d2805ae8db39c70447063a7ace6b414a4b54634c3e934f80",
+      "contentHash": "97348e7f126c5e924610fbe4b7cc629097d3a339f0bb18c31913a583ca90766b",
       "functions": [
         {
           "name": "_norm",
@@ -1192,7 +1015,7 @@
     },
     "odrl_agent/bench/oracle.py": {
       "filePath": "odrl_agent/bench/oracle.py",
-      "contentHash": "a621ef1ed92e7c44fc62bca32f4006ed21196f577701ca7cacd651dc7e2aa6ac",
+      "contentHash": "43691f5606e7f101bef0e38760fa9d31ef642f8d98bd897a3a161e1f6e5d8845",
       "functions": [
         {
           "name": "mutate",
@@ -1270,7 +1093,7 @@
     },
     "odrl_agent/bench/pins.py": {
       "filePath": "odrl_agent/bench/pins.py",
-      "contentHash": "b48b3715d7feadea21ed825a9683fce5fee9bdb12866477d1f9187ac25628211",
+      "contentHash": "8d178fcc1ddd2aff7127864a6374671be8ef92cca292cd5456dddc4da6307fb3",
       "functions": [
         {
           "name": "_sha",
@@ -1369,7 +1192,7 @@
     },
     "odrl_agent/bench/runner.py": {
       "filePath": "odrl_agent/bench/runner.py",
-      "contentHash": "391430849e7fe9b793e289ffbfe1ed93f4e5b0b5fb18d82ae1eef79c638a589a",
+      "contentHash": "4d218aa7bda2d68530fd549f6a48095d8d39d25ffd12ab2d033e323d592f6805",
       "functions": [
         {
           "name": "load_cases",
@@ -1626,7 +1449,7 @@
     },
     "odrl_agent/cli.py": {
       "filePath": "odrl_agent/cli.py",
-      "contentHash": "fc2c2e73915e32411e94c2359bbebce0bcb325a982bed3340a41fe1d256f20ad",
+      "contentHash": "961ee9ca83eefa5ad4c9d95cc16886e31abe125066fda7c3ea734f33def61ab6",
       "functions": [
         {
           "name": "cmd_run",
@@ -1645,24 +1468,6 @@
           "returnType": "list[dict[str, Any]]",
           "exported": true,
           "lineCount": 36
-        },
-        {
-          "name": "cmd_keys",
-          "params": [
-            "argv"
-          ],
-          "returnType": "int",
-          "exported": true,
-          "lineCount": 53
-        },
-        {
-          "name": "cmd_billing",
-          "params": [
-            "argv"
-          ],
-          "returnType": "int",
-          "exported": true,
-          "lineCount": 45
         },
         {
           "name": "cmd_optimize_prompts",
@@ -1748,7 +1553,7 @@
           ],
           "returnType": "int",
           "exported": true,
-          "lineCount": 39
+          "lineCount": 33
         }
       ],
       "classes": [],
@@ -1757,12 +1562,6 @@
           "source": "argparse",
           "specifiers": [
             "argparse"
-          ]
-        },
-        {
-          "source": "csv",
-          "specifiers": [
-            "csv"
           ]
         },
         {
@@ -1903,8 +1702,6 @@
       "exports": [
         "cmd_run",
         "_retrieved_doc_spans",
-        "cmd_keys",
-        "cmd_billing",
         "cmd_optimize_prompts",
         "cmd_serve",
         "cmd_chaos",
@@ -1915,7 +1712,7 @@
         "_regress_golden",
         "main"
       ],
-      "totalLines": 937,
+      "totalLines": 828,
       "hasStructuralAnalysis": true
     },
     "odrl_agent/compiler.py": {
@@ -2528,7 +2325,7 @@
     },
     "odrl_agent/extractor.py": {
       "filePath": "odrl_agent/extractor.py",
-      "contentHash": "cc7bba18192d2903249c3e737bf6c817bb999814d79d68aac7923f7a420b36cb",
+      "contentHash": "3d792b755a1cb6e358f8ce29fc127c538c4fc53ea49021de8460a1c054b96b13",
       "functions": [
         {
           "name": "split_sentences",
@@ -2595,6 +2392,15 @@
           "lineCount": 2
         },
         {
+          "name": "SlotAnswer",
+          "methods": [],
+          "properties": [
+            "answer"
+          ],
+          "exported": true,
+          "lineCount": 5
+        },
+        {
           "name": "ModelRoute",
           "methods": [],
           "properties": [
@@ -2621,12 +2427,13 @@
           "methods": [
             "__init__",
             "decompose",
+            "slot_fill",
             "extract",
             "repair"
           ],
           "properties": [],
           "exported": true,
-          "lineCount": 67
+          "lineCount": 114
         }
       ],
       "imports": [
@@ -2675,12 +2482,15 @@
         {
           "source": "odrl_agent.llm",
           "specifiers": [
-            "StructuredLlm"
+            "LlmError",
+            "StructuredLlm",
+            "TruncatedOutputError"
           ]
         }
       ],
       "exports": [
         "ClauseSplit",
+        "SlotAnswer",
         "ModelRoute",
         "ExtractResult",
         "split_sentences",
@@ -2691,12 +2501,12 @@
         "parse_ir",
         "Extractor"
       ],
-      "totalLines": 195,
+      "totalLines": 289,
       "hasStructuralAnalysis": true
     },
     "odrl_agent/grounder.py": {
       "filePath": "odrl_agent/grounder.py",
-      "contentHash": "ecf02f9b3094f4b567de1e131f8be410d0f9931647808a4a65664472447038e2",
+      "contentHash": "cca902f402400ddbaa995e3379878f7f6a6292665833ae22dcc43fda43ed7c7e",
       "functions": [
         {
           "name": "normalize_name",
@@ -2721,7 +2531,7 @@
           "params": [],
           "returnType": "list[str]",
           "exported": true,
-          "lineCount": 9
+          "lineCount": 8
         },
         {
           "name": "injected_ranges",
@@ -2927,7 +2737,7 @@
         "Grounder",
         "ground_entities"
       ],
-      "totalLines": 404,
+      "totalLines": 403,
       "hasStructuralAnalysis": true
     },
     "odrl_agent/instrument.py": {
@@ -3285,7 +3095,7 @@
     },
     "odrl_agent/llm.py": {
       "filePath": "odrl_agent/llm.py",
-      "contentHash": "5cf7cd1f35781eb1e44fcbed41ffd25dfea51c58bd9c5993d4773df5c5be8bac",
+      "contentHash": "5a00379e17f1278b6c148295399be2c6288eec23087995f115550be0834a0463",
       "functions": [],
       "classes": [
         {
@@ -3301,6 +3111,13 @@
           "properties": [],
           "exported": true,
           "lineCount": 2
+        },
+        {
+          "name": "TruncatedOutputError",
+          "methods": [],
+          "properties": [],
+          "exported": true,
+          "lineCount": 7
         },
         {
           "name": "LlmUsage",
@@ -3337,7 +3154,7 @@
             "usage"
           ],
           "exported": true,
-          "lineCount": 107
+          "lineCount": 109
         }
       ],
       "imports": [
@@ -3382,10 +3199,11 @@
       "exports": [
         "LlmError",
         "LlmNotConfiguredError",
+        "TruncatedOutputError",
         "LlmUsage",
         "StructuredLlm"
       ],
-      "totalLines": 172,
+      "totalLines": 183,
       "hasStructuralAnalysis": true
     },
     "odrl_agent/netguard.py": {
@@ -3456,7 +3274,7 @@
     },
     "odrl_agent/observability.py": {
       "filePath": "odrl_agent/observability.py",
-      "contentHash": "8f366b98231aa6b7e0e1b73621f5817221e95b89b650106dc6548f379bef3e1c",
+      "contentHash": "23d274688c4d33fc8376267b1d8152d7906d8977ec56b2d4d07809d97bb79bd4",
       "functions": [
         {
           "name": "request_id",
@@ -3705,8 +3523,48 @@
     },
     "odrl_agent/pipeline.py": {
       "filePath": "odrl_agent/pipeline.py",
-      "contentHash": "45870ba432b6c03dcf572721064b49a451b4528b142d86d2dcb27f3dad3d6484",
+      "contentHash": "02980c49c1fd9fd4f812e07833a5da862310fdba1528e60f4b0668801d02078a",
       "functions": [
+        {
+          "name": "_author_vague_flags",
+          "params": [
+            "ir"
+          ],
+          "returnType": "PolicyIR",
+          "exported": true,
+          "lineCount": 41
+        },
+        {
+          "name": "_looks_contradictory",
+          "params": [
+            "source"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "_missing_side_violations",
+          "params": [
+            "source",
+            "ir"
+          ],
+          "returnType": "list[str]",
+          "exported": true,
+          "lineCount": 53
+        },
+        {
+          "name": "_backstop_empty_policy",
+          "params": [
+            "source",
+            "ir",
+            "extractor",
+            "call"
+          ],
+          "returnType": "PolicyIR",
+          "exported": true,
+          "lineCount": 43
+        },
         {
           "name": "_normalize",
           "params": [
@@ -3840,7 +3698,7 @@
           ],
           "returnType": "tuple[PolicyDraft, dict[str, Any] | None]",
           "exported": true,
-          "lineCount": 178
+          "lineCount": 208
         },
         {
           "name": "run_conversion",
@@ -3995,17 +3853,21 @@
         {
           "source": "odrl_agent.extractor",
           "specifiers": [
+            "SLOT_ASSET_QUESTION",
+            "SLOT_PARTY_QUESTION",
             "DEFAULT_MODEL",
             "Extractor",
             "ExtractResult",
             "ModelRoute",
-            "classify"
+            "classify",
+            "split_sentences"
           ]
         },
         {
           "source": "odrl_agent.grounder",
           "specifiers": [
             "INJECTED_GRANT",
+            "SUSPICIOUS_NAME",
             "Grounder"
           ]
         },
@@ -4064,6 +3926,10 @@
         }
       ],
       "exports": [
+        "_author_vague_flags",
+        "_looks_contradictory",
+        "_missing_side_violations",
+        "_backstop_empty_policy",
         "PipelineError",
         "PolicyDraft",
         "_normalize",
@@ -4082,12 +3948,12 @@
         "convert",
         "run_conversion"
       ],
-      "totalLines": 733,
+      "totalLines": 951,
       "hasStructuralAnalysis": true
     },
     "odrl_agent/publish.py": {
       "filePath": "odrl_agent/publish.py",
-      "contentHash": "794805b1f9263a9885398b8f5d58d7701512ae4ce4c2f501546d1d8fb3472dbb",
+      "contentHash": "5f55080165b98c966a3e620c1f0634dec5f3c399224fd892ab356f0654bb40cd",
       "functions": [
         {
           "name": "ensure_tables",
@@ -4152,26 +4018,24 @@
             "conn",
             "run_key",
             "events",
-            "reviewer_fp",
             "decision",
             "reason",
             "edited_ir"
           ],
           "returnType": "dict[str, Any]",
           "exported": true,
-          "lineCount": 75
+          "lineCount": 74
         },
         {
           "name": "list_drafts",
           "params": [
             "conn",
-            "scope",
             "include_decided",
             "limit"
           ],
           "returnType": "list[dict[str, Any]]",
           "exported": true,
-          "lineCount": 39
+          "lineCount": 31
         }
       ],
       "classes": [
@@ -4274,7 +4138,7 @@
         "decide",
         "list_drafts"
       ],
-      "totalLines": 301,
+      "totalLines": 292,
       "hasStructuralAnalysis": true
     },
     "odrl_agent/reasoning.py": {
@@ -4920,33 +4784,8 @@
     },
     "odrl_agent/web.py": {
       "filePath": "odrl_agent/web.py",
-      "contentHash": "72317ab4ddc5c92bb8fd7cde9d7349f0eca5c97e2b60efb2c2d1c6f89f516b39",
+      "contentHash": "c5e29a7c644c95fbbc87881e22cd1e69828dec06a6ae5819b59c9ab26a76fe54",
       "functions": [
-        {
-          "name": "_api_keys",
-          "params": [],
-          "returnType": "list[str]",
-          "exported": true,
-          "lineCount": 5
-        },
-        {
-          "name": "_key_state",
-          "params": [
-            "conn"
-          ],
-          "returnType": "tuple[list[str], set[str], bool]",
-          "exported": true,
-          "lineCount": 13
-        },
-        {
-          "name": "key_state",
-          "params": [
-            "conn"
-          ],
-          "returnType": "tuple[list[str], set[str], bool]",
-          "exported": true,
-          "lineCount": 3
-        },
         {
           "name": "find_repo_root",
           "params": [
@@ -4983,12 +4822,11 @@
             "max_steps",
             "root",
             "attempt",
-            "out_dir",
-            "tenant"
+            "out_dir"
           ],
           "returnType": "dict[str, Any]",
           "exported": true,
-          "lineCount": 42
+          "lineCount": 40
         },
         {
           "name": "read_events",
@@ -5032,7 +4870,7 @@
           ],
           "returnType": "dict[str, Any]",
           "exported": true,
-          "lineCount": 39
+          "lineCount": 38
         },
         {
           "name": "_draft_from",
@@ -5053,7 +4891,7 @@
           ],
           "returnType": "None",
           "exported": true,
-          "lineCount": 51
+          "lineCount": 44
         },
         {
           "name": "_scripted_transport",
@@ -5092,135 +4930,36 @@
           ],
           "returnType": "Any",
           "exported": true,
-          "lineCount": 6
-        },
-        {
-          "name": "keys_db",
-          "params": [
-            "root",
-            "out_dir"
-          ],
-          "returnType": "Any",
-          "exported": true,
-          "lineCount": 3
-        },
-        {
-          "name": "_ensure_saas_tables",
-          "params": [
-            "conn"
-          ],
-          "returnType": "None",
-          "exported": true,
-          "lineCount": 4
-        },
-        {
-          "name": "_ensure_tenant_table",
-          "params": [
-            "conn"
-          ],
-          "returnType": "None",
-          "exported": true,
-          "lineCount": 2
-        },
-        {
-          "name": "_fp",
-          "params": [
-            "raw"
-          ],
-          "returnType": "str",
-          "exported": true,
           "lineCount": 5
-        },
-        {
-          "name": "_stored_key_fps",
-          "params": [
-            "conn"
-          ],
-          "returnType": "set[str]",
-          "exported": true,
-          "lineCount": 8
-        },
-        {
-          "name": "issue_api_key",
-          "params": [
-            "conn",
-            "label"
-          ],
-          "returnType": "str",
-          "exported": true,
-          "lineCount": 13
-        },
-        {
-          "name": "revoke_api_key",
-          "params": [
-            "conn",
-            "fp_prefix"
-          ],
-          "returnType": "int",
-          "exported": true,
-          "lineCount": 10
-        },
-        {
-          "name": "list_api_keys",
-          "params": [
-            "conn"
-          ],
-          "returnType": "list[dict[str, Any]]",
-          "exported": true,
-          "lineCount": 10
-        },
-        {
-          "name": "_tenant_for",
-          "params": [
-            "conn",
-            "run_key"
-          ],
-          "returnType": "str",
-          "exported": true,
-          "lineCount": 6
         },
         {
           "name": "_list_runs",
           "params": [
             "conn",
-            "flags",
-            "key_fp"
+            "flags"
           ],
           "returnType": "list[dict[str, Any]]",
           "exported": true,
-          "lineCount": 38
+          "lineCount": 9
         },
         {
           "name": "_list_pairs",
           "params": [
             "conn",
-            "flags",
-            "key_fp"
+            "flags"
           ],
           "returnType": "list[dict[str, Any]]",
           "exported": true,
-          "lineCount": 42
-        },
-        {
-          "name": "billing_lines",
-          "params": [
-            "conn",
-            "key_fp",
-            "since"
-          ],
-          "returnType": "list[dict[str, Any]]",
-          "exported": true,
-          "lineCount": 23
+          "lineCount": 9
         },
         {
           "name": "_usage_rows",
           "params": [
-            "conn",
-            "key_fp"
+            "conn"
           ],
           "returnType": "list[dict[str, Any]]",
           "exported": true,
-          "lineCount": 37
+          "lineCount": 11
         },
         {
           "name": "_env_int",
@@ -5245,9 +4984,7 @@
         },
         {
           "name": "model_status",
-          "params": [
-            "tenant"
-          ],
+          "params": [],
           "returnType": "dict[str, Any]",
           "exported": true,
           "lineCount": 12
@@ -5255,8 +4992,7 @@
         {
           "name": "apply_model_settings",
           "params": [
-            "body",
-            "tenant"
+            "body"
           ],
           "returnType": "dict[str, Any]",
           "exported": true,
@@ -5309,7 +5045,7 @@
           ],
           "properties": [],
           "exported": true,
-          "lineCount": 262
+          "lineCount": 256
         },
         {
           "name": "ServerSettings",
@@ -5322,7 +5058,7 @@
           ],
           "properties": [],
           "exported": true,
-          "lineCount": 38
+          "lineCount": 35
         }
       ],
       "imports": [
@@ -5470,9 +5206,6 @@
         }
       ],
       "exports": [
-        "_api_keys",
-        "_key_state",
-        "key_state",
         "ConvertError",
         "find_repo_root",
         "load_yaml",
@@ -5488,18 +5221,8 @@
         "run_and_store",
         "_public_snapshot",
         "_db_conn",
-        "keys_db",
-        "_ensure_saas_tables",
-        "_ensure_tenant_table",
-        "_fp",
-        "_stored_key_fps",
-        "issue_api_key",
-        "revoke_api_key",
-        "list_api_keys",
-        "_tenant_for",
         "_list_runs",
         "_list_pairs",
-        "billing_lines",
         "_usage_rows",
         "BusyError",
         "_env_int",
@@ -5510,7 +5233,7 @@
         "apply_model_settings",
         "serve_ui"
       ],
-      "totalLines": 1143,
+      "totalLines": 884,
       "hasStructuralAnalysis": true
     },
     "policies/default.yaml": {
@@ -5802,7 +5525,7 @@
     },
     "ui-react/src/App.tsx": {
       "filePath": "ui-react/src/App.tsx",
-      "contentHash": "191ef660dfea503fc39d3cfa9fcdd2c63b7acad8b39695f5d20854c065d2139e",
+      "contentHash": "45912daec5da3422877a89892f28e26feccb1fd063c794fe2049435d916db623",
       "functions": [
         {
           "name": "highlightJson",
@@ -5845,7 +5568,7 @@
             "{ initial, onClose, onSaved }"
           ],
           "exported": false,
-          "lineCount": 33
+          "lineCount": 30
         },
         {
           "name": "ConvertView",
@@ -5861,7 +5584,7 @@
             "{ focusKey, onConsumed }"
           ],
           "exported": false,
-          "lineCount": 80
+          "lineCount": 79
         },
         {
           "name": "Highlighted",
@@ -5916,12 +5639,12 @@
       "exports": [
         "App"
       ],
-      "totalLines": 432,
+      "totalLines": 428,
       "hasStructuralAnalysis": true
     },
     "ui-react/src/api.ts": {
       "filePath": "ui-react/src/api.ts",
-      "contentHash": "0fc0c64f4cae72d168fe13f7fcbc633b9f0e6b8a1ac578b1a4a301dcef925691",
+      "contentHash": "66441820b7b9a796035a57839d474d5fb4cfc3e6be5020da03cebf07b90b713b",
       "functions": [
         {
           "name": "json",
@@ -5984,7 +5707,7 @@
         "followRun",
         "fmt"
       ],
-      "totalLines": 119,
+      "totalLines": 114,
       "hasStructuralAnalysis": true
     },
     "ui-react/src/index.css": {
@@ -6085,7 +5808,7 @@
     },
     "ui/index.html": {
       "filePath": "ui/index.html",
-      "contentHash": "4ca1620aecb9aacd4138ea04e4eb2f8b4199df37469f2f99cd43cf95496e5b74",
+      "contentHash": "18b7ef98332f0eaf10c5374644e48d3cfea1133142a3dd83aad1ad39bd577740",
       "functions": [],
       "classes": [],
       "imports": [],

@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "NL → ODRL: Convert, Check, Review",
+    "output": ".archify/sequence-nl2odrl-20261127-120000/nl2odrl-sequence.html",
+    "quality_profile": "showcase"
+  },
+  "participants": [
+    { "id": "user", "type": "external", "label": "Reviewer", "sublabel": "local user" },
+    { "id": "studio", "type": "frontend", "label": "Studio UI", "sublabel": "React, ui-react/" },
+    { "id": "api", "type": "backend", "label": "FastAPI app", "sublabel": "app.py + RunRegistry" },
+    { "id": "pipeline", "type": "backend", "label": "Pipeline", "sublabel": "pipeline.py" },
+    { "id": "model", "type": "external", "label": "LLM", "sublabel": "untrusted extractor" },
+    { "id": "checks", "type": "security", "label": "Checks", "sublabel": "grounding, SHACL, Z3" },
+    { "id": "gate", "type": "security", "label": "Publish gate", "sublabel": "publish.py" },
+    { "id": "db", "type": "database", "label": "SQLite", "sublabel": "db.py" }
+  ],
+  "segments": [
+    { "from": 150, "to": 255, "label": "Submit" },
+    { "from": 262, "to": 510, "label": "Convert and check" },
+    { "from": 556, "to": 696, "label": "Human review" }
+  ],
+  "messages": [
+    { "id": "paste", "from": "user", "to": "studio", "y": 160, "label": "paste policy text", "variant": "default" },
+    { "id": "convert", "from": "studio", "to": "api", "y": 188, "label": "POST /api/convert", "variant": "emphasis" },
+    { "id": "accepted", "from": "api", "to": "studio", "y": 216, "label": "202 + run key", "variant": "return" },
+    { "id": "events-open", "from": "studio", "to": "api", "y": 244, "label": "GET /runs/{key}/events", "variant": "default" },
+    { "id": "start", "from": "api", "to": "pipeline", "y": 272, "label": "start from queue", "variant": "default" },
+    { "id": "extract", "from": "pipeline", "to": "model", "y": 300, "label": "extract PolicyIR", "variant": "emphasis" },
+    { "id": "ir", "from": "model", "to": "pipeline", "y": 328, "label": "PolicyIR JSON", "variant": "return" },
+    { "id": "verify", "from": "pipeline", "to": "checks", "y": 356, "label": "ground, compile, SHACL, Z3", "variant": "security" },
+    { "id": "violations", "from": "checks", "to": "pipeline", "y": 384, "label": "violations", "variant": "return" },
+    { "id": "repair", "from": "pipeline", "to": "model", "y": 412, "label": "repair, shrink-only", "variant": "dashed" },
+    { "id": "save-run", "from": "pipeline", "to": "db", "y": 440, "label": "save run, trace, ODRL", "variant": "default" },
+    { "id": "draft", "from": "pipeline", "to": "gate", "y": 468, "label": "draft + findings", "variant": "security" },
+    { "id": "publish-or-hold", "from": "gate", "to": "db", "y": 496, "label": "publish if clean, else hold", "variant": "default" },
+    { "id": "sse", "from": "api", "to": "studio", "y": 524, "label": "SSE: status, trace, end", "variant": "return" },
+    { "id": "open-review", "from": "user", "to": "studio", "y": 570, "label": "open Review tab", "variant": "default" },
+    { "id": "list-drafts", "from": "studio", "to": "api", "y": 598, "label": "GET /api/drafts", "variant": "default" },
+    { "id": "decide", "from": "studio", "to": "api", "y": 626, "label": "POST /runs/{key}/publish", "variant": "emphasis" },
+    { "id": "decision", "from": "api", "to": "gate", "y": 654, "label": "approve, edit or reject + reason", "variant": "security" },
+    { "id": "record", "from": "gate", "to": "db", "y": 682, "label": "record decision", "variant": "default" }
+  ],
+  "activations": [
+    { "participant": "pipeline", "from": 267, "to": 474, "type": "backend" },
+    { "participant": "gate", "from": 463, "to": 502, "type": "security" },
+    { "participant": "gate", "from": 649, "to": 688, "type": "security" }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Model is untrusted",
+      "items": [
+        "The LLM only returns a PolicyIR. It never calls tools and never writes ODRL.",
+        "Repairs may narrow grants, never widen them."
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Gate",
+      "items": [
+        "Only a clean draft is published automatically.",
+        "Everything else waits in Review. A run gets one decision, with a reason."
+      ]
+    }
+  ]
+}
