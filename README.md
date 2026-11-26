@@ -63,8 +63,8 @@ cd ui-react && npm ci && npm run build && cd ..   # builds the studio into ui/
 odrl-host serve --port 8901               # open http://localhost:8901/
 ```
 
-Or run one container: `docker compose up --build` (same port; pass `LLAMA_API_KEY`,
-`LLAMA_BASE_URL` and `NL2ODRL_API_KEYS` through the environment).
+Or run one container: `docker compose up --build` (same port; pass `LLAMA_API_KEY`
+and `LLAMA_BASE_URL` through the environment).
 
 Requirements: Python 3.11+, Node for the studio build. **No API key is needed** for
 fixtures, checks, diagnosis, the studio server or the test suite. Only live conversion needs one
@@ -202,18 +202,12 @@ Without a key, `odrl-host run` fails closed with `E_MODEL_API` (exit 5) and name
   `histogram_quantile(0.95, sum(rate(nl2odrl_queue_wait_seconds_bucket[5m])) by (le))`
 - **AgentCrash SDK**: each conversion runs inside `AgentCrash.run()`. Stages, model calls and tool calls are SDK events written to a hash-chained `<trace>.sdk.jsonl` (HMAC-signed with `AGENTCRASH_SIGNING_KEY`), exported to `AGENTCRASH_ENDPOINT` when set, and to OpenTelemetry with `NL2ODRL_OTEL=1`.
 
-### Authentication and tenancy
+### Local server (no accounts, no keys)
 
-With no keys configured the server is open, for local single-user use. Set `NL2ODRL_API_KEYS`
-(comma-separated) or issue keys with `odrl-host keys issue --label L`, and every `/api/*` call then
-needs `Authorization: Bearer <key>`; anything else gets `E_AUTH` (401). The gate fails closed:
-revoking all keys denies everyone.
-
-- Exchange a key for an `HttpOnly; SameSite=Strict` session cookie with `POST /api/session`. The studio never stores the key. Cookie-authenticated writes must send `X-Requested-With: nl2odrl`.
-- `odrl-host keys list` shows fingerprints only. `odrl-host keys revoke --fp <prefix>` disables a key.
-- `GET /api/usage` reports per-key run and token totals.
-- Runs, pairs and snapshots are scoped to the calling key. Attribution lives in the `nl2odrl_run_tenants` sidecar table, so framework upgrades never touch it.
-- Model settings are held per tenant in server memory. One tenant cannot change another's endpoint or key.
+The server is a single-user local process: every `/api/*` route is open and
+needs no login. `GET /api/usage` reports local run and token totals.
+Model settings are held in server memory via `POST /api/settings`
+(the key is never echoed, logged, or traced).
 
 ## Commands
 
@@ -225,15 +219,13 @@ revoking all keys denies everyone.
 | `odrl-host optimize-prompts [--model M] [--max-live-calls N] [--out O]` | Budgeted DSPy probe of the conversion instruction (needs a key) |
 | `odrl-host serve [--port P] [--bind B]` | Run the Studio API and UI |
 | `odrl-host chaos [--scenario S] [--seed N] [--max-cases N] [--report-out R]` | Fuzz fault schedules against the live pipeline (mocked model); exit 1 on any invariant violation |
-| `odrl-host keys issue --label L` / `list` / `revoke --fp P` | Manage product API keys (only fingerprints are stored) |
-| `odrl-host billing export [--key-fp F] [--since T] [--format json\|csv]` | Dump per-run billing line items (vendor-neutral) |
 | `agentcrash check --trace T --plugin odrl_agent.verifiers --invariant I [--state S] [--report-out R] [--scan-pii]` | Framework verdict over any trace |
 
 ## Test
 
 ```bash
 export PYTHONPATH=.
-python -m pytest        # 663 passed, 1 skipped (live-model only)
+python -m pytest        # 685 passed, 1 skipped (live-model only)
 ```
 
 CI runs the suite on Python 3.11 to 3.13, the chaos gate (`odrl-host chaos`), and the PII guardrail

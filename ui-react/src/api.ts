@@ -18,7 +18,7 @@ export interface Draft {
 export interface Decision { decision: 'approve' | 'edit' | 'reject'; reason: string; reviewer_fp: string; edited: boolean; widening: string[]; alerts: string[]; created_at: string }
 export interface RunSnapshot {
   run_key: string; status: 'queued' | 'running' | 'done' | 'error';
-  tenant?: string; request_id?: string | null;
+  request_id?: string | null;
   spec: RunSpec; nl_text: string; nl_label?: string;
   events: TraceEvent[]; usage_total: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
   model_calls: number; verdict: { verdict: string; results: VerdictRow[] } | null;
@@ -32,7 +32,6 @@ export interface SaveRow { step: number; value: unknown; valid: boolean; errors:
 export interface OdrlPair { run_key: string; nl_text: string; nl_label: string; scenario_id: string; policy_variant: string; doc: unknown; valid: boolean; attacker: boolean; outcome?: string }
 export interface ModelSettings { model: string; base_url: string; api_key_set: boolean; configured: boolean; timeout_s: string; max_tokens: string }
 export interface DraftRow { run_key: string; created_at: string; nl_text: string; decision: string | null; draft: Draft }
-export interface Session { key_fp: string; via: 'local' | 'cookie' | 'bearer'; expires_in?: number | null }
 
 /** Error carrying the server's code and optional structured detail. */
 export class ApiError extends Error {
@@ -47,11 +46,10 @@ export class ApiError extends Error {
   }
 }
 
-// The studio key is exchanged once for an HttpOnly session cookie; it is never
-// written to localStorage. Every request sends the CSRF header the server
-// requires on cookie-authenticated writes.
+// Single-user local server: no login, no sessions. The model key is kept in
+// the server process only, never in localStorage.
 async function json<T>(url: string, init?: RequestInit): Promise<T> {
-  const headers: Record<string, string> = { Accept: 'application/json', 'X-Requested-With': 'nl2odrl' };
+  const headers: Record<string, string> = { Accept: 'application/json' };
   const r = await fetch(url, {
     ...init,
     credentials: 'same-origin',
@@ -67,9 +65,6 @@ async function json<T>(url: string, init?: RequestInit): Promise<T> {
 const post = (body: unknown): RequestInit => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
 export const api = {
-  login(api_key: string) { return json<Session>('/api/session', post({ api_key })); },
-  logout() { return json<{ ok: boolean }>('/api/session', { method: 'DELETE' }); },
-  whoami() { return json<Session>('/api/session'); },
   convert(nl_text: string) {
     return json<{ run_key: string; status: string }>('/api/convert', post({ nl_text, policy_variant: 'fixed', seed: 42, max_steps: 12 }));
   },

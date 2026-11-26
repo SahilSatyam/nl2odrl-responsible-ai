@@ -1,12 +1,11 @@
-"""Service core for NL2ODRL Studio: run queue, storage, keys, tenant settings.
+"""Service core for NL2ODRL Studio: run queue, storage, model settings.
 
 The HTTP layer is :mod:`odrl_agent.app` (FastAPI on Uvicorn); this module
 holds what it calls: :class:`RunRegistry` (bounded worker pool + queue with
 honest ``Retry-After``, TTL/size-bounded run memory), ``run_and_store``
-(executes one conversion and records it in ``agentcrash.db``), API-key
-issue/revoke/list, per-tenant :class:`ServerSettings`, and the tenant-scoped
-list queries. Finished runs are recorded in SQLite; the trace JSONL files
-remain the immutable artifact layer.
+(executes one conversion and records it in ``agentcrash.db``), process-local
+:class:`ServerSettings`, and the run/policy list queries. Finished runs are
+recorded in SQLite; the trace JSONL files remain the immutable artifact layer.
 """
 
 from __future__ import annotations
@@ -81,40 +80,6 @@ SSE_POLL_SECONDS = 0.25
 SSE_HEARTBEAT_SECONDS = 15.0
 SSE_MAX_SECONDS = 600.0
 
-#: Comma-separated product API keys. The gate is off only while no keys
-#: exist anywhere (local single-user mode). Env keys or `odrl-host keys
-#: issue` turn it on: every /api/* call then needs a Bearer key, and the
-#: gate fails closed — revoking all keys denies everyone instead of opening.
-API_KEYS_ENV = "NL2ODRL_API_KEYS"
-
-
-def _api_keys() -> list[str]:
-    """Configured product keys (empty means the gate is off)."""
-    return [
-        k.strip() for k in os.environ.get(API_KEYS_ENV, "").split(",") if k.strip()
-    ]
-
-
-def _key_state(conn: Any) -> tuple[list[str], set[str], bool]:
-    """(env keys, valid fingerprints, gate-on). The gate fails closed:
-
-    once keys have ever been issued it stays on even if all are revoked.
-    """
-    _ensure_saas_tables(conn)
-    rows = [
-        {k: r[k] for k in r.keys()}
-        for r in conn.execute("SELECT key_fp, revoked FROM nl2odrl_api_keys")
-    ]
-    valid = {r["key_fp"] for r in rows if not r["revoked"]}
-    env_keys = _api_keys()
-    return env_keys, valid, bool(env_keys) or bool(rows)
-
-
-def key_state(conn: Any) -> tuple[list[str], set[str], bool]:
-    """Public alias used by the FastAPI app (env keys, live fps, gate-on)."""
-    return _key_state(conn)
-
-
 class ConvertError(ValueError):
     """Bad convert request (HTTP 400)."""
 
@@ -163,7 +128,6 @@ def build_inline_run(
     root: Path,
     attempt: int,
     out_dir: Path | None = None,
-    tenant: str = "local",
 ) -> dict[str, Any]:
     """Build the scenario/policy/paths for one pasted-NL run."""
     scenario_path = root / "scenarios" / BASE_SCENARIO / "scenario.yaml"
@@ -192,7 +156,6 @@ def build_inline_run(
         "run_id": run_id,
         "nl_text": nl_text,
         "nl_label": "user_supplied",
-        "tenant": tenant,
         "trace_path": str(out / "traces" / f"{run_id}.jsonl"),
         "state_path": str(out / "reports" / f"{run_id}.state.json"),
         "db_path": str(out / "agentcrash.db"),
@@ -276,7 +239,6 @@ def _snapshot_from_parts(
     return {
         "run_key": run_key,
         "status": status,
-        "tenant": spec.get("tenant", "local"),
         "spec": {
             "scenario_id": spec["scenario_id"],
             "policy_variant": spec["variant"],
@@ -315,13 +277,6 @@ def _record_snapshot(
     conn = db_module.connect(Path(db_path))
     try:
         db_module.migrate(conn)
-        _ensure_tenant_table(conn)
-        conn.execute(
-            "INSERT OR REPLACE INTO nl2odrl_run_tenants (run_key, key_fp, created_at)"
-            " VALUES (?, ?, ?)",
-            (run_key, spec.get("tenant", "local"), spec.get("created_at")),
-        )
-        conn.commit()
         results = (snap["verdict"] or {}).get("results", [])
         db_module.insert_run(
             conn,
@@ -401,7 +356,7 @@ def run_and_store(
             transport=_scripted_transport(actions),
         )
     else:
-        llm_config = SETTINGS.config(spec.get("tenant", "local"))
+        llm_config = SETTINGS.config()
     try:
         Path(spec["trace_path"]).parent.mkdir(parents=True, exist_ok=True)
         Path(spec["state_path"]).parent.mkdir(parents=True, exist_ok=True)
@@ -487,247 +442,42 @@ def _db_conn(root: Path, out_dir: Path | None = None) -> Any:
     out = out_dir or root
     conn = db_module.connect(out / "agentcrash.db")
     db_module.migrate(conn)
-    _ensure_tenant_table(conn)
     return conn
 
 
-def keys_db(root: Path, out_dir: Path | None = None) -> Any:
-    """Connection with SaaS tables ensured, for CLI key management."""
-    return _db_conn(root, out_dir)
-
-
-TENANT_TABLE_SQL = (
-    "CREATE TABLE IF NOT EXISTS nl2odrl_run_tenants ("
-    "run_key TEXT PRIMARY KEY, key_fp TEXT NOT NULL, created_at TEXT NOT NULL)"
-)
-
-KEYS_TABLE_SQL = (
-    "CREATE TABLE IF NOT EXISTS nl2odrl_api_keys ("
-    "key_fp TEXT PRIMARY KEY, label TEXT NOT NULL,"
-    " created_at TEXT NOT NULL, revoked INTEGER NOT NULL DEFAULT 0)"
-)
-
-
-def _ensure_saas_tables(conn: Any) -> None:
-    """SaaS sidecars (tenant attribution, issued keys); framework-safe."""
-    conn.execute(TENANT_TABLE_SQL)
-    conn.execute(KEYS_TABLE_SQL)
-
-
-def _ensure_tenant_table(conn: Any) -> None:
-    _ensure_saas_tables(conn)
-
-
-def _fp(raw: str) -> str:
-    """Attribution id: sha256 prefix. Raw keys are never stored."""
-    import hashlib
-
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
-
-
-def _stored_key_fps(conn: Any) -> set[str]:
-    _ensure_saas_tables(conn)
-    return {
-        r["key_fp"]
-        for r in conn.execute(
-            "SELECT key_fp FROM nl2odrl_api_keys WHERE revoked = 0"
-        )
-    }
-
-
-def issue_api_key(conn: Any, label: str) -> str:
-    """Create a key, store only its fingerprint, return the raw key once."""
-    import secrets
-
-    _ensure_saas_tables(conn)
-    raw = "nl2odrl_" + secrets.token_urlsafe(32)
-    conn.execute(
-        "INSERT INTO nl2odrl_api_keys (key_fp, label, created_at, revoked)"
-        " VALUES (?, ?, ?, 0)",
-        (_fp(raw), label.strip() or "unlabeled", db_module.utcnow()),
+def _list_runs(conn: Any, flags: dict[str, Any]) -> list[dict[str, Any]]:
+    """Run summaries, newest first."""
+    return db_module.list_runs(
+        conn,
+        scenario=flags["scenario"],
+        verdict=flags["verdict"],
+        status=flags["status"],
+        limit=flags["limit"],
     )
-    conn.commit()
-    return raw
 
 
-def revoke_api_key(conn: Any, fp_prefix: str) -> int:
-    """Revoke keys by fingerprint prefix; returns rows revoked."""
-    _ensure_saas_tables(conn)
-    cursor = conn.execute(
-        "UPDATE nl2odrl_api_keys SET revoked = 1"
-        " WHERE key_fp LIKE ? AND revoked = 0",
-        (fp_prefix.strip() + "%",),
+def _list_pairs(conn: Any, flags: dict[str, Any]) -> list[dict[str, Any]]:
+    """NL-to-ODRL pairs, newest first."""
+    return db_module.list_odrl_docs(
+        conn,
+        scenario=flags["scenario"],
+        valid=flags["valid"],
+        attacker=flags["attacker"],
+        limit=flags["limit"],
     )
-    conn.commit()
-    return cursor.rowcount
 
 
-def list_api_keys(conn: Any) -> list[dict[str, Any]]:
-    """Issued keys, newest first; fingerprints only, never raw keys."""
-    _ensure_saas_tables(conn)
-    return [
-        {k: r[k] for k in r.keys()}
-        for r in conn.execute(
-            "SELECT key_fp, label, created_at, revoked FROM nl2odrl_api_keys"
-            " ORDER BY created_at DESC"
-        )
-    ]
-
-
-def _tenant_for(conn: Any, run_key: str) -> str:
-    _ensure_tenant_table(conn)
+def _usage_rows(conn: Any) -> list[dict[str, Any]]:
+    """Local run/token totals, one row."""
     row = conn.execute(
-        "SELECT key_fp FROM nl2odrl_run_tenants WHERE run_key = ?", (run_key,)
+        "SELECT COUNT(*) AS runs,"
+        " COALESCE(SUM(model_calls), 0) AS model_calls,"
+        " COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,"
+        " COALESCE(SUM(completion_tokens), 0) AS completion_tokens,"
+        " COALESCE(SUM(total_tokens), 0) AS total_tokens"
+        " FROM runs"
     ).fetchone()
-    return row["key_fp"] if row is not None else "local"
-
-
-def _list_runs(conn: Any, flags: dict[str, Any], key_fp: str | None) -> list[dict[str, Any]]:
-    """Run summaries, newest first; scoped to one key when the gate is on."""
-    import json as _json
-
-    if key_fp is None:
-        return db_module.list_runs(
-            conn,
-            scenario=flags["scenario"],
-            verdict=flags["verdict"],
-            status=flags["status"],
-            limit=flags["limit"],
-        )
-    query = (
-        "SELECT r.run_key, r.run_id, r.scenario_id, r.faults_json, r.policy_variant,"
-        " r.seed, r.status, r.verdict, r.model_calls, r.total_tokens, r.wall_seconds,"
-        " r.created_at, substr(r.nl_text, 1, 160) AS nl_preview FROM runs r"
-        " JOIN nl2odrl_run_tenants t ON t.run_key = r.run_key"
-    )
-    clauses = ["t.key_fp = ?"]
-    args: list[Any] = [key_fp]
-    if flags["scenario"]:
-        clauses.append("r.scenario_id = ?")
-        args.append(flags["scenario"])
-    if flags["verdict"]:
-        clauses.append("r.verdict = ?")
-        args.append(flags["verdict"])
-    if flags["status"]:
-        clauses.append("r.status = ?")
-        args.append(flags["status"])
-    query += " WHERE " + " AND ".join(clauses)
-    query += " ORDER BY r.created_at DESC, r.rowid DESC LIMIT ?"
-    args.append(flags["limit"])
-    rows = []
-    for row in conn.execute(query, args):
-        item = {k: row[k] for k in row.keys()}
-        item["faults"] = _json.loads(item.pop("faults_json") or "[]")
-        rows.append(item)
-    return rows
-
-
-def _list_pairs(conn: Any, flags: dict[str, Any], key_fp: str | None) -> list[dict[str, Any]]:
-    """NL-to-ODRL pairs, newest first; scoped to one key when the gate is on."""
-    import json as _json
-
-    if key_fp is None:
-        return db_module.list_odrl_docs(
-            conn,
-            scenario=flags["scenario"],
-            valid=flags["valid"],
-            attacker=flags["attacker"],
-            limit=flags["limit"],
-        )
-    query = (
-        "SELECT o.run_key, o.step, o.outcome, o.doc_json, o.valid, o.errors_json,"
-        " o.attacker, r.scenario_id, r.policy_variant, r.verdict, r.nl_text,"
-        " r.nl_label, r.created_at FROM odrl_docs o"
-        " JOIN runs r ON r.run_key = o.run_key"
-        " JOIN nl2odrl_run_tenants t ON t.run_key = o.run_key"
-    )
-    clauses = ["t.key_fp = ?"]
-    args: list[Any] = [key_fp]
-    if flags["scenario"]:
-        clauses.append("r.scenario_id = ?")
-        args.append(flags["scenario"])
-    if flags["valid"] is not None:
-        clauses.append("o.valid = ?")
-        args.append(1 if flags["valid"] else 0)
-    if flags["attacker"] is not None:
-        clauses.append("o.attacker = ?")
-        args.append(1 if flags["attacker"] else 0)
-    query += " WHERE " + " AND ".join(clauses)
-    query += " ORDER BY r.created_at DESC, o.id DESC LIMIT ?"
-    args.append(flags["limit"])
-    pairs = []
-    for row in conn.execute(query, args):
-        item = {k: row[k] for k in row.keys()}
-        item["doc"] = _json.loads(item.pop("doc_json"))
-        item["errors"] = _json.loads(item.pop("errors_json") or "[]")
-        item["valid"] = bool(item["valid"])
-        item["attacker"] = bool(item["attacker"])
-        pairs.append(item)
-    return pairs
-
-
-def billing_lines(
-    conn: Any, key_fp: str | None = None, since: str | None = None
-) -> list[dict[str, Any]]:
-    """Per-run line items for billing export; optionally scoped and dated."""
-    _ensure_saas_tables(conn)
-    query = (
-        "SELECT r.run_key, COALESCE(t.key_fp, 'local') AS key_fp, r.created_at,"
-        " r.status, r.verdict, r.model_calls, r.prompt_tokens,"
-        " r.completion_tokens, r.total_tokens FROM runs r"
-        " LEFT JOIN nl2odrl_run_tenants t ON t.run_key = r.run_key"
-    )
-    clauses: list[str] = []
-    args: list[Any] = []
-    if key_fp:
-        clauses.append("COALESCE(t.key_fp, 'local') = ?")
-        args.append(key_fp)
-    if since:
-        clauses.append("r.created_at >= ?")
-        args.append(since)
-    if clauses:
-        query += " WHERE " + " AND ".join(clauses)
-    query += " ORDER BY r.created_at, r.rowid"
-    return [{k: r[k] for k in r.keys()} for r in conn.execute(query, args)]
-
-
-def _usage_rows(conn: Any, key_fp: str | None) -> list[dict[str, Any]]:
-    """Per-key run/token totals; None means all keys (local mode)."""
-    _ensure_tenant_table(conn)
-    if key_fp is None:
-        cursor = conn.execute(
-            "SELECT COALESCE(t.key_fp, 'local') AS fp, COUNT(*) AS runs,"
-            " COALESCE(SUM(r.model_calls), 0) AS model_calls,"
-            " COALESCE(SUM(r.prompt_tokens), 0) AS prompt_tokens,"
-            " COALESCE(SUM(r.completion_tokens), 0) AS completion_tokens,"
-            " COALESCE(SUM(r.total_tokens), 0) AS total_tokens"
-            " FROM runs r LEFT JOIN nl2odrl_run_tenants t ON t.run_key = r.run_key"
-            " GROUP BY fp ORDER BY fp"
-        )
-    else:
-        cursor = conn.execute(
-            "SELECT COALESCE(t.key_fp, 'local') AS fp, COUNT(*) AS runs,"
-            " COALESCE(SUM(r.model_calls), 0) AS model_calls,"
-            " COALESCE(SUM(r.prompt_tokens), 0) AS prompt_tokens,"
-            " COALESCE(SUM(r.completion_tokens), 0) AS completion_tokens,"
-            " COALESCE(SUM(r.total_tokens), 0) AS total_tokens"
-            " FROM runs r LEFT JOIN nl2odrl_run_tenants t ON t.run_key = r.run_key"
-            " WHERE t.key_fp = ? GROUP BY fp",
-            (key_fp,),
-        )
-    rows = [{k: r[k] for k in r.keys()} for r in cursor.fetchall()]
-    if key_fp is not None and not rows:
-        rows = [
-            {
-                "fp": key_fp,
-                "runs": 0,
-                "model_calls": 0,
-                "prompt_tokens": 0,
-                "completion_tokens": 0,
-                "total_tokens": 0,
-            }
-        ]
-    return [{"key_fp": r.pop("fp"), **r} for r in rows]
+    return [{"key_fp": "local", **{k: row[k] for k in row.keys()}}]
 
 
 class BusyError(ConvertError):
@@ -837,7 +587,6 @@ class RunRegistry:
         variant: str,
         seed: int,
         max_steps: int,
-        tenant: str = "local",
         request_id: str | None = None,
     ) -> dict[str, Any]:
         """Run now if a worker is free, else queue; return the public record."""
@@ -862,7 +611,6 @@ class RunRegistry:
             attempt = self._seq
         spec = build_inline_run(
             nl_text, variant, seed, max_steps, self._root, attempt, self._out_dir,
-            tenant=tenant,
         )
         spec["request_id"] = request_id
         run_key = f"{spec['run_id']}-{attempt}"
@@ -889,7 +637,7 @@ class RunRegistry:
                 self._queue.append(run_key)
             self._gauges()
         log_event("run_" + status, run_key=run_key, request_id=request_id,
-                  tenant=tenant[:12], trace_path=spec["trace_path"])  # fmt: skip
+                  trace_path=spec["trace_path"])  # fmt: skip
         if run_now:
             METRICS.observe("nl2odrl_queue_wait_seconds", 0.0)
             threading.Thread(target=self._worker, args=(run_key,), daemon=True).start()
@@ -969,7 +717,6 @@ class RunRegistry:
             return {
                 "run_key": run_key,
                 "status": record["status"],
-                "tenant": spec.get("tenant", "local"),
                 "spec": {
                     "scenario_id": spec["scenario_id"],
                     "policy_variant": spec["variant"],
@@ -992,10 +739,7 @@ class RunRegistry:
             return record["snapshot"]
         conn = _db_conn(self._root, self._out_dir)
         try:
-            snap = db_module.get_run(conn, run_key)
-            if snap is not None:
-                snap["tenant"] = _tenant_for(conn, run_key)
-            return snap
+            return db_module.get_run(conn, run_key)
         finally:
             conn.close()
 
@@ -1037,29 +781,27 @@ def _query_flags(query: dict[str, list[str]]) -> dict[str, Any]:
 
 
 class ServerSettings:
-    """Live-model settings held in memory per tenant, never in ``os.environ``.
+    """Live-model settings held in server memory, never in ``os.environ``.
 
-    Each tenant (API-key fingerprint, or ``local`` with the gate off) has its
-    own overrides, so one tenant can never change the endpoint or key another
-    tenant's conversions use. The process environment is the read-only
-    deployment default for every tenant.
+    A single local process owns one endpoint override set. The process
+    environment is the read-only deployment default.
     """
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._over: dict[str, dict[str, Any]] = {}
+        self._over: dict[str, Any] = {}
 
     def reset(self) -> None:
         with self._lock:
             self._over.clear()
 
-    def update(self, tenant: str = "local", **values: Any) -> None:
+    def update(self, **values: Any) -> None:
         with self._lock:
-            self._over.setdefault(tenant, {}).update(values)
+            self._over.update(values)
 
-    def config(self, tenant: str = "local") -> LlmConfig:
+    def config(self) -> LlmConfig:
         with self._lock:
-            over = dict(self._over.get(tenant, {}))
+            over = dict(self._over)
         env = LlmConfig.from_env()
         return LlmConfig(
             base_url=over.get("base_url", env.base_url),
@@ -1068,33 +810,32 @@ class ServerSettings:
             max_tokens=int(over.get("max_tokens", env.max_tokens)),
         )
 
-    def raw(self, name: str, env_name: str, tenant: str = "local") -> str:
+    def raw(self, name: str, env_name: str) -> str:
         with self._lock:
-            over = self._over.get(tenant, {})
-            if name in over:
-                return str(over[name])
+            if name in self._over:
+                return str(self._over[name])
         return os.environ.get(env_name, "").strip()
 
 
 SETTINGS = ServerSettings()
 
 
-def model_status(tenant: str = "local") -> dict[str, Any]:
-    """Report this tenant's live-model wiring without ever revealing the key."""
-    base_url = SETTINGS.raw("base_url", LLAMA_URL_ENV, tenant)
-    key_set = bool(SETTINGS.raw("api_key", LLAMA_KEY_ENV, tenant))
+def model_status() -> dict[str, Any]:
+    """Report the live-model wiring without ever revealing the key."""
+    base_url = SETTINGS.raw("base_url", LLAMA_URL_ENV)
+    key_set = bool(SETTINGS.raw("api_key", LLAMA_KEY_ENV))
     return {
         "model": DEFAULT_MODEL,
         "base_url": base_url,
         "api_key_set": key_set,
         "configured": bool(base_url and key_set),
-        "timeout_s": SETTINGS.raw("timeout_s", LLAMA_TIMEOUT_ENV, tenant),
-        "max_tokens": SETTINGS.raw("max_tokens", LLAMA_MAX_TOKENS_ENV, tenant),
+        "timeout_s": SETTINGS.raw("timeout_s", LLAMA_TIMEOUT_ENV),
+        "max_tokens": SETTINGS.raw("max_tokens", LLAMA_MAX_TOKENS_ENV),
     }
 
 
-def apply_model_settings(body: Any, tenant: str = "local") -> dict[str, Any]:
-    """Store this tenant's live-model settings in server memory (not ``os.environ``)."""
+def apply_model_settings(body: Any) -> dict[str, Any]:
+    """Store live-model settings in server memory (not ``os.environ``)."""
     if not isinstance(body, dict):
         raise ConvertError("request body must be a JSON object")
     staged: dict[str, Any] = {}
@@ -1121,8 +862,8 @@ def apply_model_settings(body: Any, tenant: str = "local") -> dict[str, Any]:
             if not lo <= float(value) <= hi:
                 raise ConvertError(f"{name} must be a number in {lo}..{hi}")
             staged[name] = value
-    SETTINGS.update(tenant, **staged)
-    return model_status(tenant)
+    SETTINGS.update(**staged)
+    return model_status()
 
 def serve_ui(port: int, bind: str, ui_dir: Path) -> int:
     """Serve the UI and the API with Uvicorn (FastAPI app); block on Ctrl+C."""

@@ -4,6 +4,11 @@
 **Basis:** [Nl2odrl Architecture Review.md](/C:/Users/sahil/Downloads/Nl2odrl%20Architecture%20Review.md) + code verification against `C:\Dev\Projects\NL-to-ODRL` and `C:\Dev\Projects\AgentCrash` (Nov 2026)
 **Live baseline verified:** NL-to-ODRL `.venv` runs `agentcrash-core==0.2.0` today — all imports succeed. The breakage is **latent**: any fresh resolve to `>=0.3.0` hits `ImportError` (`agentcrash.db`, `reference_patch_for` removed in 0.3.0 per `AgentCrash/CHANGELOG.md:33-36`). `pytest --collect-only` totals **189 tests / 20 files** (review says 182 — stale).
 **Status:** Plan — no code changed by this document.
+**Scope change (2026-11-26):** product auth, API keys, sessions, per-tenant
+scoping, and billing export were removed. The server is a single-user local
+process: `/api/*` routes are open, model settings are process-local, usage is
+a single local row. Multi-tenant items below (per-tenant settings, cross-tenant
+isolation, session cookies) are N/A, not open work.
 
 ## Guiding principles (non-negotiable)
 
@@ -191,7 +196,7 @@ New `odrl_agent/reasoning.py`:
 
 **Goal:** production-servable API. No behavior change to the pipeline; the server stops being the demo bottleneck.
 
-**Status: ✅ Implemented** (`odrl_agent/app.py` FastAPI/Uvicorn; bounded queue with `Retry-After` and TTL eviction in `web.py`; SSE stream at `text/event-stream`; `X-Request-ID`, JSON request logs and Prometheus `/api/metrics` via `observability.py`; httpOnly session cookie; Review tab; Dockerfile runs `odrl-host serve`). Exit-gate items below were not verified.
+**Status: ✅ Implemented** (`odrl_agent/app.py` FastAPI/Uvicorn; bounded queue with `Retry-After` and TTL eviction in `web.py`; SSE stream at `text/event-stream`; `X-Request-ID`, JSON request logs and Prometheus `/api/metrics` via `observability.py`; Review tab; Dockerfile runs `odrl-host serve`). No sessions or logins: single-user local server. Exit-gate items below were not verified.
 
 - FastAPI + Uvicorn (`odrl_agent/web.py` rewrite): async workers, per-tenant config injection (kills the `os.environ` mutation), OpenAPI schema generation.
 - Async run queue replaces `RunRegistry` daemon threads + `MAX_ACTIVE_RUNS=2` hard cap: bounded worker pool, backpressure with honest `429 + Retry-After`, bounded `_runs` store (TTL + eviction — current dict grows unbounded).
@@ -204,7 +209,7 @@ New `odrl_agent/reasoning.py`:
 
 - [ ] Sustained concurrency >2 with bounded memory; p95 queue wait SLO defined.
 - [ ] Cold-start + request logs traceable end-to-end (request ID → pipeline steps → AgentCrash trace).
-- [ ] Security re-test: cross-tenant settings write impossible; SSRF payloads rejected.
+- [ ] Security re-test: SSRF payloads rejected (no tenants exist; single-user server).
 
 ---
 

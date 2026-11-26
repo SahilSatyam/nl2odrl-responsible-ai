@@ -9,7 +9,6 @@ host's scenario loop and policy patches.
 from __future__ import annotations
 
 import argparse
-import csv
 import hashlib
 import json
 import os
@@ -235,108 +234,6 @@ def _retrieved_doc_spans(trace_path: str) -> list[dict[str, Any]]:
             }
         )
     return spans
-
-
-def cmd_keys(argv: list[str]) -> int:
-    """Issue, list, or revoke product API keys (fingerprints only on disk)."""
-    parser = argparse.ArgumentParser(prog="odrl-host keys")
-    sub = parser.add_subparsers(dest="action", required=True)
-    p_issue = sub.add_parser("issue", help="print a new raw key once and store its fingerprint")
-    p_issue.add_argument("--label", default="")
-    sub.add_parser("list", help="show issued key fingerprints (never raw keys)")
-    p_revoke = sub.add_parser("revoke", help="revoke issued keys by fingerprint prefix")
-    p_revoke.add_argument("--fp", required=True)
-    args = parser.parse_args(argv)
-
-    from odrl_agent.web import (
-        find_repo_root,
-        issue_api_key,
-        keys_db,
-        list_api_keys,
-        revoke_api_key,
-    )
-
-    root = find_repo_root()
-    if root is None:
-        print(
-            "odrl-host keys: E_CONFIG: ui/index.html not found (run from the repo root)",
-            file=sys.stderr,
-        )
-        return EXIT_USAGE
-    conn = keys_db(root)
-    try:
-        if args.action == "issue":
-            raw = issue_api_key(conn, args.label)
-            print(raw)
-            print(
-                "store it now: the server keeps only its fingerprint",
-                file=sys.stderr,
-            )
-        elif args.action == "list":
-            for entry in list_api_keys(conn):
-                print(
-                    f"{entry['key_fp']}  revoked={entry['revoked']}"
-                    f"  {entry['label']}  {entry['created_at']}"
-                )
-        elif args.action == "revoke":
-            count = revoke_api_key(conn, args.fp)
-            if not count:
-                print(
-                    f"odrl-host keys: no issued key matches {args.fp!r}",
-                    file=sys.stderr,
-                )
-                return EXIT_USAGE
-            print(f"revoked {count} key(s)")
-    finally:
-        conn.close()
-    return EXIT_OK
-
-
-def cmd_billing(argv: list[str]) -> int:
-    """Export per-run billing line items (vendor-neutral JSON or CSV)."""
-    parser = argparse.ArgumentParser(prog="odrl-host billing")
-    sub = parser.add_subparsers(dest="action", required=True)
-    p_export = sub.add_parser("export", help="dump attributed run line items")
-    p_export.add_argument("--key-fp", default=None)
-    p_export.add_argument("--since", default=None)
-    p_export.add_argument("--format", choices=("json", "csv"), default="json")
-    args = parser.parse_args(argv)
-
-    from odrl_agent.web import billing_lines, find_repo_root, keys_db
-
-    root = find_repo_root()
-    if root is None:
-        print(
-            "odrl-host billing: E_CONFIG: ui/index.html not found"
-            " (run from the repo root)",
-            file=sys.stderr,
-        )
-        return EXIT_USAGE
-    conn = keys_db(root)
-    try:
-        lines = billing_lines(conn, args.key_fp, args.since)
-    finally:
-        conn.close()
-    if args.action == "export" and args.format == "csv":
-        writer = csv.DictWriter(
-            sys.stdout,
-            fieldnames=[
-                "run_key",
-                "key_fp",
-                "created_at",
-                "status",
-                "verdict",
-                "model_calls",
-                "prompt_tokens",
-                "completion_tokens",
-                "total_tokens",
-            ],
-        )
-        writer.writeheader()
-        writer.writerows(lines)
-        return EXIT_OK
-    print(json.dumps({"lines": lines}, sort_keys=True, indent=2))
-    return EXIT_OK
 
 
 def cmd_optimize_prompts(argv: list[str]) -> int:
@@ -892,19 +789,17 @@ def _regress_golden(
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Dispatch subcommands: run, diagnose, replay, keys, billing, optimize-prompts, serve."""
+    """Dispatch subcommands: run, diagnose, replay, optimize-prompts, serve."""
     raw = list(sys.argv[1:] if argv is None else argv)
     if "--version" in raw:
         print(f"odrl-host {__version__} (framework checks: agentcrash check/serve)")
         return EXIT_OK
     if not raw or raw[0] in ("-h", "--help"):
         print(
-            "usage: odrl-host [--version] {run, diagnose, replay, keys, billing, optimize-prompts, serve, chaos} ...\n"
+            "usage: odrl-host [--version] {run, diagnose, replay, optimize-prompts, serve, chaos} ...\n"
             "  run: execute a live NL-to-ODRL conversion against a scenario\n"
             "  diagnose: propose a policy patch for a failing trace (read-only)\n"
             "  replay: re-run a trace scenario under a patched policy + regression\n"
-            "  keys: issue, list, or revoke product API keys (fingerprints only on disk)\n"
-            "  billing: export per-run line items as JSON or CSV (vendor-neutral)\n"
             "  optimize-prompts: budgeted DSPy probe of the NL-to-ODRL instruction (live model)\n"
             "  serve: run the Studio API + UI (FastAPI/Uvicorn)\n"
             "  chaos: fuzz fault schedules against the live pipeline (mocked model)\n"
@@ -918,10 +813,6 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_diagnose(rest)
     if command == "replay":
         return cmd_replay(rest)
-    if command == "keys":
-        return cmd_keys(rest)
-    if command == "billing":
-        return cmd_billing(rest)
     if command == "optimize-prompts":
         return cmd_optimize_prompts(rest)
     if command == "serve":

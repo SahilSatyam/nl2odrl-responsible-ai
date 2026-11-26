@@ -112,6 +112,15 @@ def test_model_settings_round_trip(monkeypatch) -> None:
         apply_model_settings({"api_key": "   "})
     with pytest.raises(ConvertError):
         apply_model_settings(["nope"])
+    for ssrf in (
+        "http://169.254.169.254/latest/meta-data",
+        "http://[fe80::1]/v1",
+        "http://metadata.google.internal/v1",
+        "file:///etc/passwd",
+        "gopher://127.0.0.1:6379/",
+    ):
+        with pytest.raises(ConvertError):
+            apply_model_settings({"base_url": ssrf})
 
 
 def test_convert_without_model_key_reports_error(monkeypatch, tmp_path) -> None:

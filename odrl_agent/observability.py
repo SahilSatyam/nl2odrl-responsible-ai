@@ -2,7 +2,7 @@
 
 Stdlib only, so the current ``http.server`` front end and a later
 FastAPI/Uvicorn one can share it. Nothing here ever logs a request body, an
-``Authorization`` header or a key; tenants appear only as key fingerprints.
+model keys. Nothing sensitive is ever logged.
 """
 from __future__ import annotations
 

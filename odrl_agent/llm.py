@@ -37,6 +37,15 @@ class LlmNotConfiguredError(LlmError):
     """No endpoint or key configured."""
 
 
+class TruncatedOutputError(LlmError):
+    """The model hit max_tokens mid-reply (finish_reason "length").
+
+    Unlike other model errors this one is worth one bounded retry: the same
+    input often completes on a second attempt (Baseline v1/v2 truncations
+    moved between cases across runs, never stuck to one input).
+    """
+
+
 @dataclass
 class LlmUsage:
     calls: int = 0
@@ -159,7 +168,9 @@ class StructuredLlm:
         except (KeyError, IndexError, TypeError, AttributeError) as exc:
             raise LlmError(f"model {model!r} response has no choices[0].message") from exc
         if choice.get("finish_reason") == "length":
-            raise LlmError(f"model {model!r} output truncated at max_tokens={self.max_tokens}")
+            raise TruncatedOutputError(
+                f"model {model!r} output truncated at max_tokens={self.max_tokens}"
+            )
         try:
             value = json.loads(content)
         except ValueError as exc:

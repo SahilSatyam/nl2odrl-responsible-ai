@@ -95,19 +95,17 @@ function PoliciesView({ onOpenRun }: { onOpenRun: (k: string) => void }) {
 function ModelSetupDialog({ initial, onClose, onSaved }: { initial: ModelSettings | null; onClose: () => void; onSaved: (s: ModelSettings) => void }) {
   const [baseUrl, setBaseUrl] = useState(initial?.base_url || '');
   const [apiKey, setApiKey] = useState('');
-  const [studioKey, setStudioKey] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const save = useCallback(async () => {
     setSaving(true); setError('');
     try {
-      if (studioKey.trim()) await api.login(studioKey.trim());
       const s = await api.saveSettings({ base_url: baseUrl.trim(), api_key: apiKey.trim() });
       onSaved(s);
       onClose();
     } catch (e) { setError(e instanceof Error ? e.message : 'save failed'); }
     finally { setSaving(false); }
-  }, [baseUrl, apiKey, studioKey, onSaved, onClose]);
+  }, [baseUrl, apiKey, onSaved, onClose]);
   return (
     <div className="overlay" onClick={onClose} role="presentation">
       <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="setup-title" onClick={(e) => e.stopPropagation()}>
@@ -115,7 +113,6 @@ function ModelSetupDialog({ initial, onClose, onSaved }: { initial: ModelSetting
         <p className="status">Live conversion calls your OpenAI-compatible chat endpoint. The key is kept in the server process only, never traced or returned.</p>
         <label className="field">Base URL<input type="text" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://…/v1" inputMode="url" /></label>
         <label className="field">API key<input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder={initial?.api_key_set ? 'Saved — enter a new key to replace it' : 'Paste the key'} autoComplete="off" /></label>
-        <label className="field">Studio API key (signs you in with a secure cookie; never stored in the browser)<input type="password" value={studioKey} onChange={(e) => setStudioKey(e.target.value)} placeholder="Leave empty on a local server" autoComplete="off" /></label>
         {error ? <p className="status" role="alert">{error}</p> : null}
         <div className="row">
           <button className="btn primary" disabled={saving || !baseUrl.trim() || !apiKey.trim()} onClick={save}>{saving ? 'Saving…' : 'Save'}</button>
@@ -207,7 +204,6 @@ function RunView({ focusKey, onConsumed }: { focusKey: string | null; onConsumed
       ['Tokens', u.total_tokens ? `${fmt(u.prompt_tokens)} in / ${fmt(u.completion_tokens)} out` : 'endpoint hid tokens'],
       ['Saves', String(snap.saves.length)],
       ['Chain', snap.chain_ok === true ? 'verified' : snap.chain_ok === false ? 'BROKEN' : 'pending'],
-      ['Tenant', snap.tenant || 'local'],
       ['Wall', `${Number(snap.wall_seconds || 0).toFixed(1)}s`],
     ] as [string, string][];
   }, [snap]);

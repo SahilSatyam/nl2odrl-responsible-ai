@@ -8,13 +8,19 @@ import pytest
 from scripted_llm import USAGE, scripted_llm
 
 from odrl_agent.adapter import (
+    DEFAULT_MAX_COMPLETION_TOKENS,
     LIVE_HTTP_TIMEOUT_S,
     LlmConfig,
     ModelNotConfiguredError,
     live_timeout_s,
     max_completion_tokens,
 )
-from odrl_agent.llm import LlmError, LlmNotConfiguredError, StructuredLlm
+from odrl_agent.llm import (
+    LlmError,
+    LlmNotConfiguredError,
+    StructuredLlm,
+    TruncatedOutputError,
+)
 
 SCHEMA = {"type": "object"}
 
@@ -106,8 +112,9 @@ def test_truncated_output_rejected() -> None:
             {"message": {"content": "{\"a\":"}, "finish_reason": "length"}]})
 
     llm = StructuredLlm("https://m.test/v1", "k", transport=httpx.MockTransport(handler))
-    with pytest.raises(LlmError, match="truncated"):
+    with pytest.raises(TruncatedOutputError, match="truncated"):
         _call(llm)
+    assert issubclass(TruncatedOutputError, LlmError)
 
 
 def test_empty_choices_rejected() -> None:
@@ -157,5 +164,5 @@ def test_env_defaults_and_overrides(monkeypatch) -> None:
     monkeypatch.setenv("LLAMA_MAX_TOKENS", "123")
     assert max_completion_tokens() == 123
     monkeypatch.setenv("LLAMA_MAX_TOKENS", "-4")
-    assert max_completion_tokens() == 8000
+    assert max_completion_tokens() == DEFAULT_MAX_COMPLETION_TOKENS
     assert json.loads(json.dumps(USAGE)) == USAGE
