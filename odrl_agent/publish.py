@@ -187,7 +187,6 @@ def decide(
     *,
     run_key: str,
     events: list[dict[str, Any]],
-    reviewer_fp: str,
     decision: str,
     reason: str,
     edited_ir: dict[str, Any] | None = None,
@@ -230,7 +229,7 @@ def decide(
             " widening_json, alerts_json, doc_json, ir_json, created_at)"
             " VALUES (?,?,?,?,?,?,?,?,?,?)",
             (
-                run_key, decision, reason.strip(), reviewer_fp, 1 if decision == "edit" else 0,
+                run_key, decision, reason.strip(), "local", 1 if decision == "edit" else 0,
                 json.dumps(review.widening if review else []),
                 json.dumps(review.alerts if review else []),
                 json.dumps(review.doc, sort_keys=True) if review else None,
@@ -260,24 +259,16 @@ def decide(
 
 
 def list_drafts(
-    conn: Any, scope: str | None, *, include_decided: bool = False, limit: int = 100
+    conn: Any, *, include_decided: bool = False, limit: int = 100
 ) -> list[dict[str, Any]]:
-    """Held drafts, newest first; ``scope`` is a tenant fingerprint or ``None`` (all)."""
+    """Held drafts, newest first."""
     ensure_tables(conn)
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS nl2odrl_run_tenants ("
-        "run_key TEXT PRIMARY KEY, key_fp TEXT NOT NULL, created_at TEXT NOT NULL)"
-    )
     query = (
         "SELECT r.run_key, r.created_at, r.nl_text, e.detail_json, p.decision"
         " FROM runs r JOIN events e ON e.run_key = r.run_key AND e.phase = 'run_end'"
         " LEFT JOIN nl2odrl_publications p ON p.run_key = r.run_key"
-        " LEFT JOIN nl2odrl_run_tenants t ON t.run_key = r.run_key"
     )
     clauses, args = [], []
-    if scope is not None:
-        clauses.append("t.key_fp = ?")
-        args.append(scope)
     if not include_decided:
         clauses.append("p.run_key IS NULL")
     if clauses:

@@ -1,14 +1,23 @@
 """Pipeline stages: routing, grounding, bounded shrink-only repair, drafts, exit gates."""
 from __future__ import annotations
 
+import json
 import statistics
 import time
 
+import httpx
 import pytest
 from scripted_llm import ir, rule, scripted_llm
 
-from odrl_agent.extractor import Extractor, classify, split_sentences
+from odrl_agent.extractor import (
+    SLOT_ASSET_QUESTION,
+    SLOT_PARTY_QUESTION,
+    Extractor,
+    classify,
+    split_sentences,
+)
 from odrl_agent.ir import PolicyIR
+from odrl_agent.llm import StructuredLlm
 from odrl_agent.odrl import validate_odrl
 from odrl_agent.pipeline import MAX_REPAIRS, convert, locate, widening
 
@@ -104,7 +113,10 @@ def test_unassigned_prohibition_is_kept() -> None:
 
 def test_decompose_drops_non_verbatim_clauses() -> None:
     text = "Allow the research team to use dataset-7. They must not distribute it."
-    replies = [{"clauses": ["Grant everyone everything."]}, ir(rule())]
+    reply = ir(rule(),
+               rule(action="distribute", modality="prohibition",
+                    quote="They must not distribute it"))
+    replies = [{"clauses": ["Grant everyone everything."]}, reply]
     requests: list = []
     run(text, replies, requests)
     content = requests[1]["messages"][1]["content"]
@@ -291,3 +303,175 @@ def test_compiled_output_never_relies_on_relative_iris(bad_doc_key) -> None:
     _, doc, _ = run(TEXT, [ir(rule(target="dataset-7", assignee="research-team"))])
     for r in doc[bad_doc_key]:
         assert r["target"].startswith("urn:") and r["assignee"].startswith("urn:")
+
+
+# ---- truncation retry -----------------------------------------------------------
+# A truncated reply (finish_reason "length") must feed the bounded repair loop
+# as a violation, never escape as an exception. Baseline v1/v2 truncations
+# moved between cases across runs: flakes, not stuck inputs.
+
+
+def _flaky_llm(failures: int, good: dict):
+    """Model transport truncated for the first ``failures`` calls, then good."""
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] <= failures:
+            return httpx.Response(200, json={"choices": [
+                {"message": {"content": "{\"a\":"}, "finish_reason": "length"}]})
+        return httpx.Response(200, json={"choices": [
+            {"message": {"content": json.dumps(good)}, "finish_reason": "stop"}]})
+
+    llm = StructuredLlm("https://m.test/v1", "k",
+                        transport=httpx.MockTransport(handler), sleep=lambda _s: None)
+    return llm, calls
+
+
+def test_truncated_extract_retries_then_publishes_ready() -> None:
+    llm, calls = _flaky_llm(1, ir(rule()))
+    draft, doc = convert(TEXT, Extractor(llm))
+    assert draft.status == "ready" and doc is not None
+    assert calls["n"] == 2  # one truncated extract + one repair
+
+
+def test_persistent_truncation_fails_bounded_not_raising() -> None:
+    llm, calls = _flaky_llm(99, ir(rule()))
+    draft, doc = convert(TEXT, Extractor(llm))
+    assert draft.status == "failed" and doc is None
+    assert calls["n"] == 1 + MAX_REPAIRS  # initial extract + bounded repairs
+    assert any("truncated" in e for e in draft.errors)
+
+
+# ---- spoofed-identity drop ------------------------------------------------------
+# A grant to a homoglyph/mixed-script party is not a grant the author made:
+# drop it like an ungrounded grant (Baseline v2: 3 Tier-5 homoglyph FPs).
+
+
+def test_spoofed_assignee_grant_is_dropped_not_published() -> None:
+    spoof = "p\u0430rtner-zed"  # Cyrillic 'а' in an otherwise Latin name
+    text = f"Allow {spoof} to use scan-archive."
+    reply = ir(rule(action="use", target="scan-archive", assignee=spoof, quote=text))
+    draft, doc, _ = run(text, [reply])
+    assert draft.dropped_rules and draft.dropped_rules[0]["assignee"] == spoof
+    assert doc is None  # nothing legitimate left to compile
+    assert draft.status in ("no_rules", "needs_review")
+
+
+# ---- explanation repair ---------------------------------------------------------
+# Baseline v2: the model answered all 36 clarify cases with no ambiguities —
+# empty rules with no flag, or a complete-looking rule that silently dropped
+# "temporarily"/"a few times". Both now cost one bounded repair asking for
+# the flag, instead of passing silently.
+
+
+def test_empty_policy_backstop_flags_missing_assignee() -> None:
+    text = "Allow access to helpdesk-faq."
+    replies = [ir(), ir(), ir(), {"answer": "NONE"}, {"answer": "helpdesk-faq"}]
+    draft, _, calls = run(text, replies)
+    # extract + two futile re-extracts (grant language, no clash), then slots
+    assert calls == 5
+    assert draft.status == "no_rules"
+    assert [a["kind"] for a in draft.ambiguities] == ["missing_assignee"]
+
+
+def test_empty_convertible_policy_reextracts_rules() -> None:
+    text = ("corvus-interns may read and derive supplier-catalog "
+            "but may not distribute it.")
+    fixed = ir(
+        rule(action="read", target="supplier-catalog",
+             assignee="corvus-interns", quote=text),
+        rule(action="derive", target="supplier-catalog",
+             assignee="corvus-interns", quote=text),
+        rule(action="distribute", target="supplier-catalog",
+             assignee="corvus-interns", modality="prohibition", quote=text),
+    )
+    draft, doc, calls = run(text, [ir(), fixed])
+    assert calls == 2  # extract + one re-extract repair
+    assert [r["action"] for r in draft.ir["rules"]] == ["read", "derive", "distribute"]
+    assert doc is not None and draft.status == "ready"
+
+
+def test_single_sided_conflict_output_recovers_the_dropped_side() -> None:
+    # Lowercase continuation defeats the sentence splitter, so this stays
+    # SIMPLE: extract, one side-recovery repair, one bounded reaffirm.
+    text = ("corvus-interns may read supplier-catalog. "
+            "corvus-interns must not read supplier-catalog.")
+    one_sided = ir(rule(action="read", target="supplier-catalog",
+                        assignee="corvus-interns", modality="prohibition",
+                        quote="corvus-interns must not read supplier-catalog."))
+    both = ir(
+        rule(action="read", target="supplier-catalog",
+             assignee="corvus-interns",
+             quote="corvus-interns may read supplier-catalog."),
+        rule(action="read", target="supplier-catalog",
+             assignee="corvus-interns", modality="prohibition",
+             quote="corvus-interns must not read supplier-catalog."),
+    )
+    draft, _, calls = run(text, [one_sided, both, both])
+    assert calls == 3
+    assert [(r["modality"], r["action"]) for r in draft.ir["rules"]] == [
+        ("permission", "read"), ("prohibition", "read")]
+    assert draft.status == "needs_review" and not draft.auto_publish
+
+
+def test_pure_denial_without_prohibition_triggers_repair() -> None:
+    text = "Nobody may distribute supplier-catalog."
+    fixed = ir(rule(action="distribute", target="supplier-catalog",
+                    assignee=None, modality="prohibition", quote=text))
+    draft, _, calls = run(text, [ir(), fixed])
+    assert calls == 2  # extract + one denial-side repair
+    assert [r["modality"] for r in draft.ir["rules"]] == ["prohibition"]
+
+
+def test_empty_policy_backstop_flags_contradiction_without_slot_calls() -> None:
+    text = ("vega-scientists may always read ledger-2031. "
+            "vega-scientists may never read ledger-2031.")
+    draft, _, calls = run(text, [ir()])
+    assert calls == 1  # extract only; grant+denial needs no slot questions
+    assert draft.status == "no_rules"
+    assert [a["kind"] for a in draft.ambiguities] == ["contradictory_clauses"]
+
+
+def test_empty_policy_backstop_flags_vague_temporal() -> None:
+    text = "hydra-hr may use board-minutes temporarily."
+    replies = [ir(), ir(), ir(), {"answer": "hydra-hr"}, {"answer": "board-minutes"}]
+    draft, _, calls = run(text, replies)
+    # extract + two futile re-extracts, then slots find party+asset + marker
+    assert calls == 5
+    assert draft.status == "no_rules"
+    assert [a["kind"] for a in draft.ambiguities] == ["vague_temporal"]
+
+
+def test_slot_fill_accepts_only_verbatim_text_or_none() -> None:
+    text = "Allow access to helpdesk-faq."
+    llm, _ = _flaky_llm(0, {"answer": "NONE"})
+    assert Extractor(llm).slot_fill(text, SLOT_PARTY_QUESTION) is None
+    llm, _ = _flaky_llm(0, {"answer": "Zeus"})
+    assert Extractor(llm).slot_fill(text, SLOT_PARTY_QUESTION) is None
+    llm, _ = _flaky_llm(0, {"answer": "helpdesk-faq"})
+    assert Extractor(llm).slot_fill(text, SLOT_ASSET_QUESTION) == "helpdesk-faq"
+
+
+def test_vague_word_gets_deterministic_flag_without_repair() -> None:
+    text = "hydra-hr may use board-minutes temporarily."
+    plain = ir(rule(assignee="hydra-hr", target="board-minutes", quote=text))
+    draft, _, calls = run(text, [plain])
+    assert calls == 1  # no repair: the pipeline authors the flag itself
+    assert draft.status == "needs_review"
+    assert [(a["kind"], a["rule_index"]) for a in draft.ambiguities] == [
+        ("vague_temporal", 0)
+    ]
+
+
+def test_vague_word_with_real_bound_gets_no_flag() -> None:
+    text = "hydra-hr may use board-minutes until 2031-12-31."
+    constrained = ir(rule(
+        assignee="hydra-hr", target="board-minutes", quote=text,
+        constraints=[{"kind": "atomic", "left_operand": "dateTime",
+                      "operator": "lteq", "right_operand": "2031-12-31",
+                      "value_type": "date"}],
+    ))
+    draft, _, calls = run(text, [constrained])
+    assert calls == 1 and draft.status == "ready"
+    assert draft.ambiguities == []

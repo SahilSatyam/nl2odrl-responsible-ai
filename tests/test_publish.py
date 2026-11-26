@@ -8,7 +8,6 @@ from fastapi.testclient import TestClient
 from scripted_llm import BASIC_IR, install, ir, rule
 
 from odrl_agent.app import create_app
-from odrl_agent.auth import SessionStore
 
 REPO = Path(__file__).resolve().parent.parent
 TEXT = "Allow the research team to use dataset-7."
@@ -18,18 +17,17 @@ UNGROUNDED_IR = ir(rule(assignee="zephyr-labs"))
 CONFLICT_IR = ir(rule(), rule(modality="prohibition"))
 
 
-def _held_run(monkeypatch, tmp_path, reply, *, key=None, repeats=3):
+def _held_run(monkeypatch, tmp_path, reply, *, repeats=3):
     install(monkeypatch, [reply] * repeats)
     monkeypatch.chdir(REPO)
-    client = TestClient(create_app(REPO, out_dir=tmp_path, sessions=SessionStore()))
-    headers = {"Authorization": f"Bearer {key}"} if key else {}
-    started = client.post("/api/convert", headers=headers,
+    client = TestClient(create_app(REPO, out_dir=tmp_path))
+    started = client.post("/api/convert",
                           json={"nl_text": TEXT, "policy_variant": "fixed", "seed": 42})  # fmt: skip
     assert started.status_code == 200, started.text
     rk = started.json()["run_key"]
     final = client.app.state.registry.wait(rk, timeout=30.0)
     assert final is not None and final["status"] == "done"
-    return client, rk, headers
+    return client, rk, {}
 
 
 def _decide(client, rk, headers, **body):
@@ -102,15 +100,6 @@ def test_auto_published_draft_cannot_be_decided(monkeypatch, tmp_path) -> None:
     client, rk, h = _held_run(monkeypatch, tmp_path, BASIC_IR)
     resp = _decide(client, rk, h, decision="approve", reason="r")
     assert resp.status_code == 409 and resp.json()["error"] == "E_STATE"
-
-
-def test_other_tenant_cannot_see_or_decide(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("NL2ODRL_API_KEYS", "alpha, beta")
-    client, rk, alpha = _held_run(monkeypatch, tmp_path, UNGROUNDED_IR, key="alpha")
-    beta = {"Authorization": "Bearer beta"}
-    assert client.get("/api/drafts", headers=beta).json()["drafts"] == []
-    assert _decide(client, rk, beta, decision="approve", reason="r").status_code == 404
-    assert [d["run_key"] for d in client.get("/api/drafts", headers=alpha).json()["drafts"]] == [rk]
 
 
 def test_unknown_decision_is_400(monkeypatch, tmp_path) -> None:

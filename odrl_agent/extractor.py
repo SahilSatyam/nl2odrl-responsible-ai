@@ -18,7 +18,7 @@ from typing import Any
 from pydantic import BaseModel, Field, ValidationError
 
 from odrl_agent.ir import ACTIONS, LEFT_OPERANDS, OPERATORS, PolicyIR, wire_schema
-from odrl_agent.llm import StructuredLlm
+from odrl_agent.llm import LlmError, StructuredLlm, TruncatedOutputError
 
 DEFAULT_MODEL = "muse-spark-1.3"
 
@@ -43,15 +43,45 @@ Rules for you:
 - Every rule cites at least one verbatim quote from the source in
   "source_spans" (copy the exact characters).
 - Never invent a party, asset, date or number. When the text leaves one
-  open, omit it and add an "ambiguities" entry (missing_assignee,
-  missing_target, vague_temporal such as "soon"/"temporarily",
-  vague_numeric, contradictory_clauses). When you must fill a value, record it
-  in "assumptions".
-- Typed values: dates "YYYY-MM-DD" with value_type "date"; durations ISO-8601
-  such as "P30D" with value_type "duration"; counts as integers.
+  open, omit it and add an "ambiguities" entry, kind one of:
+  missing_assignee, missing_target, missing_assigner, vague_temporal,
+  vague_numeric, contradictory_clauses, unresolved_reference, other. A pronoun
+  with no referent ("archive it") is missing_target. If no party or no target
+  can be named — or the text grants and denies the same access ("may always"
+  versus "may never") — emit "rules": [] with the matching ambiguity; never
+  emit a permission with a null assignee or target. Words like "soon",
+  "temporarily" or "a few times" are not bounds: keep the rule and flag
+  vague_temporal / vague_numeric with its rule_index. When you must fill a
+  value, record it in "assumptions".
+- Time and place words map to fixed constraint shapes (left_operand,
+  operator, right_operand, value_type): "until <date>" is (dateTime, lteq,
+  date, date); "after <date>" is (dateTime, gt, date, date); "before <date>"
+  is (dateTime, lt, date, date); "between <A> and <B>" is a logical "and" of
+  (dateTime, gteq, A, date) and (dateTime, lteq, B, date); "within <place>" or
+  "in <place>" is (spatial, eq, place, string); "for <purpose>" is
+  (purpose, eq, the-purpose-word, string); "at most N" is (count, lteq, N,
+  integer). A bare
+  calendar day "YYYY-MM-DD" is value_type "date"; only a full timestamp with
+  a time part is "dateTime".
+- Alternatives split, never flatten: "in Japan or Kenya" is one logical "or"
+  constraint with one atomic constraint per branch. Keep every branch.
+- One action, one rule: "may read and derive" is two permission rules (read,
+  derive), never one rule with a merged action.
+- Denials are rules: every must-not / may-not / forbidden / never sentence
+  becomes its own prohibition rule on the same target and assignee. Never
+  merge a denial into a permission, and never drop it. A permission and a
+  prohibition on the same action, target and assignee coexist: emit both,
+  with no conflict_strategy guess.
+- Shape guide: "A may read X. A must not read X." is TWO rules (a permission
+  to read and a prohibition on reading). "A may always read X. A may never
+  read X." is NO rules with a contradictory_clauses ambiguity. "A may read
+  and derive Y, but may not distribute it." is THREE rules (permissions to
+  read and derive, a prohibition on distributing).
+- A duty that conditions a permission ("must delete it within 14 days" on a
+  may-use grant) goes in that permission's "duties" as (delayPeriod, lteq,
+  "P14D", duration) — never in "constraints", never as a separate rule.
 - Use "permission" for may/can/allowed, "prohibition" for must not/may
-  not/forbidden, "obligation" for a standalone must/shall. A duty that is a
-  condition of a permission goes in that permission's "duties".
+  not/forbidden/never, "obligation" for a standalone must/shall.
 Reply with one JSON object that matches the schema. No prose outside it."""
 
 DECOMPOSE_PROMPT = """Split the policy text into clause groups, one group per
@@ -62,6 +92,23 @@ Reply with JSON: {"clauses": ["...", "..."]}"""
 
 class ClauseSplit(BaseModel):
     clauses: list[str] = Field(min_length=1)
+
+
+class SlotAnswer(BaseModel):
+    answer: str = Field(
+        min_length=1,
+        description="The exact name from the text, or NONE.",
+    )
+
+
+SLOT_PARTY_QUESTION = (
+    "What party (person, team or organization) is granted access or tasked "
+    "in this text? Reply with the exact name from the text, or NONE."
+)
+SLOT_ASSET_QUESTION = (
+    "What asset, dataset or thing is this policy about? Reply with the exact "
+    "words from the text, or NONE."
+)
 
 
 @dataclass(frozen=True)
@@ -139,15 +186,18 @@ class Extractor:
         Falls back to the deterministic sentence split on any bad reply,
         and drops groups that are not verbatim substrings of ``text``.
         """
-        raw = self.llm.complete_json(
-            model=self.route.fast,
-            messages=[
-                {"role": "system", "content": DECOMPOSE_PROMPT},
-                {"role": "user", "content": _source_block(text, None)},
-            ],
-            schema=ClauseSplit.model_json_schema(),
-            schema_name="ClauseSplit",
-        )
+        try:
+            raw = self.llm.complete_json(
+                model=self.route.fast,
+                messages=[
+                    {"role": "system", "content": DECOMPOSE_PROMPT},
+                    {"role": "user", "content": _source_block(text, None)},
+                ],
+                schema=ClauseSplit.model_json_schema(),
+                schema_name="ClauseSplit",
+            )
+        except TruncatedOutputError:
+            return split_sentences(text)
         try:
             clauses = ClauseSplit.model_validate(raw).clauses
         except ValidationError:
@@ -155,16 +205,51 @@ class Extractor:
         kept = [c.strip() for c in clauses if c.strip() and c.strip() in text]
         return kept or split_sentences(text)
 
+    def slot_fill(self, text: str, question: str) -> str | None:
+        """Answer one narrow slot question; ``None`` means unanswerable.
+
+        The reply must quote the text verbatim (containment-checked); anything
+        else — including a bare ``NONE`` — resolves to ``None``. Transport
+        failures also resolve to ``None``: the caller, not the model, decides
+        the flag from a missing slot.
+        """
+        try:
+            raw = self.llm.complete_json(
+                model=self.route.fast,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "Answer with one JSON object matching the schema.",
+                    },
+                    {"role": "user", "content": _source_block(text, None) + "\n" + question},
+                ],
+                schema=SlotAnswer.model_json_schema(),
+                schema_name="SlotAnswer",
+            )
+            answer = SlotAnswer.model_validate(raw).answer.strip()
+        except (ValidationError, TruncatedOutputError, LlmError):
+            return None
+        if answer.casefold() == "none":
+            return None
+        squashed = re.sub(r"[^a-z0-9]+", "", answer.casefold())
+        haystack = re.sub(r"[^a-z0-9]+", "", text.casefold())
+        if not squashed or squashed not in haystack:
+            return None
+        return answer
+
     def extract(self, text: str, clauses: list[str] | None, *, complex_input: bool) -> ExtractResult:
         model = self.route.strong if complex_input else self.route.fast
-        raw = self.llm.complete_json(
-            model=model,
-            messages=[
-                {"role": "system", "content": _system_prompt()},
-                {"role": "user", "content": _source_block(text, clauses)},
-            ],
-            schema=self._schema,
-        )
+        try:
+            raw = self.llm.complete_json(
+                model=model,
+                messages=[
+                    {"role": "system", "content": _system_prompt()},
+                    {"role": "user", "content": _source_block(text, clauses)},
+                ],
+                schema=self._schema,
+            )
+        except TruncatedOutputError as exc:
+            return ExtractResult(None, None, [f"truncated output: {exc}"], model)
         ir, errors = parse_ir(raw)
         return ExtractResult(ir, raw, errors, model)
 
@@ -178,17 +263,26 @@ class Extractor:
             "instructions": (
                 "Return a corrected IR. Fix only what the violations name. You may remove "
                 "or narrow rules (drop a permission, add a constraint) but you must not add "
-                "permissions, remove prohibitions, obligations, duties or constraints."
+                "permissions, remove prohibitions, obligations, duties or constraints. "
+                "When a violation asks for an explanation, you MUST add AmbiguityFlag "
+                "entries (missing_assignee, missing_target, vague_temporal, "
+                "vague_numeric, contradictory_clauses, unresolved_reference) and, "
+                "only if the text leaves a value open, assumptions. An empty "
+                "rules list is only valid together with the ambiguity that "
+                "explains it."
             ),
         }
-        raw = self.llm.complete_json(
-            model=self.route.strong,
-            messages=[
-                {"role": "system", "content": _system_prompt()},
-                {"role": "user", "content": _source_block(text, None)},
-                {"role": "user", "content": "Repair request:\n" + json.dumps(report, indent=1)},
-            ],
-            schema=self._schema,
-        )
+        try:
+            raw = self.llm.complete_json(
+                model=self.route.strong,
+                messages=[
+                    {"role": "system", "content": _system_prompt()},
+                    {"role": "user", "content": _source_block(text, None)},
+                    {"role": "user", "content": "Repair request:\n" + json.dumps(report, indent=1)},
+                ],
+                schema=self._schema,
+            )
+        except TruncatedOutputError as exc:
+            return ExtractResult(None, None, [f"truncated output: {exc}"], self.route.strong)
         ir, errors = parse_ir(raw)
         return ExtractResult(ir, raw, errors, self.route.strong)

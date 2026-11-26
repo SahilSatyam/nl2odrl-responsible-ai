@@ -4,28 +4,24 @@ services:
     ports:
       - "8901:8901"
     environment:
-      # Live model endpoint (deployment default; each tenant may set its own via
-      # POST /api/settings, held in server memory per tenant, never in env).
+      # Live model endpoint (deployment default; override at runtime via
+      # POST /api/settings, held in server memory, never in env).
       - LLAMA_API_KEY=${LLAMA_API_KEY:-}
       - LLAMA_BASE_URL=${LLAMA_BASE_URL:-}
       # Optional allowlist for model hosts (SSRF guard), comma-separated.
       - NL2ODRL_ALLOWED_LLM_HOSTS=${NL2ODRL_ALLOWED_LLM_HOSTS:-}
-      # Product API keys, comma-separated. Empty = open local mode.
-      - NL2ODRL_API_KEYS=${NL2ODRL_API_KEYS:-}
       # Parties the deployment vouches for (e.g. the issuing data steward).
       - NL2ODRL_TRUSTED_PARTIES=${NL2ODRL_TRUSTED_PARTIES:-}
       # Run queue: concurrent conversions, waiting room, retention.
       - NL2ODRL_WORKERS=${NL2ODRL_WORKERS:-4}
       - NL2ODRL_QUEUE_DEPTH=${NL2ODRL_QUEUE_DEPTH:-16}
       - NL2ODRL_RUN_TTL=${NL2ODRL_RUN_TTL:-900}
-      # Session cookies: set to 1 behind TLS so the cookie is Secure.
-      - NL2ODRL_COOKIE_SECURE=${NL2ODRL_COOKIE_SECURE:-0}
       # Optional AgentCrash control plane (/v1 export) and chain signing.
       - AGENTCRASH_ENDPOINT=${AGENTCRASH_ENDPOINT:-}
       - AGENTCRASH_API_KEY=${AGENTCRASH_API_KEY:-}
       - AGENTCRASH_SIGNING_KEY=${AGENTCRASH_SIGNING_KEY:-}
     volumes:
-      # Persist runs, evidence, decisions and issued keys across restarts.
+      # Persist runs, evidence and decisions across restarts.
       # The db bind needs a pre-created file: touch agentcrash-data/agentcrash.db
       - ./agentcrash-data/agentcrash.db:/app/agentcrash.db
       - agentcrash-traces:/app/traces

@@ -42,7 +42,9 @@ LLAMA_STRONG_MODEL_ENV = "LLAMA_STRONG_MODEL"
 LIVE_HTTP_TIMEOUT_S = 60
 #: Default completion-token cap per model call. Reasoning models think
 #: before answering, so the cap bounds runaway output, not typical spend.
-DEFAULT_MAX_COMPLETION_TOKENS = 8000
+#: 16000: Baseline v1 truncated two complex drafts at 8000 (valid_term_rate
+#: 0.9917); the extra headroom costs nothing on typical short replies.
+DEFAULT_MAX_COMPLETION_TOKENS = 16000
 
 #: Raised for model transport/protocol failures (``E_MODEL_API``, exit 5).
 ModelNotConfiguredError = LlmError

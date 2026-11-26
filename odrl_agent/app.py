@@ -1,17 +1,18 @@
 """FastAPI service for NL2ODRL Studio (Phase 3; served by Uvicorn).
 
-Endpoints (all JSON unless noted; every ``/api/*`` route except
-``/api/healthz`` and ``POST /api/session`` needs a caller once any API key
-exists — Bearer key or session cookie, see :mod:`odrl_agent.auth`):
+Local single-user server: every ``/api/*`` route is open (no login, no
+API keys). The model endpoint key is configured via ``/api/settings`` and
+lives in server memory only.
 
-- ``POST /api/session`` / ``GET`` / ``DELETE`` — cookie login, whoami, logout.
+Endpoints (all JSON unless noted):
+
 - ``POST /api/convert`` — queue a conversion; ``429 + Retry-After`` when full.
 - ``GET /api/runs``, ``GET /api/runs/{key}``, ``GET /api/runs/{key}/events``
   (Server-Sent Events: ``status`` / ``trace`` / ``end``).
 - ``GET /api/drafts``, ``POST /api/runs/{key}/publish`` — HITL review queue
   and Approve & Publish / edit / reject, one decision per run.
-- ``GET /api/odrl``, ``GET /api/usage`` — published policies, per-key usage.
-- ``GET|POST /api/settings`` — this tenant's model endpoint (never echoed key).
+- ``GET /api/odrl``, ``GET /api/usage`` — published policies, run/token totals.
+- ``GET|POST /api/settings`` — the model endpoint (never echoes the key).
 - ``GET /api/metrics`` — Prometheus text; ``GET /api/healthz`` — liveness.
 - ``/`` — the built React studio (``ui/``), when present.
 
@@ -22,28 +23,17 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import time
 from pathlib import Path
 from typing import Any
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import FastAPI, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, PlainTextResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from odrl_agent import publish as publish_module
 from odrl_agent import web
-from odrl_agent.auth import (
-    SESSION_COOKIE,
-    SESSIONS,
-    Principal,
-    SessionStore,
-    authenticate,
-    csrf_ok,
-    fingerprint,
-    key_is_valid,
-)
 from odrl_agent.observability import (
     METRICS,
     REQUEST_ID_HEADER,
@@ -77,7 +67,6 @@ def create_app(
     ui_dir: Path | None = None,
     out_dir: Path | None = None,
     registry: web.RunRegistry | None = None,
-    sessions: SessionStore | None = None,
 ) -> FastAPI:
     """Build the app. ``root`` is the checkout (scenarios/, policies/, schemas/)."""
     app = FastAPI(
@@ -88,8 +77,6 @@ def create_app(
     app.state.root = root
     app.state.out_dir = out_dir
     app.state.registry = registry if registry is not None else web.RunRegistry(root, out_dir)
-    # SessionStore defines __len__, so an empty store is falsy: test identity, not truth.
-    app.state.sessions = sessions if sessions is not None else SESSIONS
 
     def db() -> Any:
         return web._db_conn(root, out_dir)
@@ -118,29 +105,12 @@ def create_app(
             METRICS.inc("nl2odrl_http_requests_total", method=request.method,
                         route=template, code=str(status))  # fmt: skip
             METRICS.observe("nl2odrl_http_request_duration_seconds", seconds, route=template)
-            principal = getattr(request.state, "principal", None)
             log_event(
                 "http_request", request_id=rid, method=request.method, route=template,
                 status=status, ms=round(seconds * 1000, 2),
-                tenant=(principal.fp[:12] if principal else "-"),
             )  # fmt: skip
         response.headers[REQUEST_ID_HEADER] = rid
         return response
-
-    # ---- caller identity --------------------------------------------------------
-    def principal(request: Request) -> Principal:
-        conn = db()
-        try:
-            state = web.key_state(conn)
-        finally:
-            conn.close()
-        who = authenticate(request.headers, request.cookies, state, app.state.sessions)
-        if who is None:
-            raise ApiError(401, "E_AUTH", "valid Bearer API key or session required")
-        if not csrf_ok(request.method, who, request.headers):
-            raise ApiError(403, "E_CSRF", "cookie sessions must send X-Requested-With: nl2odrl")
-        request.state.principal = who
-        return who
 
     async def json_body(request: Request) -> Any:
         raw = await request.body()
@@ -151,70 +121,34 @@ def create_app(
         except (json.JSONDecodeError, UnicodeDecodeError) as exc:
             raise ApiError(400, "E_CONFIG", "body must be JSON") from exc
 
-    def own_snapshot(run_key: str, who: Principal) -> dict[str, Any]:
+    def own_snapshot(run_key: str) -> dict[str, Any]:
         snap = app.state.registry.snapshot(run_key)
-        if snap is None or (who.scope is not None and snap.get("tenant") != who.fp):
+        if snap is None:
             raise ApiError(404, "E_CONFIG", "unknown run_key")
         return snap
 
-    # ---- health + session ---------------------------------------------------------
+    # ---- health -----------------------------------------------------------------
     @app.get("/api/healthz")
     def healthz() -> dict[str, Any]:
         reg = app.state.registry
         return {"ok": True, "active": reg.active, "queued": reg.queued, "workers": reg.workers}
 
-    @app.post("/api/session")
-    async def login(request: Request) -> JSONResponse:
-        body = await json_body(request)
-        key = body.get("api_key") if isinstance(body, dict) else None
-        conn = db()
-        try:
-            env_keys, valid, gate_on = web.key_state(conn)
-        finally:
-            conn.close()
-        if not gate_on:
-            return JSONResponse({"key_fp": "local", "via": "local", "expires_in": None})
-        if not isinstance(key, str) or not key_is_valid(key.strip(), env_keys, valid):
-            raise ApiError(401, "E_AUTH", "invalid API key")
-        fp = fingerprint(key.strip())
-        sessions: SessionStore = app.state.sessions
-        response = JSONResponse({"key_fp": fp, "via": "cookie", "expires_in": sessions.ttl})
-        response.set_cookie(
-            SESSION_COOKIE, sessions.create(fp), max_age=sessions.ttl, path="/", httponly=True,
-            samesite="strict",
-            secure=request.url.scheme == "https" or os.environ.get("NL2ODRL_COOKIE_SECURE") == "1",
-        )  # fmt: skip
-        log_event("session_created", request_id=request.state.request_id, tenant=fp[:12])
-        return response
-
-    @app.get("/api/session")
-    def whoami(who: Principal = Depends(principal)) -> dict[str, Any]:
-        return {"key_fp": who.fp, "via": who.via}
-
-    @app.delete("/api/session")
-    def logout(request: Request, who: Principal = Depends(principal)) -> JSONResponse:
-        del who
-        app.state.sessions.revoke(request.cookies.get(SESSION_COOKIE))
-        response = JSONResponse({"ok": True})
-        response.delete_cookie(SESSION_COOKIE, path="/")
-        return response
-
     # ---- settings -----------------------------------------------------------------
     @app.get("/api/settings")
-    def get_settings(who: Principal = Depends(principal)) -> dict[str, Any]:
-        return web.model_status(who.tenant)
+    def get_settings() -> dict[str, Any]:
+        return web.model_status()
 
     @app.post("/api/settings")
-    async def post_settings(request: Request, who: Principal = Depends(principal)) -> Any:
+    async def post_settings(request: Request) -> Any:
         body = await json_body(request)
         try:
-            return web.apply_model_settings(body, who.tenant)
+            return web.apply_model_settings(body)
         except web.ConvertError as exc:
             raise ApiError(400, "E_CONFIG", str(exc)) from exc
 
     # ---- conversions ----------------------------------------------------------------
     @app.post("/api/convert")
-    async def convert(request: Request, who: Principal = Depends(principal)) -> Any:
+    async def convert(request: Request) -> Any:
         body = await json_body(request)
         try:
             nl_text, variant, seed, max_steps = web.validate_convert(body)
@@ -223,7 +157,7 @@ def create_app(
         try:
             return await run_in_threadpool(
                 app.state.registry.start, nl_text, variant, seed, max_steps,
-                tenant=who.tenant, request_id=request.state.request_id,
+                request_id=request.state.request_id,
             )  # fmt: skip
         except web.BusyError as exc:
             raise ApiError(
@@ -232,17 +166,17 @@ def create_app(
             ) from exc  # fmt: skip
 
     @app.get("/api/runs")
-    def runs(request: Request, who: Principal = Depends(principal)) -> dict[str, Any]:
+    def runs(request: Request) -> dict[str, Any]:
         flags = web._query_flags(_query(request))
         conn = db()
         try:
-            return {"runs": web._list_runs(conn, flags, who.scope)}
+            return {"runs": web._list_runs(conn, flags)}
         finally:
             conn.close()
 
     @app.get("/api/runs/{run_key}")
-    def run(run_key: str, who: Principal = Depends(principal)) -> dict[str, Any]:
-        snap = dict(own_snapshot(run_key, who))
+    def run(run_key: str) -> dict[str, Any]:
+        snap = dict(own_snapshot(run_key))
         if snap.get("draft") is None:
             snap["draft"] = web._draft_from(snap.get("events") or [])
         if snap.get("status") not in ("running", "queued"):
@@ -254,10 +188,8 @@ def create_app(
         return snap
 
     @app.get("/api/runs/{run_key}/events")
-    async def run_events(
-        request: Request, run_key: str, who: Principal = Depends(principal)
-    ) -> StreamingResponse:
-        await run_in_threadpool(own_snapshot, run_key, who)
+    async def run_events(request: Request, run_key: str) -> StreamingResponse:
+        await run_in_threadpool(own_snapshot, run_key)
         registry = app.state.registry
 
         def frame(event: str, data: Any) -> str:
@@ -300,7 +232,7 @@ def create_app(
 
     # ---- review queue + publish -----------------------------------------------------
     @app.get("/api/drafts")
-    def drafts(request: Request, who: Principal = Depends(principal)) -> dict[str, Any]:
+    def drafts(request: Request) -> dict[str, Any]:
         q = request.query_params
         include = (q.get("include_decided") or "").lower() in ("1", "true", "yes")
         try:
@@ -309,20 +241,18 @@ def create_app(
             limit = 100
         conn = db()
         try:
-            rows = publish_module.list_drafts(conn, who.scope, include_decided=include,
+            rows = publish_module.list_drafts(conn, include_decided=include,
                                               limit=limit)  # fmt: skip
         finally:
             conn.close()
         return {"drafts": rows}
 
     @app.post("/api/runs/{run_key}/publish")
-    async def publish(
-        request: Request, run_key: str, who: Principal = Depends(principal)
-    ) -> dict[str, Any]:
+    async def publish(request: Request, run_key: str) -> dict[str, Any]:
         body = await json_body(request)
         if not isinstance(body, dict):
             raise ApiError(400, "E_CONFIG", "request body must be a JSON object")
-        snap = await run_in_threadpool(own_snapshot, run_key, who)
+        snap = await run_in_threadpool(own_snapshot, run_key)
         if snap.get("status") in ("running", "queued"):
             raise ApiError(409, "E_STATE", "run is still converting")
 
@@ -330,7 +260,7 @@ def create_app(
             conn = db()
             try:
                 return publish_module.decide(
-                    conn, run_key=run_key, events=snap.get("events") or [], reviewer_fp=who.fp,
+                    conn, run_key=run_key, events=snap.get("events") or [],
                     decision=str(body.get("decision", "")), reason=body.get("reason", ""),
                     edited_ir=body.get("ir"),
                 )  # fmt: skip
@@ -343,38 +273,36 @@ def create_app(
             raise ApiError(exc.status, exc.code, exc.hint, detail=exc.detail) from exc
         METRICS.inc("nl2odrl_drafts_decided_total", decision=result.get("decision", "?"))
         log_event("draft_decision", request_id=request.state.request_id, run_key=run_key,
-                  decision=result.get("decision"), tenant=who.fp[:12],
-                  edited=result.get("edited"))  # fmt: skip
+                  decision=result.get("decision"), edited=result.get("edited"))  # fmt: skip
         return result
 
     # ---- policies, usage, metrics ---------------------------------------------------
     @app.get("/api/odrl")
-    def odrl(request: Request, who: Principal = Depends(principal)) -> dict[str, Any]:
+    def odrl(request: Request) -> dict[str, Any]:
         flags = web._query_flags(_query(request))
         conn = db()
         try:
-            return {"pairs": web._list_pairs(conn, flags, who.scope)}
+            return {"pairs": web._list_pairs(conn, flags)}
         finally:
             conn.close()
 
     @app.get("/api/usage")
-    def usage(who: Principal = Depends(principal)) -> dict[str, Any]:
+    def usage() -> dict[str, Any]:
         conn = db()
         try:
-            return {"usage": web._usage_rows(conn, who.scope)}
+            return {"usage": web._usage_rows(conn)}
         finally:
             conn.close()
 
     @app.get("/api/metrics")
-    def metrics(who: Principal = Depends(principal)) -> PlainTextResponse:
-        del who
+    def metrics() -> PlainTextResponse:
         METRICS.set("nl2odrl_runs_retained", app.state.registry.retained())
         return PlainTextResponse(METRICS.render(),
                                  media_type="text/plain; version=0.0.4; charset=utf-8")  # fmt: skip
 
     @app.api_route("/api/{rest:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
-    def unknown(rest: str, who: Principal = Depends(principal)) -> None:
-        del rest, who
+    def unknown(rest: str) -> None:
+        del rest
         raise ApiError(404, "E_CONFIG", "unknown endpoint")
 
     if ui_dir is not None and ui_dir.is_dir():

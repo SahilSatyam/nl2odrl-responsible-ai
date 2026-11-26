@@ -199,10 +199,9 @@ TRUSTED_PARTIES_ENV = "NL2ODRL_TRUSTED_PARTIES"
 def trusted_parties_from_env() -> list[str]:
     """Parties the deployment vouches for (comma-separated env value).
 
-    These come from authenticated context (the tenant that submits the text,
-    the data steward that issues offers), never from the text itself, so they
-    are grounded without a mention. With no catalog, every other party must be
-    named in the source.
+    These come from deployment context (e.g. the data steward that issues
+    offers), never from the text itself, so they are grounded without a
+    mention. With no catalog, every other party must be named in the source.
     """
     return [p.strip() for p in os.environ.get(TRUSTED_PARTIES_ENV, "").split(",") if p.strip()]
 

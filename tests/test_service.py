@@ -20,18 +20,18 @@ def fake_runs(monkeypatch, tmp_path):
     gate = threading.Event()
     started: list[str] = []
 
-    def build(nl_text, variant, seed, max_steps, root, attempt, out_dir, tenant="local"):
+    def build(nl_text, variant, seed, max_steps, root, attempt, out_dir):
         trace = tmp_path / f"t{attempt}.jsonl"
         trace.write_text("", encoding="utf-8")
         return {
             "run_id": f"r{attempt}", "scenario_id": "inline", "variant": variant,
-            "seed": seed, "nl_text": nl_text, "trace_path": str(trace), "tenant": tenant,
+            "seed": seed, "nl_text": nl_text, "trace_path": str(trace),
         }  # fmt: skip
 
     def run(spec, run_key):
         started.append(run_key)
         assert gate.wait(10)
-        return {"run_key": run_key, "status": "done", "tenant": spec["tenant"],
+        return {"run_key": run_key, "status": "done",
                 "events": [], "usage_total": {"prompt_tokens": 3, "completion_tokens": 2},
                 "model_calls": 1, "verdict": {"verdict": "PASS"}, "saves": []}  # fmt: skip
 
