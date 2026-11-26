@@ -1,6 +1,6 @@
 {
   "name": "nl2odrl",
-  "description": "NL-to-ODRL agentic converter: a fixed-stage pipeline that turns natural-language access rules into W3C ODRL 2.2 policies, with a typed IR, a deterministic compiler and SHACL validation.",
+  "description": "NL-to-ODRL agentic converter that turns natural-language access rules into verified W3C ODRL 2.2 policies using an untrusted-LLM extractor, deterministic compiler, SHACL/Z3 checks, a publish gate and a hash-chained audit trail.",
   "languages": [
     "css",
     "dockerfile",
@@ -16,14 +16,15 @@
   ],
   "frameworks": [
     "FastAPI",
-    "Pydantic",
-    "Pytest",
     "React",
     "Vite",
-    "TypeScript",
-    "Docker",
-    "Docker Compose",
-    "GitHub Actions"
+    "DSPy",
+    "pydantic",
+    "pyshacl",
+    "Z3",
+    "rdflib",
+    "pytest",
+    "Docker"
   ],
   "files": [
     {
@@ -53,20 +54,26 @@
     {
       "path": "README.md",
       "language": "markdown",
-      "sizeLines": 269,
+      "sizeLines": 257,
       "fileCategory": "docs"
     },
     {
       "path": "docker-compose.yml",
       "language": "yaml",
-      "sizeLines": 40,
+      "sizeLines": 36,
       "fileCategory": "infra"
     },
     {
       "path": "docs/NL2ODRL-SOTA-Implementation-Plan.md",
       "language": "markdown",
-      "sizeLines": 276,
+      "sizeLines": 281,
       "fileCategory": "docs"
+    },
+    {
+      "path": "docs/assets/architecture-interactive.html",
+      "language": "html",
+      "sizeLines": 15031,
+      "fileCategory": "markup"
     },
     {
       "path": "odrl_agent/__init__.py",
@@ -77,19 +84,13 @@
     {
       "path": "odrl_agent/adapter.py",
       "language": "python",
-      "sizeLines": 191,
+      "sizeLines": 193,
       "fileCategory": "code"
     },
     {
       "path": "odrl_agent/app.py",
       "language": "python",
-      "sizeLines": 389,
-      "fileCategory": "code"
-    },
-    {
-      "path": "odrl_agent/auth.py",
-      "language": "python",
-      "sizeLines": 158,
+      "sizeLines": 317,
       "fileCategory": "code"
     },
     {
@@ -155,7 +156,7 @@
     {
       "path": "odrl_agent/cli.py",
       "language": "python",
-      "sizeLines": 936,
+      "sizeLines": 827,
       "fileCategory": "code"
     },
     {
@@ -179,13 +180,13 @@
     {
       "path": "odrl_agent/extractor.py",
       "language": "python",
-      "sizeLines": 194,
+      "sizeLines": 288,
       "fileCategory": "code"
     },
     {
       "path": "odrl_agent/grounder.py",
       "language": "python",
-      "sizeLines": 403,
+      "sizeLines": 402,
       "fileCategory": "code"
     },
     {
@@ -203,7 +204,7 @@
     {
       "path": "odrl_agent/llm.py",
       "language": "python",
-      "sizeLines": 171,
+      "sizeLines": 182,
       "fileCategory": "code"
     },
     {
@@ -227,13 +228,13 @@
     {
       "path": "odrl_agent/pipeline.py",
       "language": "python",
-      "sizeLines": 732,
+      "sizeLines": 950,
       "fileCategory": "code"
     },
     {
       "path": "odrl_agent/publish.py",
       "language": "python",
-      "sizeLines": 300,
+      "sizeLines": 291,
       "fileCategory": "code"
     },
     {
@@ -269,7 +270,7 @@
     {
       "path": "odrl_agent/web.py",
       "language": "python",
-      "sizeLines": 1142,
+      "sizeLines": 883,
       "fileCategory": "code"
     },
     {
@@ -395,13 +396,13 @@
     {
       "path": "ui-react/src/App.tsx",
       "language": "typescript",
-      "sizeLines": 431,
+      "sizeLines": 427,
       "fileCategory": "code"
     },
     {
       "path": "ui-react/src/api.ts",
       "language": "typescript",
-      "sizeLines": 118,
+      "sizeLines": 113,
       "fileCategory": "code"
     },
     {
@@ -448,7 +449,7 @@
     }
   ],
   "totalFiles": 70,
-  "filteredByIgnore": 61,
+  "filteredByIgnore": 50,
   "estimatedComplexity": "moderate",
   "importMap": {
     ".dockerignore": [],
@@ -458,6 +459,7 @@
     "README.md": [],
     "docker-compose.yml": [],
     "docs/NL2ODRL-SOTA-Implementation-Plan.md": [],
+    "docs/assets/architecture-interactive.html": [],
     "odrl_agent/__init__.py": [],
     "odrl_agent/adapter.py": [
       "odrl_agent/extractor.py",
@@ -465,11 +467,9 @@
     ],
     "odrl_agent/app.py": [
       "odrl_agent/__init__.py",
-      "odrl_agent/auth.py",
       "odrl_agent/observability.py",
       "odrl_agent/web.py"
     ],
-    "odrl_agent/auth.py": [],
     "odrl_agent/bench/__init__.py": [],
     "odrl_agent/bench/__main__.py": [
       "odrl_agent/bench/__init__.py",

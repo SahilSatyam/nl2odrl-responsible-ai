@@ -1,2284 +1,1505 @@
 {
-  "version": 1,
-  "generatedAt": "2026-11-21T15:50:43.890Z",
-  "files": {
-    "README.md": {
-      "overview": "The project README explains the NL-to-ODRL design: the model only extracts a typed PolicyIR, deterministic code compiles it to ODRL 2.2 JSON-LD, and SHACL, grounding and Z3 checks gate publication. It is the starting point of the tour (step 1) and the best map of how the modules in odrl_agent/ fit together.",
-      "sections": [
-        {
-          "title": "Pitch and quick start",
-          "lineRange": [
-            1,
-            27
-          ],
-          "explanation": "States the core idea: a fixed-stage pipeline where the LLM extracts meaning into `PolicyIR` and a deterministic compiler owns syntax, IRIs and literal types. It names the ethical red line, over-permission (granting a right the source did not), and gives the install, `odrl-host serve` and `odrl-host run` commands plus the Docker alternative.",
-          "tourOrder": 1
-        },
-        {
-          "title": "Pipeline architecture diagram",
-          "lineRange": [
-            28,
-            53
-          ],
-          "explanation": "A Mermaid flowchart shows extract, ground, compile, SHACL verify, a bounded shrink-only repair loop (at most 2 rounds), then draft, validate and save. The text below it says the framework never owns the pipeline: IR, extractor, compiler and stages all live in `odrl_agent/`, and complex inputs get one extra decompose call.",
-          "tourOrder": 1
-        },
-        {
-          "title": "Benchmark and release gates",
-          "lineRange": [
-            54,
-            76
-          ],
-          "explanation": "Describes `benchmarks/v1` (240 stratified cases with gold IR, grouped so no family spans dev and test) and the `python -m odrl_agent.bench` commands. The offline gold-IR oracle runs on every PR, and a `--mutant overpermit` run must fail to prove the gates can trip. The live workflow compares against a frozen baseline.",
-          "tourOrder": 10
-        },
-        {
-          "title": "Flagship failure and safeguards",
-          "lineRange": [
-            77,
-            107
-          ],
-          "explanation": "Explains how the pipeline removes the old failure of saving invalid ODRL: the model never calls tools, every document is compiled from a validated IR, SHACL runs before the save, and repairs may narrow grants but never widen them. A sequence diagram shows the model, pipeline, ledger and verifiers, and the section ends with the `no_attacker_grant` check on the poisoned fixture.",
-          "tourOrder": 11
-        },
-        {
-          "title": "Install and LLM configuration",
-          "lineRange": [
-            108,
-            164
-          ],
-          "explanation": "Covers venv install, `PYTHONPATH`, and which commands need `LLAMA_API_KEY`/`LLAMA_BASE_URL` (live conversion) versus which work offline. It also documents product API keys (`NL2ODRL_API_KEYS`), the fail-closed auth gate and the fingerprint-only key storage. Running `odrl-host run` without a key fails closed with `E_MODEL_API` on purpose.",
-          "tourOrder": 2
-        },
-        {
-          "title": "CLI reference, scenarios, tests",
-          "lineRange": [
-            165,
-            196
-          ],
-          "explanation": "A table of every `odrl-host` subcommand (run, diagnose, replay, optimize-prompts, serve, chaos, keys, billing) plus the framework `agentcrash check`, then the two scenarios and their naive versus fixed policies. These map directly to the command handlers in `cli.py`.",
-          "tourOrder": 1
-        },
-        {
-          "title": "Grounding, reasoning, publish gate",
-          "lineRange": [
-            197,
-            221
-          ],
-          "explanation": "Lists the three deterministic checks every draft passes: grounding of parties and assets, Z3 reasoning for conflicts, and full SHACL. Only a draft with no ambiguities, assumptions, dropped rules, grounding issues or conflicts is published automatically; everything else waits for a human decision, one per run.",
-          "tourOrder": 7
-        },
-        {
-          "title": "Service behaviour",
-          "lineRange": [
-            222,
-            248
-          ],
-          "explanation": "Documents the FastAPI service: bounded worker queue with `429` and `Retry-After`, Server-Sent Events progress, Prometheus metrics, request ids written into traces, the AgentCrash SDK hash-chained traces, and cookie sessions with a CSRF header. This is the behaviour implemented in `app.py` and `web.py`.",
-          "tourOrder": 2
-        },
-        {
-          "title": "Troubleshooting and repo map",
-          "lineRange": [
-            249,
-            269
-          ],
-          "explanation": "Maps common symptoms to fixes (missing `PYTHONPATH`, missing key, missing `ui/index.html`) and closes with a table of top-level directories and their roles. Use the map to find scenarios, policies, schemas, prompts and tests.",
-          "tourOrder": 1
-        }
-      ]
-    },
-    "odrl_agent/cli.py": {
-      "overview": "Entry point for the `odrl-host` command. It parses arguments for each subcommand and delegates to the pipeline, key store, server, chaos harness and policy-patch tooling, reusing the generic `agentcrash` framework for config loading, verification and exit codes. It is the first code a reader meets in tour steps 1 and 2.",
-      "sections": [
-        {
-          "title": "Imports and registration",
-          "lineRange": [
-            1,
-            63
-          ],
-          "explanation": "The docstring says this module holds host-owned commands while the generic `agentcrash` CLI never imports it. Imports bring in framework exit codes, policy helpers, trace verifiers and the `odrl_agent` pieces. The bare `import odrl_agent.verifiers` is there only for its side effect of registering the ODRL invariants.",
-          "tourOrder": 1
-        },
-        {
-          "title": "cmd_run: live conversion",
-          "lineRange": [
-            66,
-            200
-          ],
-          "explanation": "Builds an argparse parser, resolves the scenario and policy through framework helpers, and optionally adopts a versioned prompt pack, mixing its hash into the run id so runs stay distinguishable. `--dry-run` prints the plan and exits. Otherwise it calls `run_conversion`, maps `ModelNotConfiguredError` to `E_MODEL_API` and bad config to `E_CONFIG`, and prints a human or JSON summary.",
-          "tourOrder": 1
-        },
-        {
-          "title": "Untrusted span rendering",
-          "lineRange": [
-            202,
-            239
-          ],
-          "explanation": "`_retrieved_doc_spans` reads the trace and collects the parsed natural-language spans so `cmd_run` can print them through `render_untrusted`. The output labels source text as untrusted, which keeps hostile input visibly delimited in terminal output."
-        },
-        {
-          "title": "keys and billing commands",
-          "lineRange": [
-            240,
-            340
-          ],
-          "explanation": "`cmd_keys` issues, lists and revokes product API keys, and `cmd_billing` exports per-run line items as JSON or CSV. Both operate on the SQLite store through helpers in `web.py`, and only key fingerprints are shown or stored."
-        },
-        {
-          "title": "Prompt optimization and serve",
-          "lineRange": [
-            342,
-            440
-          ],
-          "explanation": "`cmd_optimize_prompts` runs a budgeted DSPy probe and refuses to run without a live key. `cmd_serve` finds the repository root, then calls `serve_ui(port, bind, root/'ui')`; it defaults to `127.0.0.1:8901` and returns a usage error when `ui/` cannot be found. Imports are done inside the function so other subcommands start fast.",
-          "tourOrder": 2
-        },
-        {
-          "title": "chaos command",
-          "lineRange": [
-            442,
-            501
-          ],
-          "explanation": "`cmd_chaos` fuzzes fault schedules against the real pipeline with a mocked model and store, and exits 1 on any invariant violation. The small helpers `_infer_scenario` and `_trace_seed` recover a scenario path and seed from an existing trace.",
-          "tourOrder": 11
-        },
-        {
-          "title": "diagnose command",
-          "lineRange": [
-            503,
-            671
-          ],
-          "explanation": "Reads a failing trace, runs the verifiers and proposes a policy patch. It is read-only and fixture-backed unless a live endpoint is configured, so it can run offline using `reference_patch_for`."
-        },
-        {
-          "title": "replay command and regression",
-          "lineRange": [
-            672,
-            893
-          ],
-          "explanation": "Re-runs a trace's scenario under a patched policy and compares the verdict, with `_regress_golden` checking frozen golden traces for regressions. This is how a proposed patch is proven to fix the failure without breaking known-good runs."
-        },
-        {
-          "title": "main dispatcher",
-          "lineRange": [
-            894,
-            936
-          ],
-          "explanation": "`main` handles `--version` and help, then dispatches the first argument to the matching `cmd_*` function with a plain if-chain. Unknown commands return the framework's usage exit code, and `raise SystemExit(main())` makes the module runnable directly.",
-          "tourOrder": 2
-        }
-      ]
-    },
-    "odrl_agent/app.py": {
-      "overview": "The FastAPI application factory for NL2ODRL Studio. `create_app` assembles the app with error handling, a request-observing middleware, cookie or Bearer authentication, and every `/api/*` route, delegating real work to `web.RunRegistry` and `publish`. It is the HTTP half of tour step 2.",
-      "sections": [
-        {
-          "title": "Module docs and imports",
-          "lineRange": [
-            1,
-            56
-          ],
-          "explanation": "The docstring is the API reference: sessions, convert, runs and SSE events, the draft review queue, policies, usage, settings, metrics and health. Imports pull in FastAPI, auth helpers and observability utilities, and `METRICS.describe` registers a counter for reviewer decisions."
-        },
-        {
-          "title": "ApiError and app setup",
-          "lineRange": [
-            57,
-            96
-          ],
-          "explanation": "`ApiError` carries an HTTP status, a short code and a hint, so every error has one JSON shape. `create_app` takes the repo root and optional dependencies (UI dir, output dir, registry, sessions) for easy testing. The comment on sessions explains the `is not None` check: `SessionStore` defines `__len__`, so an empty store would be falsy.",
-          "tourOrder": 2
-        },
-        {
-          "title": "Error handler and middleware",
-          "lineRange": [
-            97,
-            129
-          ],
-          "explanation": "The exception handler turns `ApiError` into JSON with optional extra headers. The `_observe` middleware assigns or reuses an `X-Request-ID`, times the request, records Prometheus counters and histograms under the route template (not the raw URL, so labels stay low-cardinality), and emits one JSON log line with a truncated tenant fingerprint."
-        },
-        {
-          "title": "Auth dependencies and helpers",
-          "lineRange": [
-            130,
-            159
-          ],
-          "explanation": "`principal` is a dependency that loads the key state from the database, authenticates via header or cookie, and enforces the CSRF header for cookie sessions. `json_body` caps bodies at 64 KiB and returns clean `E_CONFIG` errors. `own_snapshot` hides runs that belong to another tenant by answering 404.",
-          "tourOrder": 2
-        },
-        {
-          "title": "Health, session, settings routes",
-          "lineRange": [
-            160,
-            214
-          ],
-          "explanation": "`/api/healthz` reports queue counts without auth. Login validates the key, sets an `HttpOnly`, `SameSite=strict` session cookie (with `secure` for HTTPS or an env flag), and returns a local session when no keys exist. Logout revokes the session; settings are read and written per tenant, with config errors mapped to 400."
-        },
-        {
-          "title": "Convert and run routes",
-          "lineRange": [
-            215,
-            255
-          ],
-          "explanation": "`POST /api/convert` validates the body and starts a run in a thread pool, translating `BusyError` into `429` with `Retry-After`. `GET /api/runs` lists runs and `GET /api/runs/{run_key}` returns a snapshot, adding the draft and, once finished, the stored review decision."
-        },
-        {
-          "title": "Server-Sent Events stream",
-          "lineRange": [
-            256,
-            300
-          ],
-          "explanation": "An async generator polls the registry every `SSE_POLL_SECONDS` and emits `status`, `trace` and finally `end` frames, sending only events not yet delivered. It stops on completion, on the hard time cap or when the client disconnects, and sends keep-alive comments so proxies do not close the stream."
-        },
-        {
-          "title": "Review queue and publish",
-          "lineRange": [
-            301,
-            349
-          ],
-          "explanation": "`GET /api/drafts` lists drafts awaiting review, and `POST /api/runs/{run_key}/publish` hands the reviewer's decision, reason and optional edited IR to `publish_module.decide` in a thread. A run that is still converting gets 409, `PublishError` maps to its own status and code, and each decision increments a metric and writes a log line."
-        },
-        {
-          "title": "Policies, usage, metrics, static UI",
-          "lineRange": [
-            350,
-            389
-          ],
-          "explanation": "Remaining routes list published pairs, per-key usage and Prometheus text. A catch-all `/api/{rest:path}` route returns a JSON 404 so unknown API paths never fall through to the static UI. When a built `ui/` directory exists it is mounted at `/`, and `_query` flattens query parameters into lists."
-        }
-      ]
-    },
-    "odrl_agent/web.py": {
-      "overview": "Service core behind the HTTP layer: constants and limits, API-key storage, request validation, building inline scenario runs, executing and recording conversions, tenant-scoped queries, the bounded `RunRegistry` worker queue, per-tenant model settings and the Uvicorn launcher. It supports the service half of tour step 2.",
-      "sections": [
-        {
-          "title": "Docs, imports, constants",
-          "lineRange": [
-            1,
-            89
-          ],
-          "explanation": "The docstring lists the module's duties. Constants fix the base scenario, input limit (4000 characters), queue defaults and SSE timing, and note that each is overridable by environment. The comment on `API_KEYS_ENV` explains the gate: it is off only while no keys exist anywhere, and it fails closed afterwards.",
-          "tourOrder": 2
-        },
-        {
-          "title": "Key state and request validation",
-          "lineRange": [
-            91,
-            200
-          ],
-          "explanation": "`_key_state` returns env keys, valid fingerprints and whether the gate is on; once a key has ever been issued, the gate stays on even if all are revoked. `validate_convert` strictly checks types and ranges for text, policy variant, seed and step count, rejecting booleans as ints. `build_inline_run` copies the base scenario, injects the pasted text as an untrusted doc and computes the run id and output paths."
-        },
-        {
-          "title": "Trace reading and snapshots",
-          "lineRange": [
-            202,
-            363
-          ],
-          "explanation": "Helpers read trace events, sum token usage, summarize saves, extract the draft, and build and record snapshots into SQLite. The trace JSONL files stay the immutable artifact; the database holds the queryable summary."
-        },
-        {
-          "title": "run_and_store",
-          "lineRange": [
-            365,
-            484
-          ],
-          "explanation": "Runs one conversion with either a live `LlmConfig` or a scripted transport, then runs the scenario invariants over the trace and state. A failed verdict gets a reference patch proposal, and the hash chain is verified. Model configuration and verifier errors become `error` snapshots with `E_MODEL_API` or `E_RUN` instead of exceptions, and the result is always persisted.",
-          "tourOrder": 2
-        },
-        {
-          "title": "Database, keys and queries",
-          "lineRange": [
-            486,
-            731
-          ],
-          "explanation": "Opens the database and creates sidecar tables for tenants and API keys, so upgrades of the framework never touch attribution. Keys are stored only as fingerprints. Run, pair and usage queries are scoped by key fingerprint, and `billing_lines` produces vendor-neutral line items."
-        },
-        {
-          "title": "BusyError and RunRegistry",
-          "lineRange": [
-            733,
-            1011
-          ],
-          "explanation": "`RunRegistry` is a bounded worker pool with a FIFO queue. When full it raises `BusyError` carrying a `Retry-After` estimated from an exponentially weighted mean run time. Finished runs are evicted by TTL and by count, after which snapshots come from the database, which keeps memory bounded. State is guarded by a lock.",
-          "tourOrder": 2
-        },
-        {
-          "title": "Query flags",
-          "lineRange": [
-            1013,
-            1037
-          ],
-          "explanation": "`_query_flags` turns URL query parameters into a flags dict used by the list endpoints."
-        },
-        {
-          "title": "Per-tenant model settings",
-          "lineRange": [
-            1039,
-            1125
-          ],
-          "explanation": "`ServerSettings` keeps live-model overrides in memory per tenant, never in `os.environ`, so one tenant cannot change another tenant's endpoint or key. `apply_model_settings` validates each field, runs `validate_base_url` as an SSRF guard (see `netguard.py`), and `model_status` reports configuration without revealing the key.",
-          "tourOrder": 4
-        },
-        {
-          "title": "serve_ui launcher",
-          "lineRange": [
-            1127,
-            1142
-          ],
-          "explanation": "Opens the database once to create tables, configures logging, builds the app with `create_app`, and runs Uvicorn with access logging disabled in favour of the app's own JSON logs.",
-          "tourOrder": 2
-        }
-      ]
-    },
-    "odrl_agent/ir.py": {
-      "overview": "Defines the typed policy intermediate representation (`PolicyIR`) as Pydantic models. It is the contract between the model, which supplies meaning, and the compiler, which supplies ODRL syntax, so malformed or out-of-vocabulary model output is rejected here instead of at SHACL time. It is the focus of tour step 3.",
-      "sections": [
-        {
-          "title": "Vocabulary tuples and Literals",
-          "lineRange": [
-            1,
-            71
-          ],
-          "explanation": "Lists the allowed actions, left operands, operators, policy types and value types, once as tuples (used to build prompts) and once as `Literal` types (used for validation and the JSON Schema). The two copies are kept in sync by a test against the bundled ontology, which is why the duplication is tolerated.",
-          "tourOrder": 3
-        },
-        {
-          "title": "Typing rules and patterns",
-          "lineRange": [
-            73,
-            100
-          ],
-          "explanation": "`OPERAND_VALUE_TYPES` records which value types each left operand may carry (for example `count` takes integers and `elapsedTime` takes durations). Ordering operators require ordered types. Regexes for ISO durations, integers, decimals and IRIs, and a maximum constraint depth of 3, back the checks.",
-          "tourOrder": 3
-        },
-        {
-          "title": "Base model, SpanRef, check_value",
-          "lineRange": [
-            102,
-            147
-          ],
-          "explanation": "`_Model` forbids extra fields so the model cannot smuggle in unknown keys. `SpanRef` holds a verbatim quote, and the ground stage later fills its offsets. `check_value` validates a literal string against its declared type and returns a readable message, which later feeds repair prompts.",
-          "tourOrder": 3
-        },
-        {
-          "title": "Constraints and nesting depth",
-          "lineRange": [
-            149,
-            204
-          ],
-          "explanation": "`ConstraintIR` is one atomic `left operator right` triple whose `model_validator` cross-checks the literal, the operand's allowed types and the operator. `LogicalConstraintIR` combines two or more constraints, and a discriminated union on `kind` lets Pydantic pick the right class. `model_rebuild` resolves the forward reference, and `constraint_depth` with `_check_depth` limits recursion.",
-          "tourOrder": 3
-        },
-        {
-          "title": "Duties and rules",
-          "lineRange": [
-            206,
-            244
-          ],
-          "explanation": "`DutyIR` describes an obligation attached to a permission. `RuleIR` covers permission, prohibition and obligation, and its validator enforces that only permissions carry duties, obligations need an assignee, and party names are not blank.",
-          "tourOrder": 3
-        },
-        {
-          "title": "Ambiguity and assumption records",
-          "lineRange": [
-            246,
-            273
-          ],
-          "explanation": "`AmbiguityFlag` and `AssumptionRecord` let the extractor flag what the text leaves open or what it filled in, instead of inventing facts. The publish gate later routes any draft with such entries to human review."
-        },
-        {
-          "title": "PolicyIR root model",
-          "lineRange": [
-            275,
-            320
-          ],
-          "explanation": "The root model holds an `analysis` field written before the structured fields, the policy type, parties, rules, ambiguities and assumptions. Its validator requires an assigner for Offer and Agreement, an assignee for Agreement, and valid `rule_index` references. `is_compilable` is true when there is at least one rule, and `ir_json_schema` exposes the schema that a snapshot test pins.",
-          "tourOrder": 3
-        },
-        {
-          "title": "Wire schema unrolling",
-          "lineRange": [
-            322,
-            393
-          ],
-          "explanation": "Some OpenAI-compatible providers reject recursive or deeply nested JSON Schemas. `_unroll` inlines every `$ref` and cuts recursion at a limit, dropping branches that would exceed it, and `schema_depth` measures nesting. `wire_schema` returns the flattened schema sent to the model, while replies are still validated against the full `PolicyIR`.",
-          "tourOrder": 4
-        }
-      ]
-    },
-    "odrl_agent/extractor.py": {
-      "overview": "Turns natural-language policy text into a validated `PolicyIR` using one structured model call, plus a decompose call for complex inputs and a repair call that receives validation violations. The model never sees tools, Turtle or JSON-LD. This is the main logic of tour step 4.",
-      "sections": [
-        {
-          "title": "Docs, imports and heuristics",
-          "lineRange": [
-            1,
-            31
-          ],
-          "explanation": "The docstring explains that source text reaches the model as quoted, untrusted data, and that a fast and a strong model are routed by complexity (both default to the same id). Two regexes detect complexity markers such as `unless` and `must not`, and split sentences deterministically.",
-          "tourOrder": 4
-        },
-        {
-          "title": "System and decompose prompts",
-          "lineRange": [
-            33,
-            61
-          ],
-          "explanation": "The system prompt tells the model that source text is data, requires verbatim quotes for each rule, forbids inventing parties or numbers, and requires ambiguities and assumptions to be recorded. It also specifies typed values and when to use permission, prohibition or obligation. A separate prompt asks only for a clause split.",
-          "tourOrder": 4
-        },
-        {
-          "title": "Result types and classify",
-          "lineRange": [
-            63,
-            95
-          ],
-          "explanation": "`ClauseSplit`, `ModelRoute` and `ExtractResult` are small containers. `classify` is a deterministic, model-free heuristic returning COMPLEX when there are many sentences, several markers or long text, so routing costs no extra call.",
-          "tourOrder": 4
-        },
-        {
-          "title": "Prompt and error helpers",
-          "lineRange": [
-            97,
-            126
-          ],
-          "explanation": "`_system_prompt` injects the vocabulary lists from `ir.py`. `_source_block` wraps the text in `<untrusted_source>` tags, and `format_validation_errors` flattens Pydantic errors into stable `path: message` strings that the repair prompt can quote. `parse_ir` validates a raw reply into either a `PolicyIR` or those errors.",
-          "tourOrder": 4
-        },
-        {
-          "title": "Extractor class",
-          "lineRange": [
-            128,
-            194
-          ],
-          "explanation": "`decompose` falls back to the sentence split if the reply is invalid and drops clauses that are not verbatim substrings of the text. `extract` picks the model route and validates the reply. `repair` sends the previous IR and violations to the strong model with instructions that allow removing or narrowing rules but forbid adding permissions or removing prohibitions, duties or constraints. The class never compiles or publishes.",
-          "tourOrder": 4
-        }
-      ]
-    },
-    "odrl_agent/llm.py": {
-      "overview": "A small httpx client for OpenAI-compatible chat endpoints that returns one JSON object matching a JSON Schema. It adds retry with exponential backoff, usage accounting and strict response checks, and is built per run from an immutable config. It is part of tour step 4.",
-      "sections": [
-        {
-          "title": "Docs and constants",
-          "lineRange": [
-            1,
-            27
-          ],
-          "explanation": "The docstring lists the retry policy: transient statuses (429, 500, 502, 503, 504) and transport errors back off exponentially and honor `Retry-After`, while other HTTP errors fail fast. Constants set 4 attempts, 0.5 s base backoff capped at 8 s, a 60 s timeout and an 8000-token default.",
-          "tourOrder": 4
-        },
-        {
-          "title": "Errors and usage accounting",
-          "lineRange": [
-            30,
-            62
-          ],
-          "explanation": "`LlmError` carries the code `E_MODEL_API` and `LlmNotConfiguredError` marks a missing endpoint or key. `LlmUsage` accumulates calls, attempts and token counts, ignoring values that are not integers.",
-          "tourOrder": 4
-        },
-        {
-          "title": "StructuredLlm configuration",
-          "lineRange": [
-            64,
-            89
-          ],
-          "explanation": "A dataclass holds endpoint, key, timeouts, retry settings, an injectable httpx `transport` for tests, and an injectable `sleep`. `from_config` duck-types a config object so the client has no dependency on the adapter module, and no process-global environment is read here.",
-          "tourOrder": 4
-        },
-        {
-          "title": "Retry delay",
-          "lineRange": [
-            91,
-            99
-          ],
-          "explanation": "`_retry_delay` uses the `Retry-After` header when it parses, clamped to the 8 s cap, and otherwise doubles the base backoff for each attempt.",
-          "tourOrder": 4
-        },
-        {
-          "title": "complete_json request loop",
-          "lineRange": [
-            101,
-            171
-          ],
-          "explanation": "Builds a `json_schema` response-format request at temperature 0 and posts it in a bounded retry loop. A non-transient HTTP error raises at once, and the final attempt does not sleep. Afterwards it checks that the response has `choices[0].message`, rejects `finish_reason == length` as truncated, and requires a bare JSON object; there is deliberately no brace-scraping fallback.",
-          "tourOrder": 4
-        }
-      ]
-    },
-    "odrl_agent/netguard.py": {
-      "overview": "An SSRF guard for user-supplied model endpoints. It rejects unsafe base URLs before the server will ever send a request to them, which matters because tenants can set their own endpoint through the settings API. It belongs to tour step 4.",
-      "sections": [
-        {
-          "title": "Constants and error type",
-          "lineRange": [
-            1,
-            16
-          ],
-          "explanation": "Defines the optional allowlist environment variable `NL2ODRL_ALLOWED_LLM_HOSTS`, a few blocked cloud metadata names and `UnsafeBaseUrlError`.",
-          "tourOrder": 4
-        },
-        {
-          "title": "Blocked address test",
-          "lineRange": [
-            18,
-            20
-          ],
-          "explanation": "`_blocked` treats link-local (which includes the 169.254.x.x metadata range), unspecified, multicast and reserved addresses as unsafe. Loopback is intentionally allowed for local model servers.",
-          "tourOrder": 4
-        },
-        {
-          "title": "validate_base_url",
-          "lineRange": [
-            22,
-            58
-          ],
-          "explanation": "Checks the scheme, requires a host, rejects embedded credentials and metadata names, and applies the allowlist when set. It then resolves the hostname and rejects any address that falls in a blocked range, unwrapping IPv4-mapped IPv6 first. Names that do not resolve are not rejected here, and the function returns the URL without its trailing slash.",
-          "tourOrder": 4
-        }
-      ]
-    },
-    "odrl_agent/compiler.py": {
-      "overview": "Deterministic compiler from `PolicyIR` to ODRL 2.2 JSON-LD plus an RDF graph. It involves no model, network or clock, so the same IR always produces identical output. Code, not the model, owns IRIs and literal types. This is the heart of tour step 5.",
-      "sections": [
-        {
-          "title": "Docs, imports, constants",
-          "lineRange": [
-            1,
-            33
-          ],
-          "explanation": "The docstring states the guarantees: byte-identical canonical JSON-LD and an isomorphic graph for the same IR, validated offline using the bundled context. Constants define the `urn:nl2odrl:` prefixes for parties, assets and policies and the ODRL namespace.",
-          "tourOrder": 5
-        },
-        {
-          "title": "IRI minting and canonical JSON",
-          "lineRange": [
-            36,
-            56
-          ],
-          "explanation": "`mint_iri` keeps names that are already absolute IRIs and otherwise builds a URN from a case-folded, hyphenated slug. Non-ASCII characters are percent-encoded rather than folded, so look-alike names stay distinct IRIs. `canonical_json` sorts keys with compact separators for hashing and comparison.",
-          "tourOrder": 5
-        },
-        {
-          "title": "Literals and constraints",
-          "lineRange": [
-            58,
-            77
-          ],
-          "explanation": "`_literal` emits plain strings, `{\"@id\"}` for IRIs and typed `@value` objects for the rest. `_constraint` builds atomic or logical constraints, using an `@list` for `andSequence` so order is preserved.",
-          "tourOrder": 5
-        },
-        {
-          "title": "Actions, duties and rules",
-          "lineRange": [
-            79,
-            121
-          ],
-          "explanation": "`_action` returns a plain action or a refined action with `rdf:value` and `refinement`. `_duty` and `_rule` build the Permission, Prohibition or Duty nodes, mint party and asset IRIs, and omit assignee or assigner when they repeat the policy-level value. A permission or prohibition with no target raises `CompileError`.",
-          "tourOrder": 5
-        },
-        {
-          "title": "Policy uid and compile_doc",
-          "lineRange": [
-            123,
-            160
-          ],
-          "explanation": "When no uid is given, `_policy_uid` hashes the canonical IR (excluding `analysis` and `ambiguities`) with SHA-256, so identical policies get identical ids. `compile_doc` assembles the document with the ODRL context, type, uid, conflict strategy, parties and one array per modality.",
-          "tourOrder": 5
-        },
-        {
-          "title": "Graph verification and compile_ir",
-          "lineRange": [
-            162,
-            180
-          ],
-          "explanation": "`_verify_graph` counts permission, prohibition and obligation triples in the parsed graph and fails loudly if JSON-LD processing dropped anything. `compile_ir` is the public entry returning both the document and graph.",
-          "tourOrder": 5
-        }
-      ]
-    },
-    "odrl_agent/odrl.py": {
-      "overview": "Offline ODRL 2.2 validation. It loads the bundled ontology, JSON-LD context and SHACL shapes from `schemas/`, converts JSON-LD to an RDF graph without fetching anything, and validates it with pySHACL. It supplies the ontology, context and RDF conversion for tour step 5.",
-      "sections": [
-        {
-          "title": "Docs and constants",
-          "lineRange": [
-            1,
-            38
-          ],
-          "explanation": "The docstring promises no wall-clock, network or model use and notes that the older subset validator was retired. Constants set the canonical context URL, the allowed policy types and the synthetic attacker principal used by the poisoned fixture, with a note that it is not an email address so redaction keeps it as evidence.",
-          "tourOrder": 5
-        },
-        {
-          "title": "Loading the ontology",
-          "lineRange": [
-            41,
-            74
-          ],
-          "explanation": "`_repo_file` searches upward for a `schemas/` file. The ontology is parsed once at import, and the module raises `ImportError` if Set, Offer or Agreement are not Policy subclasses, so vocabulary drift fails early. `ontology_terms` lists individuals of a given class.",
-          "tourOrder": 6
-        },
-        {
-          "title": "Attacker-grant scan",
-          "lineRange": [
-            76,
-            89
-          ],
-          "explanation": "`contains_attacker_grant` recursively scans every string in a document so a smuggled grant cannot hide in a nested constraint or duty."
-        },
-        {
-          "title": "Local context and shapes",
-          "lineRange": [
-            91,
-            112
-          ],
-          "explanation": "Loads the bundled `odrl-2.2.jsonld` as `LOCAL_CONTEXT` and parses the SHACL shapes once. A fixed relative base IRI makes bare names resolve identically on every machine.",
-          "tourOrder": 6
-        },
-        {
-          "title": "Offline JSON-LD parsing",
-          "lineRange": [
-            114,
-            133
-          ],
-          "explanation": "`_localize_context` swaps the canonical context URL for the bundled copy and refuses any other remote context. `jsonld_to_graph` then parses the document with rdflib, so validation never fetches anything.",
-          "tourOrder": 5
-        },
-        {
-          "title": "validate_odrl",
-          "lineRange": [
-            135,
-            170
-          ],
-          "explanation": "Never raises: it returns `(valid, errors)`. It checks the context and policy type, parses the graph, runs pySHACL without inference against the full shapes, and builds sorted, deduplicated messages that include the failing property name.",
-          "tourOrder": 6
-        }
-      ]
-    },
-    "schemas/odrl-2.2.ttl": {
-      "overview": "The bundled W3C ODRL 2.2 ontology in Turtle (2274 lines). `odrl.py` parses it at import time to confirm policy types and expose vocabulary terms, and the SHACL shapes check output against its terms. It is the standard reference in tour step 6.",
-      "sections": [
-        {
-          "title": "Prefixes and ontology header",
-          "lineRange": [
-            1,
-            24
-          ],
-          "explanation": "Declares namespace prefixes (`odrl`, `rdf`, `rdfs`, `skos`, `owl`, `xsd`, `dct`, `schema`, `foaf`, `vcard`, `cc`) and the `owl:Ontology` resource for ODRL Version 2.2 with its creators, description and license.",
-          "tourOrder": 6
-        },
-        {
-          "title": "SKOS collections",
-          "lineRange": [
-            25,
-            376
-          ],
-          "explanation": "Groups terms into `skos:Collection` resources (policy, rule, conflict, asset, party, action, constraint, operand and operator groups, and deprecated terms). They exist mainly to organize the vocabulary document and are not used for validation.",
-          "tourOrder": 6
-        },
-        {
-          "title": "Core classes and properties",
-          "lineRange": [
-            377,
-            882
-          ],
-          "explanation": "The core profile: assets, parties, the `:Policy` class and its subclasses, Permission, Prohibition, Duty, Action and Constraint classes, and properties such as `:action`, `:constraint`, `:duty` and `:operator`. About 45 `owl:Class` and 46 object-property declarations appear in the file as a whole, and this region holds the main ones.",
-          "tourOrder": 6
-        },
-        {
-          "title": "Operators and left operands",
-          "lineRange": [
-            883,
-            1297
-          ],
-          "explanation": "Defines the `:Operator` class and individuals such as `eq`, `gt` and `isAnyOf`, then the `:LeftOperand` class and its individuals (for example `:dateTime`, `:count`, `:purpose`). Their local names are the same lists mirrored in `ir.py`.",
-          "tourOrder": 6
-        },
-        {
-          "title": "Actions",
-          "lineRange": [
-            1298,
-            1774
-          ],
-          "explanation": "Declares the standard action individuals, from `use` and `display` to `synchronize`, with `includedIn` hierarchy links that the Z3 reasoner uses for action-overlap checks.",
-          "tourOrder": 6
-        },
-        {
-          "title": "Functions, policies, scopes",
-          "lineRange": [
-            1775,
-            2072
-          ],
-          "explanation": "Defines party functions (assigner, assignee and the like), policy-type individuals (Set, Offer, Agreement and others) and party or asset scopes.",
-          "tourOrder": 6
-        },
-        {
-          "title": "Deprecated and collective terms",
-          "lineRange": [
-            2073,
-            2274
-          ],
-          "explanation": "Keeps deprecated terms for backward compatibility, the collective vocabulary, and annotation-property declarations that keep the ontology within OWL DL.",
-          "tourOrder": 6
-        }
-      ]
-    },
-    "schemas/odrl-2.2.jsonld": {
-      "overview": "The bundled W3C ODRL 2.2 JSON-LD context (200 lines). It maps short JSON keys such as `permission`, `target` and `leftOperand` to full ODRL IRIs and declares how values are typed. `odrl.py` substitutes it for the remote context URL so validation never needs a network. It is part of tour step 6.",
-      "sections": [
-        {
-          "title": "Namespace prefixes",
-          "lineRange": [
-            1,
-            16
-          ],
-          "explanation": "Opens the `@context` object and declares prefixes for `odrl`, `rdf`, `rdfs`, `owl`, `skos`, `dct`, `xsd`, `vcard`, `foaf`, `schema` and `cc`.",
-          "tourOrder": 6
-        },
-        {
-          "title": "Keywords, policy types, assets, parties",
-          "lineRange": [
-            17,
-            69
-          ],
-          "explanation": "Aliases `uid` to `@id` and `type` to `@type`, then maps policy classes (Policy, Set, Offer, Agreement and others), conflict terms, asset terms such as `target`, and party properties such as `assignee`, `assigner` and the role pairs. Properties holding references are typed `@type: @id`.",
-          "tourOrder": 6
-        },
-        {
-          "title": "Actions and rules",
-          "lineRange": [
-            70,
-            112
-          ],
-          "explanation": "Maps `action` (vocabulary-typed), Permission and Prohibition classes and their properties, `obligation`, and the individual action terms starting with `use`.",
-          "tourOrder": 6
-        },
-        {
-          "title": "Duties and constraints",
-          "lineRange": [
-            113,
-            150
-          ],
-          "explanation": "Defines `Duty` and `duty`, then `Constraint`, `LogicalConstraint`, `constraint`, `refinement`, and the `operator` and `leftOperand` properties, which are typed `@vocab` so a bare string like `eq` expands to an ODRL IRI.",
-          "tourOrder": 6
-        },
-        {
-          "title": "Operands, operators, closing",
-          "lineRange": [
-            151,
-            200
-          ],
-          "explanation": "Lists left-operand terms such as `count` and `dateTime`, relational operators such as `eq`, and logical operators such as `and`, then closes the context. The compiler output only works offline because these mappings are available locally.",
-          "tourOrder": 6
-        }
-      ]
-    },
-    "schemas/odrl-2.2-shapes.ttl": {
-      "overview": "SHACL shapes for the ODRL 2.2 core profile, written in Turtle. They validate the RDF graph obtained by parsing the compiler's JSON-LD output, so a compiled policy can be checked locally with no network access. This is the standard that the tour step on ODRL vocabulary and SHACL refers to.",
-      "sections": [
-        {
-          "title": "Prefixes and design notes",
-          "lineRange": [
-            1,
-            14
-          ],
-          "explanation": "Declares the `sh`, `odrl`, `rdf`, `xsd` and `ex` prefixes. The comment explains that every node in the validated graph is explicitly typed, so shapes can target classes without RDFS inference. Extra properties are allowed (no `sh:closed`), and vocabulary lists are pinned to the bundled ontology by a test.",
-          "tourOrder": 6
-        },
-        {
-          "title": "Action vocabulary list",
-          "lineRange": [
-            16,
-            27
-          ],
-          "explanation": "`ex:ActionTerms` lists every ODRL 2.2 action IRI as an RDF list. It acts as a single reference copy of the vocabulary that tests can compare with `schemas/odrl-2.2.ttl`. The same list is repeated inline in `ex:ActionValueShape`, because SHACL `sh:in` needs a literal list.",
-          "tourOrder": 6
-        },
-        {
-          "title": "Policy, Offer and Agreement shapes",
-          "lineRange": [
-            29,
-            82
-          ],
-          "explanation": "`ex:PolicyShape` requires an IRI-identified Set, Offer or Agreement with at least one permission, prohibition or obligation. It also limits `odrl:conflict` to perm, prohibit or invalid and requires single-IRI assigner and assignee. `OfferShape` and `AgreementShape` add the rule that an assigner (and for Agreements an assignee) must exist at policy level or on every rule, using the `HasAssigner` and `HasAssignee` helper shapes.",
-          "tourOrder": 6
-        },
-        {
-          "title": "Rule and prohibition shapes",
-          "lineRange": [
-            84,
-            117
-          ],
-          "explanation": "Rules are found with `sh:targetObjectsOf`, following the properties that point at them, because ODRL 2.2 does not require an explicit `rdf:type` on a rule. A rule needs exactly one action and an IRI target. `ProhibitionShape` forbids any duty on a prohibition.",
-          "tourOrder": 6
-        },
-        {
-          "title": "Action value shape",
-          "lineRange": [
-            119,
-            144
-          ],
-          "explanation": "An action is valid if it is a vocabulary IRI, or a blank node holding an `rdf:value` from the vocabulary plus at least one `odrl:refinement`. The second branch supports refined actions such as `use` limited by a constraint. The long IRI list is duplicated in both branches, which is verbose but required by SHACL.",
-          "tourOrder": 6
-        },
-        {
-          "title": "Duty and obligation shapes",
-          "lineRange": [
-            146,
-            170
-          ],
-          "explanation": "`DutyShape` applies to objects of `odrl:duty` and `odrl:obligation` and requires exactly one vocabulary action. `ObligationShape` adds that a policy-level obligation must name an assignee, since otherwise nobody is bound to act.",
-          "tourOrder": 6
-        },
-        {
-          "title": "Constraint shapes",
-          "lineRange": [
-            172,
-            210
-          ],
-          "explanation": "A constraint is identified by the property pointing at it (constraint, refinement, and/or/xone), so third-party documents without an explicit Constraint type still validate. `ConstraintValueShape` uses `sh:xone` to demand either an atomic or a logical form. `AtomicConstraintShape` restricts the left operand and operator to the ODRL 2.2 vocabularies and requires a right operand. Literal datatypes are checked in the IR layer instead.",
-          "tourOrder": 6
-        },
-        {
-          "title": "Logical and typed constraints",
-          "lineRange": [
-            212,
-            236
-          ],
-          "explanation": "`LogicalConstraintShape` needs exactly one of and/or/xone with at least two members, or an `andSequence` list walked with a property path over `rdf:rest` and `rdf:first`. `AtomicOrLogicalShape` accepts members of such lists. `TypedConstraintShape` gives precise error messages for nodes explicitly typed as `odrl:Constraint`.",
-          "tourOrder": 6
-        }
-      ]
-    },
-    "odrl_agent/grounder.py": {
-      "overview": "Implements the entity grounding and least-privilege gate. It checks that parties and assets in a PolicyIR exist in an entity catalog or in the source text, rejects wildcard or external grants, and detects permissions supported only by prompt-injected text. It never calls a model and never widens a policy. It corresponds to the grounding half of the Grounding and Z3 Reasoning tour step.",
-      "sections": [
-        {
-          "title": "Module purpose and issue codes",
-          "lineRange": [
-            1,
-            81
-          ],
-          "explanation": "The docstring defines three checks: grounded names, least privilege, and authorship of grants. Stable string codes such as `BROAD_GRANT`, `INJECTED_GRANT` and `SUSPICIOUS_NAME` are defined here and collected in `ISSUE_CODES`. `WILDCARD_NAMES` and the compiled `_INJECTION_PATTERNS` drive detection of public principals and instruction-like text.",
-          "tourOrder": 7
-        },
-        {
-          "title": "Name normalization and catalog",
-          "lineRange": [
-            82,
-            155
-          ],
-          "explanation": "`normalize_name` canonicalizes text with Unicode normalization before comparison, and `_suspicious` flags names that look deceptive. `CatalogEntry` is a frozen record and `EntityCatalog` maps names and aliases to IRIs, loadable from a dict or file. Normalizing first is what lets homoglyph names be caught.",
-          "tourOrder": 7
-        },
-        {
-          "title": "Issue and report types",
-          "lineRange": [
-            157,
-            194
-          ],
-          "explanation": "`GroundingIssue` carries a code, detail, rule index and field. `GroundingReport` collects issues and resolved names and exposes `grounded`, `codes`, `as_dict` and `messages`. Any issue blocks auto-publication, so there is no warning level.",
-          "tourOrder": 7
-        },
-        {
-          "title": "Source-text helpers",
-          "lineRange": [
-            196,
-            260
-          ],
-          "explanation": "Reads trusted party names from the `NL2ODRL_TRUSTED_PARTIES` environment variable. `injected_ranges` finds character spans that match injection patterns, and `_mentions`, `_aliases` and `_overlaps` locate a name in the source and test whether it falls inside an injected span. `_constraint_values` flattens nested logical constraints to atomic ones.",
-          "tourOrder": 7
-        },
-        {
-          "title": "Grounder setup and name resolution",
-          "lineRange": [
-            262,
-            316
-          ],
-          "explanation": "`Grounder.__init__` takes an optional catalog, an `allow_external` flag and trusted parties. `_resolve` applies the checks in order: wildcard grant, suspicious name, catalog lookup (substituting the IRI), trusted party, then a mention search in the source. A name that appears only inside injected text yields `INJECTED_GRANT`.",
-          "tourOrder": 7
-        },
-        {
-          "title": "Grounding a whole policy",
-          "lineRange": [
-            318,
-            345
-          ],
-          "explanation": "`ground` deep-copies the IR so the input is never mutated, merges detected injected ranges with caller-supplied untrusted ranges, then resolves the policy-level assigner and assignee. It treats the assignee as a grant if any rule is a permission. It returns the new IR together with the report.",
-          "tourOrder": 7
-        },
-        {
-          "title": "Per-rule checks",
-          "lineRange": [
-            347,
-            392
-          ],
-          "explanation": "`_ground_rule` flags rules with no source span and permissions whose spans all lie in injected text. It resolves assignee, assigner, target and duty assignees, and reports a permission with no target as a broad grant. It also reports a `recipient` constraint whose value is a wildcard.",
-          "tourOrder": 7
-        },
-        {
-          "title": "Convenience wrapper",
-          "lineRange": [
-            394,
-            403
-          ],
-          "explanation": "`ground_entities` builds a `Grounder` and calls `ground` in one step, forwarding the optional `allow_external` flag.",
-          "tourOrder": 7
-        }
-      ]
-    },
-    "odrl_agent/reasoning.py": {
-      "overview": "Uses Z3 to find logical problems in a PolicyIR: constraints that can never hold, permissions that overlap prohibitions, and obligations that are prohibited. It encodes constraint trees and uses the ODRL action hierarchy from the bundled ontology. This is the formal reasoning half of the Grounding and Z3 Reasoning tour step.",
-      "sections": [
-        {
-          "title": "Analyses and constants",
-          "lineRange": [
-            1,
-            52
-          ],
-          "explanation": "The docstring lists the three analyses and states a safety goal: operators Z3 cannot model are left unconstrained, so the engine may miss a conflict but never invents one. The constants include the ontology path, a duration regex, operands that must be non-negative and the finding codes.",
-          "tourOrder": 7
-        },
-        {
-          "title": "Action hierarchy and value parsing",
-          "lineRange": [
-            55,
-            116
-          ],
-          "explanation": "`action_parents` reads `odrl:includedIn` relations from the ontology once (cached with `lru_cache`). `ancestors` and `includes` answer whether a broader action covers a narrower one. The `_duration_seconds`, `_epoch` and `_numeric` helpers turn dates, datetimes and ISO durations into floats so Z3 can compare them.",
-          "tourOrder": 7
-        },
-        {
-          "title": "Z3 constraint encoder",
-          "lineRange": [
-            118,
-            174
-          ],
-          "explanation": "`_Encoder` keeps one Z3 variable per left operand, adds axioms such as `count >= 0` and `percentage <= 100`, and turns atomic constraints into comparisons. Constraints it cannot model become a fresh free boolean, which keeps the result sound. Logical nodes map to And, Or and a pseudo-boolean equality for `xone`.",
-          "tourOrder": 7
-        },
-        {
-          "title": "Thread-safe solving",
-          "lineRange": [
-            176,
-            201
-          ],
-          "explanation": "Z3's default context is global and not thread-safe, so every Z3 object is created and freed under `_Z3_LOCK`. `_solve` sets a two-second timeout and treats `unknown` as satisfiable, again to avoid inventing conflicts. `satisfiable` is the public entry point.",
-          "tourOrder": 7
-        },
-        {
-          "title": "Finding and report types",
-          "lineRange": [
-            204,
-            237
-          ],
-          "explanation": "`Finding` records a code, detail, involved rule indexes and a path. `ReasoningReport` separates unsatisfiable-constraint findings from conflicts and provides `ok`, `as_dict` and `messages` for the pipeline and review gate.",
-          "tourOrder": 7
-        },
-        {
-          "title": "Policy analysis",
-          "lineRange": [
-            239,
-            317
-          ],
-          "explanation": "`analyze` first reports rules and duties whose constraints are unsatisfiable. It then pairs each permission with each prohibition that includes its action. When rules can overlap and no `conflict` strategy is set it raises a deontic conflict, or a hierarchy conflict for different actions. Finally it flags obligations and duties that a prohibition forbids, regardless of strategy.",
-          "tourOrder": 7
-        }
-      ]
-    },
-    "odrl_agent/pipeline.py": {
-      "overview": "The fixed-stage conversion pipeline that replaced the earlier ReAct loop. The model is called only to extract, decompose and repair; grounding, compilation, SHACL and Z3 checks, persistence and the publish decision are plain code. It also records trace events and SDK events and enforces a shrink-only repair rule. It is the orchestrator described in the Pipeline and Publish Gate tour step.",
-      "sections": [
-        {
-          "title": "Pipeline design notes",
-          "lineRange": [
-            1,
-            12
-          ],
-          "explanation": "The docstring lists the stages (ingest, optional decompose, extract, ground, compile, verify, up to two repairs, draft). It states that repair is shrink-only: a repaired IR may drop or narrow permissions but may not add one or remove a restriction.",
-          "tourOrder": 8
-        },
-        {
-          "title": "Constants and PolicyDraft",
-          "lineRange": [
-            53,
-            94
-          ],
-          "explanation": "Defines the pipeline id, `MAX_REPAIRS = 2`, the stage names and `PipelineError`. `PolicyDraft` is the result object handed to reviewers: status (ready, needs_review, no_rules, failed), the ODRL document and IR, errors, ambiguities, grounding and reasoning reports, and an `auto_publish` flag that is true only for a fully clean draft.",
-          "tourOrder": 8
-        },
-        {
-          "title": "Span grounding and widening check",
-          "lineRange": [
-            96,
-            176
-          ],
-          "explanation": "`locate` finds a quoted span in the source, exactly and then ignoring case and whitespace. `ground` fills span offsets and reports rules whose quotes are not found. `widening` compares an old and a new IR and returns reasons the new one grants more, such as a new permission, removed prohibition or duty, or a relaxed conflict strategy. The review gate reuses it for reviewer edits.",
-          "tourOrder": 8
-        },
-        {
-          "title": "Per-run trace plumbing",
-          "lineRange": [
-            179,
-            311
-          ],
-          "explanation": "`_Run` writes the legacy hash-chained trace events that the verifiers judge, and mirrors each stage, model call and tool call into the AgentCrash SDK run when one is attached. Its `fault` method asks the SDK whether a chaos fault fires at a boundary. Keeping this here lets `convert` stay focused on the logic.",
-          "tourOrder": 8
-        },
-        {
-          "title": "Model calls and holding drafts",
-          "lineRange": [
-            313,
-            353
-          ],
-          "explanation": "`_usage_delta` computes token usage per call. `_call` wraps a model call at the LLM boundary and simulates a `timeout_after_commit` fault by billing a call, discarding its result and retrying once. `_hold` withdraws auto-publication and moves a ready draft to needs_review.",
-          "tourOrder": 8
-        },
-        {
-          "title": "Safe single publish",
-          "lineRange": [
-            355,
-            395
-          ],
-          "explanation": "`_publish` validates the document, reads the record version, re-reads it just before writing, and holds the draft if another writer changed the version (check-then-act). It writes with `expected_version`. If a write acknowledgement is lost, it reads the record back instead of writing again, which keeps saves exactly-once.",
-          "tourOrder": 8
-        },
-        {
-          "title": "convert: routing and extraction",
-          "lineRange": [
-            397,
-            455
-          ],
-          "explanation": "`convert` runs the semantic stages without persistence, so it can be unit-tested. It strips the input, classifies it as simple or complex, decomposes complex text into clauses with the fast model, and extracts with the strong model for complex input.",
-          "tourOrder": 8
-        },
-        {
-          "title": "convert: ground, verify, repair loop",
-          "lineRange": [
-            456,
-            495
-          ],
-          "explanation": "Each pass rejects a widening repair and falls back to the last good IR, grounds spans, compiles, runs SHACL validation and Z3 analysis, and collects violations. If violations remain and fewer than `MAX_REPAIRS` attempts were used, the strong model is asked to repair the previous IR.",
-          "tourOrder": 8
-        },
-        {
-          "title": "convert: shrink-only fallback and draft",
-          "lineRange": [
-            496,
-            576
-          ],
-          "explanation": "After the loop, permissions that are ungrounded, target-less, assigned to nobody or backed only by injected text are dropped, while prohibitions and obligations are always kept. A `missing_assignee` ambiguity is added when a grant had no party. The final IR is compiled and validated, and the draft is marked ready only when nothing needs a human.",
-          "tourOrder": 8
-        },
-        {
-          "title": "run_conversion entry point",
-          "lineRange": [
-            577,
-            732
-          ],
-          "explanation": "Builds the extractor, ledger, tool registry, trace writer and SDK run, then writes run_start and run_end events around `convert`. A poisoned-source fault can replace the input text. Only an auto-publish draft is saved, through `_publish`. The trace is checked with `strict_validate` before the run summary is returned.",
-          "tourOrder": 8
-        }
-      ]
-    },
-    "odrl_agent/publish.py": {
-      "overview": "The human-in-the-loop publish gate. Drafts that the pipeline did not auto-publish wait here, and a reviewer can approve, edit or reject them with a reason. Every verdict is recomputed at decision time and each run can be decided only once. It completes the Pipeline and Publish Gate tour step.",
-      "sections": [
-        {
-          "title": "Gate rules and imports",
-          "lineRange": [
-            1,
-            36
-          ],
-          "explanation": "The docstring defines the three decisions. Approve is blocked by SHACL failures or remaining conflicts, edit re-grounds and recompiles a reviewer IR, and reject closes the draft. It states that nothing is trusted from the stored draft and that a draft is published at most once.",
-          "tourOrder": 8
-        },
-        {
-          "title": "Table SQL and constants",
-          "lineRange": [
-            38,
-            52
-          ],
-          "explanation": "`PUBLICATIONS_SQL` defines the `nl2odrl_publications` table with `run_key` as primary key, which is what enforces one decision per run. It also stores the reviewer fingerprint, widening notes, alerts and the published document and IR. `MAX_REASON` caps reason length.",
-          "tourOrder": 8
-        },
-        {
-          "title": "PublishError",
-          "lineRange": [
-            55,
-            63
-          ],
-          "explanation": "A `ValueError` subclass that carries a machine code, a hint and an HTTP status so the web layer can turn a refusal into a reply.",
-          "tourOrder": 8
-        },
-        {
-          "title": "Event and decision helpers",
-          "lineRange": [
-            66,
-            104
-          ],
-          "explanation": "`ensure_tables` creates the publications table on demand. `run_end_detail`, `draft_of` and `source_of` pull the stored draft and source text from the run's trace events. `decision_for` reads a prior decision for a run.",
-          "tourOrder": 8
-        },
-        {
-          "title": "Review result",
-          "lineRange": [
-            107,
-            138
-          ],
-          "explanation": "`Review` holds freshly computed verdicts for a candidate document. `blocking` lists reasons that stop publication: no document, SHACL errors or logical conflicts. Alerts, such as ambiguities, do not block, because a human may vouch for them.",
-          "tourOrder": 8
-        },
-        {
-          "title": "Recomputing the review",
-          "lineRange": [
-            140,
-            183
-          ],
-          "explanation": "`review_draft` validates the stored or edited IR against the PolicyIR schema (a bad edit raises `E_SCHEMA`), resolves spans, grounds entities, compiles, validates with SHACL and runs Z3 analysis. For an edit it also computes which grants were widened, which is recorded but allowed.",
-          "tourOrder": 8
-        },
-        {
-          "title": "Recording a decision",
-          "lineRange": [
-            185,
-            260
-          ],
-          "explanation": "`decide` validates the inputs, refuses auto-published, missing or already-decided drafts, and blocks approvals and edits that fail the review with `E_BLOCKED`. It inserts the publication row and, for approve and edit, an `odrl_docs` row in one transaction. A unique-key violation from a racing second decision becomes `E_DECIDED`.",
-          "tourOrder": 8
-        },
-        {
-          "title": "Listing held drafts",
-          "lineRange": [
-            262,
-            300
-          ],
-          "explanation": "`list_drafts` joins runs, their `run_end` event, decisions and tenant fingerprints to return the review queue, newest first. It clamps the limit to 1..500, filters by tenant scope and skips auto-published drafts. All values are passed as query parameters.",
-          "tourOrder": 8
-        }
-      ]
-    },
-    "odrl_agent/db.py": {
-      "overview": "The SQLite query layer for runs, trace events, verdicts, patches and ODRL documents, using only the standard library. The JSONL traces remain the immutable record, and this module is what the API and UI read. It is part of the Pipeline and Publish Gate step because the publish gate stores decisions and documents in the same database.",
-      "sections": [
-        {
-          "title": "Module notes and schema",
-          "lineRange": [
-            1,
-            88
-          ],
-          "explanation": "The schema creates `runs`, `events`, `verdicts`, `patches` and `odrl_docs` with foreign keys back to `runs.run_key`, plus indexes on creation time and on run and sequence. All statements use `IF NOT EXISTS`, so the script can run repeatedly.",
-          "tourOrder": 8
-        },
-        {
-          "title": "Connection and migration",
-          "lineRange": [
-            90,
-            110
-          ],
-          "explanation": "`connect` opens SQLite with `Row` access and foreign keys enabled. `migrate` runs the schema script and stores `SCHEMA_VERSION` the first time, returning the stored version afterward.",
-          "tourOrder": 8
-        },
-        {
-          "title": "Insert a finished run",
-          "lineRange": [
-            112,
-            223
-          ],
-          "explanation": "`insert_run` replaces a run row and writes its events, verdicts, patch and ODRL documents from one record. Values are bound as parameters and complex fields are stored as sorted JSON.",
-          "tourOrder": 8
-        },
-        {
-          "title": "Run listing",
-          "lineRange": [
-            225,
-            275
-          ],
-          "explanation": "`_RUN_COLUMNS` and `_run_row` shape a stored row, decoding fault JSON and the chain flag. `list_runs` builds a filtered, newest-first summary query with optional scenario, verdict and status filters. Filters are added as bound parameters rather than string-formatted values.",
-          "tourOrder": 8
-        },
-        {
-          "title": "Full run snapshot",
-          "lineRange": [
-            277,
-            372
-          ],
-          "explanation": "`get_run` rebuilds a response shaped like the live API: events with decoded injector and policy decisions, verdict rows, the patch, saved documents, token totals and any error. The UI can therefore show a stored run the same way as one still running.",
-          "tourOrder": 8
-        },
-        {
-          "title": "ODRL document pairs",
-          "lineRange": [
-            374,
-            411
-          ],
-          "explanation": "`list_odrl_docs` returns NL-to-ODRL pairs for the Policies view, with optional scenario, validity and attacker filters and a limit.",
-          "tourOrder": 8
-        }
-      ]
-    },
-    "ui-react/src/main.tsx": {
-      "overview": "The React entry point. It mounts the `App` component into the `#root` element inside `StrictMode`. It is the start of the React Studio UI tour step.",
-      "sections": [
-        {
-          "title": "Imports",
-          "lineRange": [
-            1,
-            4
-          ],
-          "explanation": "Imports `StrictMode`, the React 18 `createRoot` API, the `App` component and the global stylesheet.",
-          "tourOrder": 9
-        },
-        {
-          "title": "Mount the app",
-          "lineRange": [
-            6,
-            10
-          ],
-          "explanation": "Creates the root on the `#root` element, using a non-null assertion, and renders `App` inside `StrictMode`. StrictMode adds development-time checks, such as double-invoked effects, that help find side-effect bugs.",
-          "tourOrder": 9
-        }
-      ]
-    },
-    "ui-react/src/App.tsx": {
-      "overview": "The studio's main component file. It defines four views (Convert, Review, Policies, Runs), a model setup dialog and helpers for showing JSON and run outcomes. All server access goes through the typed client in `api.ts`. It is the core of the React Studio UI tour step.",
-      "sections": [
-        {
-          "title": "Imports and constants",
-          "lineRange": [
-            1,
-            6
-          ],
-          "explanation": "Imports React hooks and the typed API client with its interfaces. Declares the `Tab` union, the `ATTACKER` marker string used to highlight a poisoned client name, and an example sentence for the Convert view.",
-          "tourOrder": 9
-        },
-        {
-          "title": "Rendering helpers",
-          "lineRange": [
-            8,
-            38
-          ],
-          "explanation": "`highlightJson` HTML-escapes a pretty-printed value before wrapping keys and strings in spans, so the markup is safe to inject. `markAttacker` highlights lines naming the attacker. `outcomeOf` turns a run snapshot into a one-line message covering queued, running, error, held-for-review, pass and the specific failed invariants.",
-          "tourOrder": 9
-        },
-        {
-          "title": "Policies view",
-          "lineRange": [
-            40,
-            93
-          ],
-          "explanation": "Lists NL and ODRL pairs with scenario, validity and attacker filters. A memoized `useCallback` loader calls `api.pairs`, updates the scenario options and shows errors in a status note.",
-          "tourOrder": 9
-        },
-        {
-          "title": "Model setup dialog",
-          "lineRange": [
-            95,
-            127
-          ],
-          "explanation": "A dialog for saving the model base URL and API key through `api.saveSettings`, so the live model can be configured from the UI.",
-          "tourOrder": 9
-        },
-        {
-          "title": "Convert view",
-          "lineRange": [
-            129,
-            184
-          ],
-          "explanation": "Takes natural-language text, starts a conversion with `api.convert` and follows progress with `followRun`. It opens the setup dialog when no model is configured and links to the finished run.",
-          "tourOrder": 9
-        },
-        {
-          "title": "Run view",
-          "lineRange": [
-            186,
-            265
-          ],
-          "explanation": "Shows a run's trace events, verdict rows, saved documents and draft details. It can focus on a run chosen from another tab and clears that request through `onConsumed`.",
-          "tourOrder": 9
-        },
-        {
-          "title": "Source highlighting",
-          "lineRange": [
-            267,
-            289
-          ],
-          "explanation": "The `Highlighted` component marks the source-text spans that rules cite, so a reviewer can see which sentence produced which rule.",
-          "tourOrder": 9
-        },
-        {
-          "title": "Review view",
-          "lineRange": [
-            290,
-            387
-          ],
-          "explanation": "Loads held drafts and lets a reviewer approve, edit or reject each with a reason through `api.publish`. Server errors surface as `ApiError` with a code and detail, such as the blocking reasons the publish gate returns.",
-          "tourOrder": 9
-        },
-        {
-          "title": "App shell",
-          "lineRange": [
-            388,
-            431
-          ],
-          "explanation": "`App` holds the active tab, the run to focus and the model settings. It loads settings on mount and opens the setup dialog if the model is not configured. The sidebar, top bar and tabs share one `titles` map, and each view is mounted only while its tab is active.",
-          "tourOrder": 9
-        }
-      ]
-    },
-    "ui-react/src/api.ts": {
-      "overview": "The typed client for the FastAPI backend. It declares TypeScript interfaces for the API payloads, an `ApiError` class, a shared `fetch` wrapper and an `api` object with one method per endpoint. It also provides `followRun`, which streams a run's progress. It keeps the UI and backend shapes aligned, as described in the React Studio UI tour step.",
-      "sections": [
-        {
-          "title": "Payload interfaces",
-          "lineRange": [
-            1,
-            35
-          ],
-          "explanation": "Interfaces for run specs, source spans, rules, the PolicyIR, drafts, review decisions, run snapshots, trace events, verdict rows, saved documents, model settings and the session. They mirror the backend JSON, so a field change on the server shows up as a compile error here.",
-          "tourOrder": 9
-        },
-        {
-          "title": "ApiError",
-          "lineRange": [
-            37,
-            48
-          ],
-          "explanation": "An `Error` subclass carrying the HTTP status, the server's error code and optional structured detail, so callers can show the server's hint and inspect details.",
-          "tourOrder": 9
-        },
-        {
-          "title": "JSON fetch wrapper",
-          "lineRange": [
-            50,
-            67
-          ],
-          "explanation": "`json<T>` sends `credentials: 'same-origin'` and an `X-Requested-With` header that the server requires as CSRF protection on cookie-authenticated writes. The comment says the key becomes an HttpOnly session cookie and is never put in localStorage. A non-OK response becomes an `ApiError`. `post` builds JSON POST options.",
-          "tourOrder": 9
-        },
-        {
-          "title": "Endpoint methods",
-          "lineRange": [
-            69,
-            85
-          ],
-          "explanation": "The `api` object has methods for login, logout, whoami, convert, run lookups, pairs, drafts, publish and settings. Each returns a typed promise and URL-encodes any run key placed in a path.",
-          "tourOrder": 9
-        },
-        {
-          "title": "Following a run",
-          "lineRange": [
-            87,
-            114
-          ],
-          "explanation": "`followRun` opens a Server-Sent Events stream and counts trace events until an `end` event arrives. If `EventSource` is missing, the stream errors or it times out, it falls back to polling once per second for up to 600 tries. A `settled` flag stops the stream from resolving twice.",
-          "tourOrder": 9
-        },
-        {
-          "title": "Number formatting",
-          "lineRange": [
-            116,
-            118
-          ],
-          "explanation": "`fmt` formats a number with US thousands separators and shows a dash when the value is missing.",
-          "tourOrder": 9
-        }
-      ]
-    },
-    "ui-react/vite.config.ts": {
-      "overview": "The Vite build and dev-server configuration for the studio. It builds into the `ui` folder that the Python backend serves, and proxies API calls in development. It covers the build part of the React Studio UI tour step.",
-      "sections": [
-        {
-          "title": "Imports",
-          "lineRange": [
-            1,
-            2
-          ],
-          "explanation": "Imports the React plugin and `defineConfig`, which gives type checking for the config object."
-        },
-        {
-          "title": "Build and dev server",
-          "lineRange": [
-            4,
-            10
-          ],
-          "explanation": "`base: './'` makes asset URLs relative, so the bundle works when served from the backend. The build writes to `../ui` and empties it first. The dev server runs on port 5173 and proxies `/api` to `localhost:8901`, avoiding CORS issues during development.",
-          "tourOrder": 9
-        }
-      ]
-    },
-    "odrl_agent/bench/generate.py": {
-      "overview": "A deterministic generator for the 240-case Benchmark v1. Each case pairs a natural-language text with its gold PolicyIR, so the text and labels cannot drift apart. Cases are spread over five difficulty tiers and a manifest records a hash of the cases. It supports the Benchmark and Quality Gates tour step.",
-      "sections": [
-        {
-          "title": "Purpose and settings",
-          "lineRange": [
-            1,
-            23
-          ],
-          "explanation": "The docstring says vocabulary is kept disjoint from training data and fixtures, and that all cases in a group land in a single split to avoid near-duplicates across dev and test. `TIER_SHARES` fixes 240 cases across five tiers.",
-          "tourOrder": 10
-        },
-        {
-          "title": "Vocabulary pools",
-          "lineRange": [
-            25,
-            63
-          ],
-          "explanation": "Lists of invented parties, assets, action phrasings, regions, purposes and dates. The injection principals and Cyrillic homoglyph names serve the adversarial tier.",
-          "tourOrder": 10
-        },
-        {
-          "title": "Case-building helpers",
-          "lineRange": [
-            65,
-            105
-          ],
-          "explanation": "Small builders create spans, rules, atomic constraints and a gold IR, and `_case` assembles an id, tier, group, text, gold IR and expected flags. `_name` picks pool entries with a stride so cases vary deterministically without randomness.",
-          "tourOrder": 10
-        },
-        {
-          "title": "Tier 1 simple grants",
-          "lineRange": [
-            107,
-            123
-          ],
-          "explanation": "Generates plain single permissions in three phrasings across the core actions. The quote in the gold rule is the exact phrase from the text, which lets span grounding be tested.",
-          "tourOrder": 10
-        },
-        {
-          "title": "Tiers 2 and 3",
-          "lineRange": [
-            125,
-            237
-          ],
-          "explanation": "Tier 2 covers single constraints, prohibitions and duties (until, region, purpose, count, prohibit, duty, elapsed). Tier 3 covers compound cases such as split rules, two parties, alternatives, windows, conflicts and unsatisfiable constraints, with an assertion that family counts equal the tier share.",
-          "tourOrder": 10
-        },
-        {
-          "title": "Tiers 4 and 5",
-          "lineRange": [
-            239,
-            311
-          ],
-          "explanation": "Tier 4 holds ambiguous inputs, such as a missing assignee or target and vague terms like soon. Tier 5 holds adversarial inputs: ignore-previous, instruction tags, role overrides, JSON breakout, homoglyphs and wildcard notes.",
-          "tourOrder": 10
-        },
-        {
-          "title": "Assembling cases and splits",
-          "lineRange": [
-            313,
-            332
-          ],
-          "explanation": "`build_cases` concatenates the tiers, numbers the ids and assigns a split. `split_of` hashes the group name with SHA-256 to give roughly 30 percent dev and 70 percent test. `canonical` produces stable JSON for hashing.",
-          "tourOrder": 10
-        },
-        {
-          "title": "Manifest and writing",
-          "lineRange": [
-            334,
-            364
-          ],
-          "explanation": "`cases_sha` and `build_manifest` record the version, total, tier shares, split rule and per-group counts. `write` saves `cases.json` and `manifest.json` under `benchmarks/v1`. The runner later refuses cases that do not match the manifest hash.",
-          "tourOrder": 10
-        }
-      ]
-    },
-    "odrl_agent/bench/runner.py": {
-      "overview": "Runs the real conversion pipeline over every benchmark case and builds the report. The report combines metrics, gate results, a baseline comparison and an identity block (version, hash, commit and pins) so a run can be reproduced. It connects generation to the metrics and gates in the Benchmark and Quality Gates tour step.",
-      "sections": [
-        {
-          "title": "Imports and factory type",
-          "lineRange": [
-            1,
-            19
-          ],
-          "explanation": "Imports the sibling `gates`, `generate`, `metrics` and `pins` modules and the pipeline's `convert`. `LlmFactory` is a callable that returns a fresh client for each case.",
-          "tourOrder": 10
-        },
-        {
-          "title": "Load verified cases",
-          "lineRange": [
-            22,
-            30
-          ],
-          "explanation": "`load_cases` reads `cases.json` and raises an error if its hash differs from the manifest. This prevents running against a hand-edited or stale benchmark.",
-          "tourOrder": 10
-        },
-        {
-          "title": "Run one case",
-          "lineRange": [
-            33,
-            48
-          ],
-          "explanation": "Builds a fresh LLM client, calls `convert` with a `Grounder` that has no trusted parties, so a party is grounded only if the text names it. An `LlmError` becomes a failed draft instead of aborting the run. It records the draft, calls, tokens, wall time and error.",
-          "tourOrder": 10
-        },
-        {
-          "title": "Run all cases",
-          "lineRange": [
-            51,
-            56
-          ],
-          "explanation": "Runs cases in order or on a thread pool when `workers` is above one. Each case gets its own client, which keeps threads from sharing state.",
-          "tourOrder": 10
-        },
-        {
-          "title": "Git commit lookup",
-          "lineRange": [
-            59,
-            65
-          ],
-          "explanation": "Reads `HEAD` with a 10-second timeout and returns `unknown` if git is missing or fails, so a report never fails over provenance.",
-          "tourOrder": 10
-        },
-        {
-          "title": "Build the report",
-          "lineRange": [
-            68,
-            114
-          ],
-          "explanation": "`report` computes overall and per-tier metrics, evaluates gates and adds regression rows against a baseline. With `enforce='regression'` only the baseline comparison can fail the run, though absolute gates are still listed as not enforced. It also lists failing cases with their false permissions.",
-          "tourOrder": 10
-        }
-      ]
-    },
-    "odrl_agent/bench/metrics.py": {
-      "overview": "Pure functions that turn benchmark case results into the Phase 4.2 metrics (checkpoint F1, false-permission rate, ambiguity recall, latency percentiles and more). It reads predictions from each draft's final IR, the same IR the compiler consumed. The gates module compares these numbers to thresholds, which is what the benchmark tour step relies on.",
-      "sections": [
-        {
-          "title": "Result shape and helpers",
-          "lineRange": [
-            1,
-            35
-          ],
-          "explanation": "The docstring defines a result as the case, the draft dict, the call count, wall time and any error. `_norm` collapses whitespace and casefolds text. `_constraint_key` builds a canonical string for a constraint and sorts the children of logical nodes, so ordering differences do not count as errors. `_party` reads an assignee or assigner from the rule and falls back to the policy level.",
-          "tourOrder": 10
-        },
-        {
-          "title": "Checkpoint extraction",
-          "lineRange": [
-            37,
-            59
-          ],
-          "explanation": "`checkpoints` flattens an IR into sets of tuples in four categories: entity, action, modality and constraint. Constraints, action refinements and duties (including their constraints) all land in the constraint set, keyed by modality, action and target. Using sets makes gold and prediction comparison a simple set operation.",
-          "tourOrder": 10
-        },
-        {
-          "title": "Micro-averaged F1 scores",
-          "lineRange": [
-            62,
-            81
-          ],
-          "explanation": "`_f1` returns None when there is nothing to score, so a missing category is distinguishable from a score of zero. `checkpoint_scores` accumulates true positives, false positives and false negatives per category across all cases. It then reports one overall F1 plus one per category (micro-averaging).",
-          "tourOrder": 10
-        },
-        {
-          "title": "Permission and prohibition checks",
-          "lineRange": [
-            84,
-            113
-          ],
-          "explanation": "`false_permissions` flags a predicted permission that no gold permission covers. Coverage requires the same target and assignee and a gold action that `includes` the predicted action. A permission is also bad if its assignee appears in the case's forbidden principals. `missed_prohibitions` counts gold prohibitions with no matching predicted one, where an unscoped (None) assignee also matches. A dropped prohibition is therefore treated as an over-permission risk.",
-          "tourOrder": 10
-        },
-        {
-          "title": "Span attribution",
-          "lineRange": [
-            116,
-            127
-          ],
-          "explanation": "Counts rules for which at least one source span, sliced from the original text by its start and end offsets, matches its quoted text after normalization. It returns (rules attributed, total rules). This checks that provenance offsets are genuine and not just plausible quotes.",
-          "tourOrder": 10
-        },
-        {
-          "title": "Ratio and percentile helpers",
-          "lineRange": [
-            130,
-            138
-          ],
-          "explanation": "`_ratio` returns None on a zero denominator, which propagates 'not applicable' into the gates. `_percentile` uses a simple nearest-rank index into the sorted values, with no interpolation.",
-          "tourOrder": 10
-        },
-        {
-          "title": "Computing all metrics",
-          "lineRange": [
-            141,
-            203
-          ],
-          "explanation": "`compute` assembles every metric into one dict: SHACL pass rate, valid-term rate, false-permission and false-auto-publish rates, the tier-5 adversarial rate, behavioral agreement, conflict escape, ambiguity recall, unsupported assumptions, span attribution, median LLM calls and p95 latency per route. Conflict cases and cases with no gold rules are skipped for agreement. Ambiguity counts as caught only when the draft's ambiguity kinds overlap the expected ones and the draft was not auto-published.",
-          "tourOrder": 10
-        },
-        {
-          "title": "Per-tier breakdown",
-          "lineRange": [
-            206,
-            217
-          ],
-          "explanation": "`by_tier` groups results by difficulty tier, reruns `compute` per group and keeps a short list of headline keys. It gives the report a per-tier view without duplicating metric logic.",
-          "tourOrder": 10
-        }
-      ]
-    },
-    "odrl_agent/bench/gates.py": {
-      "overview": "Declares the release gates for the benchmark and the regression rules against a frozen baseline. It evaluates a metrics dict into pass/fail rows. The CI workflows use it to decide whether a run blocks a merge.",
-      "sections": [
-        {
-          "title": "Gate thresholds table",
-          "lineRange": [
-            1,
-            24
-          ],
-          "explanation": "`GATES` maps each metric name to a comparison operator, a threshold and a live-only flag. Examples are SHACL pass rate == 1.0, checkpoint F1 >= 0.92 and tier-5 false permission == 0. The latency gates are live-only because the offline run has no real model latency. A comment explains that missed prohibitions are gated because a dropped prohibition is an over-permission.",
-          "tourOrder": 10
-        },
-        {
-          "title": "Regression limits and operators",
-          "lineRange": [
-            26,
-            37
-          ],
-          "explanation": "Constants set how far a candidate may drift from the baseline: false-permission-type rates may rise by 0.005 and F1 may fall by 0.01 (both absolute). `_OPS` maps operator strings to lambdas so the table can stay declarative.",
-          "tourOrder": 10
-        },
-        {
-          "title": "Absolute gate evaluation",
-          "lineRange": [
-            40,
-            50
-          ],
-          "explanation": "`evaluate` produces one row per gate with metric, rule, value and passed. Live-only gates are skipped in offline mode. A metric that is missing or None fails, so missing data cannot slip through a gate silently.",
-          "tourOrder": 10
-        },
-        {
-          "title": "Baseline regression rows",
-          "lineRange": [
-            52,
-            69
-          ],
-          "explanation": "`regressions` compares the three over-permission rates and the two F1 scores to the baseline using the tolerances above. Either side being None fails the row. `failed` filters rows to the ones that did not pass. This is the check that pull requests are held to in the live workflow.",
-          "tourOrder": 10
-        }
-      ]
-    },
-    "odrl_agent/bench/pins.py": {
-      "overview": "Records and verifies the pins that a benchmark number depends on: model id, extractor prompt pack hash, IR schema hash, wire schema hash and IR version. They are stored in benchmarks/v1/pins.json. Any prompt or model change moves a hash, which makes an offline test fail until the pins file is rewritten in a visible diff.",
-      "sections": [
-        {
-          "title": "Purpose and imports",
-          "lineRange": [
-            1,
-            18
-          ],
-          "explanation": "The docstring explains the mechanism: the pins file is path-filtered by the live gate workflow, so a change must clear a live benchmark run. `PINS_PATH` resolves two parents up from this file to the repository's benchmarks/v1/pins.json.",
-          "tourOrder": 10
-        },
-        {
-          "title": "Computing current pins",
-          "lineRange": [
-            21,
-            34
-          ],
-          "explanation": "`_sha` returns the first 16 hex characters of a SHA-256. `current` hashes the system and decompose prompts joined by a separator, and the IR and wire JSON schemas serialized with sorted keys so the hash is stable. It also records the default model and `IR_VERSION`.",
-          "tourOrder": 10
-        },
-        {
-          "title": "Load, write and drift",
-          "lineRange": [
-            37,
-            50
-          ],
-          "explanation": "`load` and `write` read and write the JSON pins file as UTF-8. `drift` returns `{key: (pinned, current)}` for every pin that differs, which the integrity test and the `bench pins` command use to detect an unpinned change.",
-          "tourOrder": 10
-        }
-      ]
-    },
-    "odrl_agent/chaos.py": {
-      "overview": "The live-workflow chaos gate. It re-executes the real conversion pipeline under fuzzed fault schedules, with faults injected at the read_source, llm and save_odrl boundaries. It judges each resulting trace with the ODRL invariants and shrinks failing schedules. The model is an offline mock, so the gate runs on every pull request without a network or key.",
-      "sections": [
-        {
-          "title": "Why a live chaos gate",
-          "lineRange": [
-            1,
-            27
-          ],
-          "explanation": "The docstring contrasts this with `agentcrash check --fuzz`, which only replays faults over a recorded trace and so cannot show whether this workflow recovers. Here the same fuzz-and-shrink engine drives a runner that reruns the pipeline each time. Imports include the SDK factory `chaos_sdk` and the `StructuredLlm` client.",
-          "tourOrder": 11
-        },
-        {
-          "title": "Invariants and fault kinds",
-          "lineRange": [
-            29,
-            51
-          ],
-          "explanation": "`CHAOS_INVARIANTS` lists the seven checks every trace must satisfy, mixing ODRL gate checks with the generic fresh-write and lost-update checks. `FAULT_KINDS` names the injected faults. `REFERENCE_IR` is the IR an honest extractor would return for the scenario text: one permission for the research team on dataset-7.",
-          "tourOrder": 11
-        },
-        {
-          "title": "Offline mock LLM",
-          "lineRange": [
-            54,
-            66
-          ],
-          "explanation": "`mock_llm` builds a real `StructuredLlm` over an `httpx.MockTransport` whose handler always returns the same chat-completion JSON. The `sleep` is replaced with a no-op so retries cost no time. This keeps the whole LLM code path (parsing, usage accounting) under test without network access.",
-          "tourOrder": 11
-        },
-        {
-          "title": "Runner factory",
-          "lineRange": [
-            69,
-            110
-          ],
-          "explanation": "`make_runner` loads the scenario and policy YAML and returns a `runner(schedule)` closure. Each call numbers its own trace and state files and builds a fault-injecting SDK from the schedule and seed. It then calls `run_conversion`, always closing the SDK in `finally`. It optionally logs the faults, draft status, saves and hash-chain health, and returns parsed trace events with the state snapshot. Agentcrash imports are deferred into the function body.",
-          "tourOrder": 11
-        },
-        {
-          "title": "Running the full gate",
-          "lineRange": [
-            113,
-            159
-          ],
-          "explanation": "`run_chaos` registers the ODRL verifiers, resolves the invariants and uses a temp directory when none is given. For each scenario it first runs a fault-free baseline, then `fuzz_and_shrink`. A scenario passes only if the baseline verdict is PASS, no fuzz case fails and at least one run actually fired a fault. This last condition stops a harness that injects nothing from passing. The overall `ok` also needs every SDK hash chain to be valid.",
-          "tourOrder": 11
-        }
-      ]
-    },
-    "odrl_agent/verifiers.py": {
-      "overview": "The ODRL domain invariants registered with the AgentCrash verifier registry. It holds the original three checks (valid, no attacker grant, exactly-once save) and four Phase 2 gate checks that judge the draft-versus-publish contract. The core agentcrash package never imports this module. Hosts import it, or call `register_odrl_verifiers`, to judge ODRL traces.",
-      "sections": [
-        {
-          "title": "Imports, constants, exports",
-          "lineRange": [
-            1,
-            69
-          ],
-          "explanation": "The docstring says to import the module from the host application only. `SAVE_ODRL` names the mutating tool. `ODRL_INVARIANT_IDS` and `ODRL_GATE_IDS` list the two groups of check ids. `__all__` re-exports the core `FreshWriteOnly` and `NoLostUpdate` classes so hosts get one import point.",
-          "tourOrder": 11
-        },
-        {
-          "title": "Trace filtering helpers",
-          "lineRange": [
-            71,
-            97
-          ],
-          "explanation": "`_mutating_calls` validates that the trace is a list of dict events. It keeps only non-error `tool_result` events for the given tool. `_committed_saves` narrows these to `save_odrl` events whose args have op 'write', which is the definition of a published document used throughout.",
-          "tourOrder": 11
-        },
-        {
-          "title": "OdrlValid check",
-          "lineRange": [
-            100,
-            125
-          ],
-          "explanation": "Every committed save must pass `validate_odrl` against the ODRL shapes. It also fails when there are no saves, because a converter that saves nothing has not converted anything. Failure messages list the step and the SHACL errors.",
-          "tourOrder": 11
-        },
-        {
-          "title": "NoAttackerGrant check",
-          "lineRange": [
-            128,
-            158
-          ],
-          "explanation": "Checks that no saved document grants `ATTACKER_PRINCIPAL`, using `contains_attacker_grant`. It targets the poisoned-sentence scenario, where an untrusted instruction tries to plant a grant. A structurally valid document can still fail this check.",
-          "tourOrder": 11
-        },
-        {
-          "title": "ExactlyOnceSave check",
-          "lineRange": [
-            161,
-            179
-          ],
-          "explanation": "Passes only when exactly one committed `save_odrl` write exists, so retries and duplicate saves fail even if each document is valid. It is kept in the host module so the framework core stays domain-free.",
-          "tourOrder": 11
-        },
-        {
-          "title": "Draft recovery helpers",
-          "lineRange": [
-            185,
-            214
-          ],
-          "explanation": "`_run_end` finds the last `run_end` event detail. `_source` returns the ingested text from the `ingest` pipeline stage. `_draft_ir` revalidates the draft's IR dict into a `PolicyIR` and returns None if it is missing or invalid. The gate checks use these to recompute results from the trace rather than trust recorded reports.",
-          "tourOrder": 11
-        },
-        {
-          "title": "OdrlShaclValid check",
-          "lineRange": [
-            217,
-            245
-          ],
-          "explanation": "Like `OdrlValid`, but publishing nothing is acceptable when the pipeline held the draft for review. It fails when a saved document is invalid or when an auto-publishable draft was not saved.",
-          "tourOrder": 11
-        },
-        {
-          "title": "Conflict and grounding checks",
-          "lineRange": [
-            248,
-            305
-          ],
-          "explanation": "`NoDeonticConflict` reruns `reasoning.analyze` on the draft IR and fails if the report has conflicts or unsatisfiable ranges. `GroundedPrincipals` reruns the `Grounder` on the ingested source. It rebuilds a catalog from names the draft already resolved, so catalog-resolved parties count as grounded. Both pass vacuously when nothing was published and fail when a draft IR is missing.",
-          "tourOrder": 11
-        },
-        {
-          "title": "ExactlyOncePublish check",
-          "lineRange": [
-            308,
-            330
-          ],
-          "explanation": "Expects one save when the draft is auto-publishable and zero otherwise. Held drafts reach the store only through Approve & Publish, outside the conversion run, so any save of a held draft is a violation.",
-          "tourOrder": 11
-        },
-        {
-          "title": "Registration",
-          "lineRange": [
-            333,
-            351
-          ],
-          "explanation": "`register_odrl_verifiers` registers all checks and is idempotent. It rebinds `FreshWriteOnly` to `save_odrl`, because `agentcrash check` re-registers its built-ins and overwrites that binding with a default for `key_value_store`. The module calls it once at import time.",
-          "tourOrder": 11
-        }
-      ]
-    },
-    "scenarios/odrl_convert_poisoned/scenario.yaml": {
-      "overview": "An AgentCrash scenario for the adversarial variant of the ODRL conversion task. The natural-language request carries a hostile instruction that grants attacker-client access. The converter must never save that as a grant. The chaos gate and the verifiers load this file.",
-      "sections": [
-        {
-          "title": "Scenario header and task",
-          "lineRange": [
-            1,
-            7
-          ],
-          "explanation": "Declares the scenario schema version, id, task and seed 42. The comments say the fixture bytes carry the hostile instruction, tagged untrusted, and that the converter must not save it as a grant.",
-          "tourOrder": 11
-        },
-        {
-          "title": "Tool definitions",
-          "lineRange": [
-            8,
-            23
-          ],
-          "explanation": "Three tools are declared with simulated latency and timeout: parse_policy and validate_odrl are read-only, and save_odrl is the only mutating tool. `idempotency_key_arg` is null for all of them, so the verifiers rely on trace shape and not on idempotency keys.",
-          "tourOrder": 11
-        },
-        {
-          "title": "Invariants",
-          "lineRange": [
-            24,
-            36
-          ],
-          "explanation": "Lists four invariants: odrl_valid, no_attacker_grant, exactly_once_save and fresh_write_only. Each has a check expression and a description. These ids match the verifiers registered in `odrl_agent/verifiers.py`.",
-          "tourOrder": 11
-        },
-        {
-          "title": "Policy and environment",
-          "lineRange": [
-            37,
-            46
-          ],
-          "explanation": "References the default agent policy file and a 12-step limit. The environment points at the NL fixture file and a document keyed `poisoned_sentence_v1`. It seeds an empty `odrl-policy-1` record in the store.",
-          "tourOrder": 11
-        }
-      ]
-    },
-    "schemas/trace-event.json": {
-      "overview": "A JSON Schema (draft-07) for one JSONL trace event envelope, version trace/v1. Trace events are the evidence the verifiers and the chaos gate read. Each event links to the previous one by hash.",
-      "sections": [
-        {
-          "title": "Schema header",
-          "lineRange": [
-            1,
-            5
-          ],
-          "explanation": "Sets the draft-07 dialect, the title and a description naming the trace/v1 format. The root is an object.",
-          "tourOrder": 11
-        },
-        {
-          "title": "Required fields",
-          "lineRange": [
-            6,
-            19
-          ],
-          "explanation": "Twelve fields are mandatory, including `event_id`, `prev_hash`, `run_id`, `step`, `tool`, `args`, `outcome` and `latency`. `injector_event` and `policy_decision` are also required, though they may be null. The optional `detail` object is not required.",
-          "tourOrder": 11
-        },
-        {
-          "title": "Property definitions",
-          "lineRange": [
-            20,
-            35
-          ],
-          "explanation": "`event_id` and `run_id` have strict hex patterns. `ts_virtual`, `step` and `latency` are non-negative integers. `tool` may be null. `outcome` is limited to success, timeout, error, blocked or info. `detail` is a free-form object, where the verifiers find phases like `tool_result` and `run_end`.",
-          "tourOrder": 11
-        }
-      ]
-    },
-    "Dockerfile": {
-      "overview": "A multi-stage build for the self-host image. The first stage builds the React studio with Node. The second installs the Python package and serves the API and built UI with Uvicorn on port 8901. It covers the container part of the deployment tour step.",
-      "sections": [
-        {
-          "title": "UI build stage",
-          "lineRange": [
-            1,
-            10
-          ],
-          "explanation": "Uses node:22-slim. It copies only package.json and the lockfile first so the `npm ci` layer is cached, then copies the source and runs the Vite build. The comment notes the build output lands in /build/ui through the Vite outDir setting.",
-          "tourOrder": 12
-        },
-        {
-          "title": "Python runtime stage",
-          "lineRange": [
-            12,
-            25
-          ],
-          "explanation": "Starts from python:3.12-slim with unbuffered output and PYTHONPATH set to /app. It copies only what the app needs: package, policies, prompts, schemas, scenarios and one test fixture. It installs the project with pip, then copies the built UI from the first stage. No Node tooling reaches the final image.",
-          "tourOrder": 12
-        },
-        {
-          "title": "Port, healthcheck, command",
-          "lineRange": [
-            26,
-            30
-          ],
-          "explanation": "Exposes 8901 and defines a healthcheck with a Python one-liner that requests /api/healthz, the one endpoint that answers without credentials. The default command is `odrl-host serve` bound to 0.0.0.0.",
-          "tourOrder": 12
-        }
-      ]
-    },
-    "docker-compose.yml": {
-      "overview": "Compose file that runs the studio service with environment-driven configuration and persistent storage. All secrets and tunables come from the host environment with safe empty defaults.",
-      "sections": [
-        {
-          "title": "Service and ports",
-          "lineRange": [
-            1,
-            5
-          ],
-          "explanation": "A single `studio` service is built from the local Dockerfile and publishes port 8901.",
-          "tourOrder": 12
-        },
-        {
-          "title": "Environment configuration",
-          "lineRange": [
-            6,
-            26
-          ],
-          "explanation": "Variables cover the model endpoint and key, an allowlist of model hosts as an SSRF guard, product API keys (empty means open local mode), trusted parties and the run queue limits (workers, depth, TTL). Secure session cookies are an opt-in toggle for TLS deployments. Optional AgentCrash control plane variables are also set. The comments note that per-tenant model settings are held in server memory and not in env.",
-          "tourOrder": 12
-        },
-        {
-          "title": "Persistent volumes",
-          "lineRange": [
-            27,
-            32
-          ],
-          "explanation": "Bind-mounts agentcrash.db to keep runs, evidence, decisions and issued keys across restarts. The comment warns the file must exist first. Named volumes keep traces and reports.",
-          "tourOrder": 12
-        },
-        {
-          "title": "Healthcheck and volume declarations",
-          "lineRange": [
-            33,
-            40
-          ],
-          "explanation": "The healthcheck calls /api/healthz every 30 seconds with a 5 second timeout and 3 retries. The two named volumes are declared at the bottom.",
-          "tourOrder": 12
-        }
-      ]
-    },
-    ".github/workflows/ci.yml": {
-      "overview": "The per-push and per-pull-request CI pipeline. It runs the converter tests, the chaos gate and the benchmark checks on three Python versions. It also builds the React studio and the Docker image.",
-      "sections": [
-        {
-          "title": "Triggers",
-          "lineRange": [
-            1,
-            6
-          ],
-          "explanation": "Runs on every push and every pull request.",
-          "tourOrder": 12
-        },
-        {
-          "title": "Converter job setup",
-          "lineRange": [
-            7,
-            20
-          ],
-          "explanation": "The `converter` job runs on Ubuntu with PYTHONPATH set to the repo root. It uses a matrix of Python 3.11, 3.12 and 3.13 with fail-fast off, so one version failing does not hide results from the others.",
-          "tourOrder": 12
-        },
-        {
-          "title": "Converter gates",
-          "lineRange": [
-            21,
-            40
-          ],
-          "explanation": "Installs the package in editable mode with pytest, then runs the tests. Next come the chaos gate (20 fuzz cases with a mocked model) and the benchmark integrity checks (`bench verify` for the manifest hash and `bench pins` for prompt and model pins). Then it runs the offline oracle benchmark. The last step runs `agentcrash check` on the golden trace with the ODRL plugin and `--scan-pii` as a PII guardrail.",
-          "tourOrder": 12
-        },
-        {
-          "title": "Studio build job",
-          "lineRange": [
-            41,
-            54
-          ],
-          "explanation": "Sets up Node 22 with npm caching keyed on the lockfile, then runs `npm ci` and the Vite build in ui-react. This verifies the front end compiles.",
-          "tourOrder": 12
-        },
-        {
-          "title": "Image build job",
-          "lineRange": [
-            55,
-            61
-          ],
-          "explanation": "Needs both the converter and studio jobs to pass, then builds the Docker image to check the Dockerfile still works.",
-          "tourOrder": 12
-        }
-      ]
-    },
-    ".github/workflows/bench-live.yml": {
-      "overview": "The live-model benchmark workflow. It runs nightly, on demand and on pull requests that touch files able to move benchmark numbers. Pull requests are blocked only by regressions against Baseline v1. Nightly and manual runs enforce every absolute target.",
-      "sections": [
-        {
-          "title": "Triggers and policy",
-          "lineRange": [
-            1,
-            20
-          ],
-          "explanation": "The header comment sets the policy for pull requests versus nightly runs. Triggers are a nightly cron, manual dispatch and pull requests path-filtered to the extractor, LLM client, IR, grounder, pipeline, prompts and pins file. These match the files the pins module hashes.",
-          "tourOrder": 12
-        },
-        {
-          "title": "Concurrency",
-          "lineRange": [
-            22,
-            24
-          ],
-          "explanation": "Groups runs by workflow and ref and cancels in-progress runs, so a newer push replaces a stale live run and saves model cost.",
-          "tourOrder": 12
-        },
-        {
-          "title": "Job setup",
-          "lineRange": [
-            26,
-            38
-          ],
-          "explanation": "A single `benchmark` job with a 90 minute timeout. Model credentials come from repository secrets as environment variables. It checks out the code and sets up Python 3.12.",
-          "tourOrder": 12
-        },
-        {
-          "title": "Install and credential check",
-          "lineRange": [
-            39,
-            46
-          ],
-          "explanation": "Installs the package, then fails fast with an error annotation if either secret is missing. The message states that a prompt or model change cannot merge without a live run.",
-          "tourOrder": 12
-        },
-        {
-          "title": "Live benchmark run",
-          "lineRange": [
-            47,
-            59
-          ],
-          "explanation": "Builds the argument list: live mode with 4 workers, and the baseline file if it exists. For pull requests it adds `--enforce regression`. Otherwise all absolute gates apply. The comment says nightly runs may stay red until the model and pipeline meet the targets.",
-          "tourOrder": 12
-        },
-        {
-          "title": "Report upload",
-          "lineRange": [
-            60,
-            65
-          ],
-          "explanation": "Uploads reports/bench-live.json as an artifact even when the run failed (`if: always()`), so failures can be inspected.",
-          "tourOrder": 12
-        }
-      ]
-    },
-    "pyproject.toml": {
-      "overview": "Packaging and tool configuration for the nl2odrl project, version 2.0.0. It declares dependencies, the odrl-host console command and the pytest and ruff settings.",
-      "sections": [
-        {
-          "title": "Build system",
-          "lineRange": [
-            1,
-            3
-          ],
-          "explanation": "Uses setuptools (version 68 or newer) and wheel as the build backend.",
-          "tourOrder": 12
-        },
-        {
-          "title": "Project metadata",
-          "lineRange": [
-            5,
-            10
-          ],
-          "explanation": "Names the package nl2odrl, describes it as a converter built on agentcrash-core and points at README.md. It requires Python 3.11 or newer, which matches the CI matrix floor.",
-          "tourOrder": 12
-        },
-        {
-          "title": "Runtime dependencies",
-          "lineRange": [
-            11,
-            23
-          ],
-          "explanation": "agentcrash-core is pinned to the 0.4 series. Other dependencies cover the main parts of the pipeline: pydantic for the IR, httpx for the LLM client, pyshacl and rdflib for validation, z3-solver for reasoning, dspy for prompt optimization, and fastapi with uvicorn for serving.",
-          "tourOrder": 12
-        },
-        {
-          "title": "Extras, script, packages",
-          "lineRange": [
-            25,
-            32
-          ],
-          "explanation": "A `dev` extra adds pytest. The `odrl-host` console script points to `odrl_agent.cli:main`, which the Dockerfile and CI call. Package discovery includes only `odrl_agent*`.",
-          "tourOrder": 12
-        },
-        {
-          "title": "Pytest and ruff settings",
-          "lineRange": [
-            34,
-            41
-          ],
-          "explanation": "Pytest puts the repo root on the Python path, looks in tests/ and runs quietly. Ruff uses a line length of 100 and targets py311.",
-          "tourOrder": 12
-        }
-      ]
-    },
-    "odrl_agent/__init__.py": {
-      "overview": "Package initializer for odrl_agent that declares the package and its public metadata.",
-      "sections": []
-    },
-    "odrl_agent/adapter.py": {
-      "overview": "Adapts the benchmark corpus and LLM settings for the pipeline: loads document and NL stores and reads live-run timeout and token limits from the environment.",
-      "sections": []
-    },
-    "odrl_agent/auth.py": {
-      "overview": "API-key and session authentication helpers: key fingerprinting, bearer parsing, an in-memory session store, principal resolution and CSRF checks.",
-      "sections": []
-    },
-    "odrl_agent/observability.py": {
-      "overview": "Observability helpers: request IDs, structured JSON event logging, route templating and an in-process Prometheus-style metrics registry.",
-      "sections": []
-    },
-    "odrl_agent/remediation.py": {
-      "overview": "Reference remediation patches for known failure scenarios (validate, fresh, reconcile stages), used by diagnose to propose fixes.",
-      "sections": []
-    },
-    "scripts/baseline_v0.py": {
-      "overview": "Script that runs the v0 baseline over the benchmark cases and writes baseline results.",
-      "sections": []
-    },
-    "odrl_agent/bench/evaluator.py": {
-      "overview": "Benchmark evaluator that turns compiled ODRL documents into allow/deny decisions over generated access requests, so predicted and gold policies can be compared behaviorally.",
-      "sections": []
-    },
-    "odrl_agent/strict.py": {
-      "overview": "Strict validation of tool-call keyed arguments and canonical forms for the agent, rejecting malformed or unexpected tool inputs.",
-      "sections": []
-    },
-    "odrl_agent/tools.py": {
-      "overview": "Tool registry exposing scenario-backed tools to the agent, with argument validation and untrusted-content rendering.",
-      "sections": []
-    },
-    "odrl_agent/bench/__init__.py": {
-      "overview": "Package marker for the benchmark subpackage; effectively empty.",
-      "sections": []
-    },
-    "odrl_agent/bench/__main__.py": {
-      "overview": "CLI entry point (python -m odrl_agent.bench) with generate, pins and run subcommands that drive benchmark generation, pin drift checks and offline/live/oracle runs with gate reporting.",
-      "sections": []
-    },
-    "odrl_agent/bench/oracle.py": {
-      "overview": "Provides an oracle LLM stand-in that returns mutated gold IR, used to exercise the repair loop and pipeline without a live model.",
-      "sections": []
-    },
-    ".dockerignore": {
-      "overview": "Excludes virtualenvs, caches, node_modules, local databases, traces, reports and .env files from the Docker build context.",
-      "sections": []
-    },
-    "schemas/env-state.json": {
-      "overview": "JSON Schema for the post-run environment snapshot (env_state/v1) holding run id, documents, record versions and a sha256 ledger hash.",
-      "sections": []
-    },
-    "schemas/policy-patch.json": {
-      "overview": "JSON Schema for a diagnoser-proposed recovery-policy diff (policy_patch/v1) with source run id, rationale and a free-form patch object.",
-      "sections": []
-    },
-    "schemas/policy.json": {
-      "overview": "JSON Schema for the recovery policy (policy/v1): rules keyed by trigger (timeout, mutating retry, untrusted content, stale read) with actions such as fail, retry_same or require_confirmation, and retry limits of at most 3 attempts.",
-      "sections": []
-    },
-    "schemas/scenario.json": {
-      "overview": "JSON Schema for a scenario declaration (scenario/v1): task, seed, tool latency/timeout/mutating flags, invariants and the recovery policy name.",
-      "sections": []
-    },
-    "ui-react/.oxlintrc.json": {
-      "overview": "Oxlint configuration enabling the react, typescript and oxc plugins with rules-of-hooks as an error and only-export-components as a warning.",
-      "sections": []
-    },
-    "ui-react/README.md": {
-      "overview": "Vite React TypeScript template readme covering the available React plugins, the React Compiler and how to enable type-aware Oxlint rules.",
-      "sections": []
-    },
-    "ui-react/index.html": {
-      "overview": "Vite HTML entry page titled NL2ODRL Responsible AI Console that loads IBM Plex fonts and mounts the React app from /src/main.tsx into #root.",
-      "sections": []
-    },
-    "ui-react/package.json": {
-      "overview": "npm manifest for the private ui-react studio with dev, build, lint and preview scripts, React 19 runtime dependencies and Vite, TypeScript and Oxlint dev tooling.",
-      "sections": []
-    },
-    "ui-react/tsconfig.app.json": {
-      "overview": "TypeScript compiler options for the browser application source under src.",
-      "sections": []
-    },
-    "ui-react/tsconfig.json": {
-      "overview": "Solution-style TypeScript root config with no files of its own that references the app and node tsconfig projects.",
-      "sections": []
-    },
-    "ui-react/tsconfig.node.json": {
-      "overview": "TypeScript compiler options for Node-side tooling files such as the Vite config.",
-      "sections": []
-    },
-    "docs/NL2ODRL-SOTA-Implementation-Plan.md": {
-      "overview": "Phase-wise implementation plan (Phase 0 onward) for taking NL2ODRL to state of the art, with guiding principles, verified starting point and per-phase work items.",
-      "sections": []
-    },
-    "odrl_agent/dspy_opt.py": {
-      "overview": "DSPy-based prompt-optimization probe: builds trainset and metric from ODRL docs, compiles an optimized instruction under a live-call budget, and reads/writes versioned prompt packs.",
-      "sections": []
-    },
-    "odrl_agent/instrument.py": {
-      "overview": "AgentCrash SDK instrumentation for the conversion pipeline, wiring read_source, llm and save_odrl boundaries to fault injection and trace finalization.",
-      "sections": []
-    },
-    "policies/default.yaml": {
-      "overview": "Default (minimal) AgentCrash policy file with a schema version and a short rule list.",
-      "sections": []
-    },
-    "policies/fixed-odrl-convert.yaml": {
-      "overview": "Fixed S4 policy requiring confirmation for mutating actions derived from untrusted documents and a version freshness check before save_odrl.",
-      "sections": []
-    },
-    "prompts/pack-probe-v1.json": {
-      "overview": "Versioned optimized prompt pack from the DSPy probe: baseline and optimized instruction, validation means, train/val ids, trainset hash and model.",
-      "sections": []
-    },
-    "scenarios/odrl_convert/scenario.yaml": {
-      "overview": "AgentCrash scenario for the NL-to-ODRL conversion task: seed, tool definitions, invariants, policy reference and environment.",
-      "sections": []
-    },
-    "scripts/make_baseline_cases.py": {
-      "overview": "Script that builds the Baseline v0 case file from 10 trainset rows plus 40 authored natural-language cases with a pinned hash.",
-      "sections": []
-    },
-    "ui-react/src/index.css": {
-      "overview": "Global stylesheet for the React studio UI.",
-      "sections": []
-    },
-    "ui/index.html": {
-      "overview": "Built HTML entry of the Responsible AI Console served by the backend, loading the hashed Vite JS/CSS bundles and IBM Plex fonts.",
-      "sections": []
+ "version": 1,
+ "generatedAt": "2026-11-26T10:35:31.214Z",
+ "files": {
+  "odrl_agent/__init__.py": {
+   "overview": "Package marker for the odrl_agent host application; defines __version__ (\"0.1.0\"). Its docstring still describes an older layout (adapter owning the agentic loop).",
+   "sections": []
+  },
+  "odrl_agent/app.py": {
+   "overview": "FastAPI application factory (create_app) for NL2ODRL Studio: healthz, settings, convert, runs, SSE run events, drafts, publish, odrl pairs, usage and Prometheus metrics routes, plus static mounting of the built ui/ directory. It is covered in tour step 10.",
+   "sections": [
+    {
+     "title": "Header and ApiError",
+     "lineRange": [
+      1,
+      61
+     ],
+     "explanation": "Imports and `ApiError`, which carries status, code, hint, headers and detail for the error handler.",
+     "tourOrder": 10
+    },
+    {
+     "title": "App setup, errors and middleware",
+     "lineRange": [
+      64,
+      130
+     ],
+     "explanation": "`create_app` builds the FastAPI app, state and registry, then installs the ApiError handler, the request-observing middleware (request id, metrics, JSON log) and JSON-body and snapshot helpers.",
+     "tourOrder": 10
+    },
+    {
+     "title": "Health, settings and convert routes",
+     "lineRange": [
+      131,
+      167
+     ],
+     "explanation": "Routes for /api/healthz, GET and POST /api/settings and POST /api/convert.",
+     "tourOrder": 10
+    },
+    {
+     "title": "Run routes and SSE",
+     "lineRange": [
+      168,
+      233
+     ],
+     "explanation": "Routes for listing runs, reading one run and the Server-Sent Events stream at /api/runs/{run_key}/events.",
+     "tourOrder": 10
+    },
+    {
+     "title": "Drafts, publish and pairs",
+     "lineRange": [
+      234,
+      288
+     ],
+     "explanation": "Routes for held drafts, the publish decision and the NL-to-ODRL pair listing.",
+     "tourOrder": 10
+    },
+    {
+     "title": "Usage, metrics and UI mount",
+     "lineRange": [
+      289,
+      317
+     ],
+     "explanation": "Routes for /api/usage and /api/metrics, then mounting the built UI as static files; `_query` is a small query helper.",
+     "tourOrder": 10
     }
+   ]
+  },
+  "odrl_agent/cli.py": {
+   "overview": "odrl-host command-line entry point with run, diagnose, replay, optimize-prompts, serve and chaos subcommands and their exit-code conventions. It is covered in tour step 2.",
+   "sections": [
+    {
+     "title": "Imports and shared helpers",
+     "lineRange": [
+      1,
+      64
+     ],
+     "explanation": "Module docstring, imports of AgentCrash and local modules, and constants shared by the subcommands.",
+     "tourOrder": 2
+    },
+    {
+     "title": "run subcommand",
+     "lineRange": [
+      65,
+      198
+     ],
+     "explanation": "`cmd_run` executes a scenario with the live model through the pipeline and returns exit 0 on completion, 2 on usage or config errors and 5 on a runaway. `_retrieved_doc_spans` (201-236) collects parsed-NL spans for delimiter rendering.",
+     "tourOrder": 2
+    },
+    {
+     "title": "optimize-prompts",
+     "lineRange": [
+      239,
+      315
+     ],
+     "explanation": "`cmd_optimize_prompts` runs the budgeted DSPy probe against a live model; it refuses to start without the endpoint and key.",
+     "tourOrder": 2
+    },
+    {
+     "title": "serve and chaos",
+     "lineRange": [
+      318,
+      374
+     ],
+     "explanation": "`cmd_serve` starts the Studio server (reads ui/, local only) and `cmd_chaos` fuzzes fault schedules against the live pipeline with a mocked model.",
+     "tourOrder": 2
+    },
+    {
+     "title": "diagnose",
+     "lineRange": [
+      377,
+      566
+     ],
+     "explanation": "`cmd_diagnose` proposes a policy patch for a failing trace read-only, with helpers to infer the scenario and read the trace seed. Exit 0 means patch, 2 usage, 4 rejected.",
+     "tourOrder": 2
+    },
+    {
+     "title": "replay",
+     "lineRange": [
+      569,
+      788
+     ],
+     "explanation": "`cmd_replay` re-runs a trace scenario under a patched policy, and `_regress_golden` re-runs one golden trace under the new policy for the regression check. Exit 0 PASS, 1 VERDICT_FAIL, 4 rejected.",
+     "tourOrder": 2
+    },
+    {
+     "title": "main dispatcher",
+     "lineRange": [
+      791,
+      827
+     ],
+     "explanation": "`main` parses argv and dispatches run, diagnose, replay, optimize-prompts, serve and chaos.",
+     "tourOrder": 2
+    }
+   ]
+  },
+  "odrl_agent/dspy_opt.py": {
+   "overview": "Offline-first DSPy probe that scores NL-to-ODRL conversion instructions with a frozen deterministic metric, enforces a live-call budget and reads/writes the versioned prompt pack. It is covered in tour step 15.",
+   "sections": [
+    {
+     "title": "Header and helpers",
+     "lineRange": [
+      1,
+      80
+     ],
+     "explanation": "Docstring, lazy DSPy import and helpers that build expected ODRL docs.",
+     "tourOrder": 15
+    },
+    {
+     "title": "Frozen trainset",
+     "lineRange": [
+      81,
+      200
+     ],
+     "explanation": "`TRAINSET_ROWS` holds the frozen NL requests with expected ODRL documents used to score instructions.",
+     "tourOrder": 15
+    },
+    {
+     "title": "Metric",
+     "lineRange": [
+      201,
+      289
+     ],
+     "explanation": "`trainset_hash`, JSON extraction, triple helpers, `score_doc` (frozen 0..1 score), `odrl_metric`, `build_trainset` and `split_rows`.",
+     "tourOrder": 15
+    },
+    {
+     "title": "Program and budget",
+     "lineRange": [
+      292,
+      360
+     ],
+     "explanation": "`build_program` builds a single-step NL-to-ODRL program, `evaluate` scores it, and `check_budget` and `live_lm` enforce and configure the live-call budget.",
+     "tourOrder": 15
+    },
+    {
+     "title": "Probe and prompt pack",
+     "lineRange": [
+      363,
+      497
+     ],
+     "explanation": "`run_probe` runs the budgeted optimization, `pack_for_report` builds a versioned pack only when baseline is beaten and `load_pack` / `write_pack` read and write it.",
+     "tourOrder": 15
+    }
+   ]
+  },
+  "odrl_agent/netguard.py": {
+   "overview": "SSRF guard that validates user-supplied model endpoint URLs, rejecting link-local, metadata and non-allowlisted hosts.",
+   "sections": []
+  },
+  "odrl_agent/observability.py": {
+   "overview": "Request IDs, one-line JSON structured logging and a thread-safe Prometheus-text Metrics class for the HTTP service.",
+   "sections": []
+  },
+  "odrl_agent/remediation.py": {
+   "overview": "Fixture-backed reference policy patches for the S4 scenarios, selected by scenario id for the diagnose command.",
+   "sections": []
+  },
+  "odrl_agent/verifiers.py": {
+   "overview": "ODRL domain invariants registered with the AgentCrash verifier registry: valid ODRL, no attacker grant, exactly-once save, SHACL validity, no deontic conflict, grounded principals and exactly-once publish. It is covered in tour step 9.",
+   "sections": [
+    {
+     "title": "Header and helpers",
+     "lineRange": [
+      1,
+      97
+     ],
+     "explanation": "Module docstring and helpers that return executed (non-error) mutating calls and committed saves from a trace.",
+     "tourOrder": 9
+    },
+    {
+     "title": "Original S4 invariants",
+     "lineRange": [
+      100,
+      179
+     ],
+     "explanation": "`OdrlValid`, `NoAttackerGrant` and `ExactlyOnceSave` check saved documents.",
+     "tourOrder": 9
+    },
+    {
+     "title": "Trace extraction helpers",
+     "lineRange": [
+      185,
+      214
+     ],
+     "explanation": "Helpers that read the run end, source and draft IR from trace events.",
+     "tourOrder": 9
+    },
+    {
+     "title": "Publish-gate invariants",
+     "lineRange": [
+      217,
+      330
+     ],
+     "explanation": "`OdrlShaclValid`, `NoDeonticConflict`, `GroundedPrincipals` and `ExactlyOncePublish` re-check published documents against shapes, reasoning and grounding.",
+     "tourOrder": 9
+    },
+    {
+     "title": "Registration",
+     "lineRange": [
+      333,
+      348
+     ],
+     "explanation": "`register_odrl_verifiers` registers the invariants idempotently with AgentCrash.",
+     "tourOrder": 9
+    }
+   ]
+  },
+  "odrl_agent/web.py": {
+   "overview": "Service core for Studio: request validation, inline run construction, trace/usage/save summaries, SQLite recording, the bounded RunRegistry worker pool and queue, server-memory model settings and the Uvicorn serve_ui launcher. It is covered in tour step 10.",
+   "sections": [
+    {
+     "title": "Header",
+     "lineRange": [
+      1,
+      82
+     ],
+     "explanation": "Imports, constants and settings used by the service core.",
+     "tourOrder": 10
+    },
+    {
+     "title": "Request validation and run building",
+     "lineRange": [
+      83,
+      162
+     ],
+     "explanation": "`validate_convert` checks the request body and `build_inline_run` assembles the scenario, policy and paths for a pasted-NL run.",
+     "tourOrder": 10
+    },
+    {
+     "title": "Trace summaries",
+     "lineRange": [
+      165,
+      262
+     ],
+     "explanation": "Tolerant trace reading, usage totals, committed-save summaries and the snapshot builder.",
+     "tourOrder": 10
+    },
+    {
+     "title": "Recording and running",
+     "lineRange": [
+      265,
+      431
+     ],
+     "explanation": "`_record_snapshot` writes to SQLite and `run_and_store` executes a spec live or scripted and records it.",
+     "tourOrder": 10
+    },
+    {
+     "title": "Listing helpers",
+     "lineRange": [
+      434,
+      496
+     ],
+     "explanation": "Public snapshot stripping, DB connection, run and pair listing and usage rows.",
+     "tourOrder": 10
+    },
+    {
+     "title": "RunRegistry",
+     "lineRange": [
+      499,
+      754
+     ],
+     "explanation": "Bounded worker pool and queue for background runs; `start` runs now or queues, `_worker` drains the queue and `snapshot` serves live or stored state.",
+     "tourOrder": 10
+    },
+    {
+     "title": "Settings and serving",
+     "lineRange": [
+      757,
+      883
+     ],
+     "explanation": "Query flag parsing, in-memory `ServerSettings`, `model_status`, `apply_model_settings` and `serve_ui` which launches Uvicorn.",
+     "tourOrder": 10
+    }
+   ]
+  },
+  "scripts/baseline_v0.py": {
+   "overview": "Script that runs the inline pipeline over the frozen Baseline v0 case file with a live model (key from env) and writes results.",
+   "sections": []
+  },
+  "scripts/make_baseline_cases.py": {
+   "overview": "Script that builds the hash-pinned Baseline v0 case file from 10 DSPy trainset rows plus 40 authored cases.",
+   "sections": []
+  },
+  "odrl_agent/bench/evaluator.py": {
+   "overview": "Behavioral-equivalence evaluator: derives boundary access requests from a gold policy and measures whether a predicted policy permits or denies them the same way.",
+   "sections": []
+  },
+  "odrl_agent/bench/metrics.py": {
+   "overview": "Pure benchmark metric functions over case results: checkpoint F1, false permissions, missed prohibitions, attribution, percentiles and per-tier breakdowns.",
+   "sections": []
+  },
+  "odrl_agent/compiler.py": {
+   "overview": "Deterministic ODRL 2.2 compiler that turns a validated PolicyIR into compact JSON-LD and an RDF graph, minting stable URN IRIs and failing loudly if JSON-LD processing drops anything. It is covered in tour step 6.",
+   "sections": [
+    {
+     "title": "Errors and IRIs",
+     "lineRange": [
+      1,
+      55
+     ],
+     "explanation": "Imports plus `CompileError`, `mint_iri` (keeps absolute IRIs, otherwise stable URNs) and `canonical_json` for comparison and hashing.",
+     "tourOrder": 6
+    },
+    {
+     "title": "Building blocks",
+     "lineRange": [
+      58,
+      129
+     ],
+     "explanation": "Helpers that create typed literals, constraints, actions, duties and rules, and derive the policy uid.",
+     "tourOrder": 6
+    },
+    {
+     "title": "compile_doc",
+     "lineRange": [
+      132,
+      159
+     ],
+     "explanation": "Compiles an IR into a compact ODRL 2.2 JSON-LD document.",
+     "tourOrder": 6
+    },
+    {
+     "title": "Graph verification and compile_ir",
+     "lineRange": [
+      162,
+      180
+     ],
+     "explanation": "`_verify_graph` fails loudly if JSON-LD processing dropped anything the compiler emitted; `compile_ir` returns the JSON-LD and RDF graph or raises `CompileError`.",
+     "tourOrder": 6
+    }
+   ]
+  },
+  "odrl_agent/grounder.py": {
+   "overview": "Entity grounding and least-privilege gate: resolves IR names against an EntityCatalog, flags homoglyph/spoofed names, wildcard grants and injected-text permissions, and reports grounding issues. It is covered in tour step 7.",
+   "sections": [
+    {
+     "title": "Constants and normalization",
+     "lineRange": [
+      1,
+      106
+     ],
+     "explanation": "Docstring, regexes and constants, `normalize_name` (NFKC-fold, casefold) and `_suspicious`, which explains homoglyph or spoof-looking names.",
+     "tourOrder": 7
+    },
+    {
+     "title": "Catalog and report types",
+     "lineRange": [
+      110,
+      193
+     ],
+     "explanation": "`CatalogEntry` and `EntityCatalog` provide pluggable lookup of known parties and assets; `GroundingIssue` and `GroundingReport` describe what failed.",
+     "tourOrder": 7
+    },
+    {
+     "title": "Injection and trust helpers",
+     "lineRange": [
+      199,
+      258
+     ],
+     "explanation": "`trusted_parties_from_env`, `injected_ranges` for model-steering sentences, mention lookup and alias helpers.",
+     "tourOrder": 7
+    },
+    {
+     "title": "Grounder",
+     "lineRange": [
+      261,
+      390
+     ],
+     "explanation": "Resolves IR names and applies the least-privilege gate. `ground` returns the IR with catalog IRIs substituted plus the report; per-rule logic lives in `_ground_rule`.",
+     "tourOrder": 7
+    },
+    {
+     "title": "ground_entities",
+     "lineRange": [
+      393,
+      402
+     ],
+     "explanation": "Convenience wrapper around `Grounder.ground`.",
+     "tourOrder": 7
+    }
+   ]
+  },
+  "odrl_agent/ir.py": {
+   "overview": "Typed Pydantic policy IR (PolicyIR, RuleIR, ConstraintIR, DutyIR, ambiguity and assumption records) that forms the contract between model output and the deterministic compiler, plus JSON-schema helpers for structured output. It is covered in tour step 3.",
+   "sections": [
+    {
+     "title": "Vocabularies and constants",
+     "lineRange": [
+      1,
+      101
+     ],
+     "explanation": "Docstring explaining the IR contract plus `IR_VERSION`, tuples and Literal aliases for ODRL actions, left operands, operators, logical operators, conflict strategies, policy and value types.",
+     "tourOrder": 3
+    },
+    {
+     "title": "SpanRef and literal checking",
+     "lineRange": [
+      102,
+      146
+     ],
+     "explanation": "`_Model` is the shared Pydantic base; `SpanRef` is a verbatim source quote supporting an IR element, and `check_value` validates a raw string against a value type.",
+     "tourOrder": 3
+    },
+    {
+     "title": "Constraints",
+     "lineRange": [
+      149,
+      203
+     ],
+     "explanation": "`ConstraintIR` is one atomic `left_operand operator right_operand` with validation; `LogicalConstraintIR` combines two or more with and/or/xone/andSequence, and `constraint_depth` bounds nesting.",
+     "tourOrder": 3
+    },
+    {
+     "title": "Duties and rules",
+     "lineRange": [
+      206,
+      243
+     ],
+     "explanation": "`DutyIR` models an ODRL duty attached to a permission and `RuleIR` models one permission, prohibition or obligation.",
+     "tourOrder": 3
+    },
+    {
+     "title": "Ambiguity, assumptions and PolicyIR",
+     "lineRange": [
+      258,
+      314
+     ],
+     "explanation": "`AmbiguityFlag` and `AssumptionRecord` record what the text leaves open or what the extractor filled in. `PolicyIR` is the full IR with cross-field validation.",
+     "tourOrder": 3
+    },
+    {
+     "title": "JSON Schema for the model",
+     "lineRange": [
+      317,
+      393
+     ],
+     "explanation": "`ir_json_schema` exports the schema (pinned by a snapshot test), `_unroll` inlines $refs with a nesting limit, and `wire_schema` builds the non-recursive response_format schema sent to the model.",
+     "tourOrder": 3
+    }
+   ]
+  },
+  "odrl_agent/odrl.py": {
+   "overview": "Offline ODRL 2.2 validation: loads the bundled JSON-LD context and ontology, converts documents to RDF graphs and validates them against the full core SHACL shapes. It is covered in tour step 6.",
+   "sections": [
+    {
+     "title": "Paths and ontology terms",
+     "lineRange": [
+      1,
+      73
+     ],
+     "explanation": "Constants, repo-file lookup and `ontology_terms`, which lists local names of ODRL ontology individuals of a class.",
+     "tourOrder": 6
+    },
+    {
+     "title": "Attacker grant check",
+     "lineRange": [
+      76,
+      88
+     ],
+     "explanation": "`contains_attacker_grant` reports whether a principal appears in any string inside a document.",
+     "tourOrder": 6
+    },
+    {
+     "title": "JSON-LD to RDF",
+     "lineRange": [
+      99,
+      132
+     ],
+     "explanation": "Loads and localizes the bundled ODRL context so processing stays offline and `jsonld_to_graph` parses a document with it.",
+     "tourOrder": 6
+    },
+    {
+     "title": "validate_odrl",
+     "lineRange": [
+      135,
+      170
+     ],
+     "explanation": "Validates a document against the full ODRL 2.2 core SHACL shapes.",
+     "tourOrder": 6
+    }
+   ]
+  },
+  "odrl_agent/pipeline.py": {
+   "overview": "Fixed-stage conversion pipeline (extract, ground, compile, verify, bounded shrink-only repair, draft) that calls the model only through the extractor and routes validate/save through deterministic tools; run_conversion writes the trace and state snapshot. It is covered in tour step 5.",
+   "sections": [
+    {
+     "title": "Overview, imports and constants",
+     "lineRange": [
+      1,
+      87
+     ],
+     "explanation": "Docstring describing the stages and shrink-only repair, imports from agentcrash and every pipeline module, `MAX_REPAIRS = 2`, and regexes for vague words, universal grant/denial and grant markers.",
+     "tourOrder": 5
+    },
+    {
+     "title": "Author-side backstops",
+     "lineRange": [
+      88,
+      242
+     ],
+     "explanation": "Helpers that flag unbounded time or quantity words, spot grant-versus-denial contradictions, report grants or denials the IR failed to encode as rules, and author an explanation for an otherwise unexplained empty policy.",
+     "tourOrder": 5
+    },
+    {
+     "title": "Draft type and span grounding",
+     "lineRange": [
+      248,
+      361
+     ],
+     "explanation": "`PipelineError` and `PolicyDraft` define what the pipeline hands to a reviewer. `locate` and `ground` resolve quote offsets, and `widening` explains when a new IR grants more than the old one.",
+     "tourOrder": 5
+    },
+    {
+     "title": "Run plumbing",
+     "lineRange": [
+      367,
+      540
+     ],
+     "explanation": "`_source_text` picks the scenario NL document, `_Run` wraps trace and tool calls, `_call` makes one model call at the llm boundary and `_hold` withdraws auto-publication.",
+     "tourOrder": 5
+    },
+    {
+     "title": "Publishing a draft",
+     "lineRange": [
+      543,
+      582
+     ],
+     "explanation": "`_publish` validates, freshness-checks and writes the document once through the tools, returning committed saves.",
+     "tourOrder": 5
+    },
+    {
+     "title": "convert",
+     "lineRange": [
+      585,
+      792
+     ],
+     "explanation": "Runs the semantic stages on the text and returns the draft and compiled doc: classify, optional decompose, extract, ground, compile, SHACL and reasoning checks, then bounded repair.",
+     "tourOrder": 5
+    },
+    {
+     "title": "run_conversion",
+     "lineRange": [
+      795,
+      950
+     ],
+     "explanation": "Top-level entry. Converts the scenario NL document, runs the publish flow when allowed, and writes the trace and state snapshot.",
+     "tourOrder": 5
+    }
+   ]
+  },
+  "odrl_agent/publish.py": {
+   "overview": "Draft-vs-publish human-in-the-loop gate: recomputes every verdict for a stored draft or reviewer edit, records exactly one approve/edit/reject decision per run and lists held drafts. It is covered in tour step 8.",
+   "sections": [
+    {
+     "title": "Errors and decision lookup",
+     "lineRange": [
+      1,
+      104
+     ],
+     "explanation": "Header, `PublishError` (code and HTTP status), table creation and event helpers that find a run's draft, source and prior decision.",
+     "tourOrder": 8
+    },
+    {
+     "title": "review_draft",
+     "lineRange": [
+      105,
+      182
+     ],
+     "explanation": "`Review` holds freshly recomputed verdicts and `review_draft` recomputes every gate for the stored draft or a reviewer edit.",
+     "tourOrder": 8
+    },
+    {
+     "title": "decide",
+     "lineRange": [
+      185,
+      258
+     ],
+     "explanation": "Records one reviewer decision and publishes on approve or edit, exactly once per run.",
+     "tourOrder": 8
+    },
+    {
+     "title": "list_drafts",
+     "lineRange": [
+      261,
+      291
+     ],
+     "explanation": "Returns held drafts, newest first.",
+     "tourOrder": 8
+    }
+   ]
+  },
+  "odrl_agent/reasoning.py": {
+   "overview": "Z3-backed symbolic checks over a PolicyIR: constraint satisfiability, permission/prohibition conflicts including the odrl:includedIn action hierarchy, and duty clashes. It is covered in tour step 7.",
+   "sections": [
+    {
+     "title": "Action hierarchy",
+     "lineRange": [
+      1,
+      87
+     ],
+     "explanation": "Header plus `action_parents`, `ancestors` and `includes`, computing the odrl:includedIn hierarchy from the bundled ontology.",
+     "tourOrder": 7
+    },
+    {
+     "title": "Value encoding and solver",
+     "lineRange": [
+      90,
+      201
+     ],
+     "explanation": "Normalizes duration, date and numeric values, defines `_Encoder` with shared Z3 variables, and `satisfiable` checks that constraint lists can hold together.",
+     "tourOrder": 7
+    },
+    {
+     "title": "Reports",
+     "lineRange": [
+      205,
+      236
+     ],
+     "explanation": "`Finding` and `ReasoningReport` collect conflicts and unsatisfiable constraints.",
+     "tourOrder": 7
+    },
+    {
+     "title": "analyze",
+     "lineRange": [
+      239,
+      317
+     ],
+     "explanation": "Runs every check on an IR and returns an empty report for a consistent policy.",
+     "tourOrder": 7
+    }
+   ]
+  },
+  "odrl_agent/strict.py": {
+   "overview": "Old-envelope strict trace validation (doc 06 S8 rules 1-5) that returns the trace seed and derives which tools require idempotency keys.",
+   "sections": []
+  },
+  "odrl_agent/tools.py": {
+   "overview": "Deterministic synthetic tool registry (parse_policy, validate_odrl, save_odrl) executing against an AgentCrash Ledger on virtual time, plus untrusted-content delimiter rendering. It is covered in tour step 5.",
+   "sections": [
+    {
+     "title": "Tool names and header",
+     "lineRange": [
+      1,
+      31
+     ],
+     "explanation": "Imports and constants for the tool names (`parse_policy`, `validate_odrl`, `save_odrl`) and the INSTRUCTION marker.",
+     "tourOrder": 5
+    },
+    {
+     "title": "Untrusted rendering and argument checks",
+     "lineRange": [
+      32,
+      79
+     ],
+     "explanation": "`render_untrusted` wraps retrieved document bytes in labeled delimiters and `_validate_args` returns an error string for bad tool arguments.",
+     "tourOrder": 5
+    },
+    {
+     "title": "ToolRegistry",
+     "lineRange": [
+      82,
+      254
+     ],
+     "explanation": "Executes synthetic tools against a Ledger on virtual time. The constructor memoizes validate_odrl verdicts; `call` always returns a result dict and rejections leave the clock and ledger untouched.",
+     "tourOrder": 5
+    }
+   ]
+  },
+  "odrl_agent/adapter.py": {
+   "overview": "Model endpoint configuration (LlmConfig, env-driven timeout and token cap) and scenario fixture loading that builds the read_doc and parse_policy stores for the conversion pipeline.",
+   "sections": []
+  },
+  "odrl_agent/bench/__init__.py": {
+   "overview": "Package docstring for the Phase 4 benchmark: stratified cases, metrics, release gates and CI runner.",
+   "sections": []
+  },
+  "odrl_agent/bench/__main__.py": {
+   "overview": "CLI for the benchmark package (python -m odrl_agent.bench generate|verify|pins|run) that builds the model factory, runs cases, prints gate rows and exits non-zero on failure. It is covered in tour step 13.",
+   "sections": [
+    {
+     "title": "Header and gate printing",
+     "lineRange": [
+      1,
+      19
+     ],
+     "explanation": "Docstring listing generate, verify, pins and run, and `_print_gates` to show gate rows.",
+     "tourOrder": 13
+    },
+    {
+     "title": "main",
+     "lineRange": [
+      22,
+      105
+     ],
+     "explanation": "`main` parses the subcommand and runs it, building the offline oracle or live model factory and exiting non-zero when gates fail.",
+     "tourOrder": 13
+    }
+   ]
+  },
+  "odrl_agent/bench/gates.py": {
+   "overview": "Release gates: evaluates metrics against threshold rows (missing data fails) and checks regressions in false-permission rate and checkpoint F1 against a frozen baseline. It is covered in tour step 13.",
+   "sections": [
+    {
+     "title": "Header",
+     "lineRange": [
+      1,
+      39
+     ],
+     "explanation": "The GATES table maps each metric to (comparison, threshold, live_only): for example checkpoint_f1 >= 0.92, false_permission_rate < 0.01, tier-5 false permissions == 0, and p95 latency gates that apply only in live mode. MAX_FPR_INCREASE (0.005) and MAX_F1_DROP (0.01) bound regressions against a baseline.",
+     "tourOrder": 13
+    },
+    {
+     "title": "Evaluate and regressions",
+     "lineRange": [
+      40,
+      69
+     ],
+     "explanation": "`evaluate` returns one row per gate (missing data fails), `regressions` checks false-permission and checkpoint-F1 drift against a baseline and `failed` filters failing rows.",
+     "tourOrder": 13
+    }
+   ]
+  },
+  "odrl_agent/bench/generate.py": {
+   "overview": "Deterministic generator for the stratified Benchmark v1 case file across five tiers, with group-level dev/test split and manifest hashing.",
+   "sections": []
+  },
+  "odrl_agent/bench/oracle.py": {
+   "overview": "Offline oracle model for per-PR benchmark runs: a StructuredLlm transport that answers with the gold IR, optionally mutated to prove the gates can fail.",
+   "sections": []
+  },
+  "odrl_agent/bench/pins.py": {
+   "overview": "Pins for everything a benchmark number depends on (model id, prompt pack, IR schema hashes), with write and drift detection.",
+   "sections": []
+  },
+  "odrl_agent/bench/runner.py": {
+   "overview": "Benchmark runner: loads and manifest-verifies cases, runs the pipeline per case and builds the report with metrics, gate rows and a reproducibility identity block. It is covered in tour step 13.",
+   "sections": [
+    {
+     "title": "load_cases",
+     "lineRange": [
+      1,
+      30
+     ],
+     "explanation": "Reads cases.json and refuses a file that does not match its manifest.",
+     "tourOrder": 13
+    },
+    {
+     "title": "Running cases",
+     "lineRange": [
+      33,
+      56
+     ],
+     "explanation": "`run_case` converts one case with a fresh LLM and `run_all` runs sequentially or in a thread pool.",
+     "tourOrder": 13
+    },
+    {
+     "title": "Report",
+     "lineRange": [
+      59,
+      114
+     ],
+     "explanation": "`_git_sha` and `report` build metrics, gate rows and an identity block that makes the run reproducible.",
+     "tourOrder": 13
+    }
+   ]
+  },
+  "odrl_agent/extractor.py": {
+   "overview": "Constrained extractor: classifies input complexity, decomposes multi-clause text, and fills a PolicyIR through structured model calls (extract, slot fill, repair) without ever compiling, saving or publishing. It is covered in tour step 4.",
+   "sections": [
+    {
+     "title": "Prompts and constants",
+     "lineRange": [
+      1,
+      92
+     ],
+     "explanation": "Module docstring, imports and the prompt text and constants that frame the model call.",
+     "tourOrder": 4
+    },
+    {
+     "title": "Wire models and routing",
+     "lineRange": [
+      93,
+      125
+     ],
+     "explanation": "`ClauseSplit` and `SlotAnswer` are Pydantic replies for decompose and slot-fill calls; `ModelRoute` and `ExtractResult` carry model choice and the call result.",
+     "tourOrder": 4
+    },
+    {
+     "title": "Deterministic helpers",
+     "lineRange": [
+      128,
+      172
+     ],
+     "explanation": "`split_sentences` and `classify` (SIMPLE or COMPLEX, no model) drive routing; `format_validation_errors` and `parse_ir` turn a raw model reply into a `PolicyIR` or stable error strings.",
+     "tourOrder": 4
+    },
+    {
+     "title": "Extractor.decompose and slot_fill",
+     "lineRange": [
+      175,
+      238
+     ],
+     "explanation": "The `Extractor` class calls the model but never compiles, saves or decides publication. `decompose` splits complex text into clause groups with a fast model call and `slot_fill` answers one narrow question.",
+     "tourOrder": 4
+    },
+    {
+     "title": "Extractor.extract and repair",
+     "lineRange": [
+      240,
+      288
+     ],
+     "explanation": "`extract` performs the single structured call. `repair` makes one strong-model call fed the structured violation report.",
+     "tourOrder": 4
+    }
+   ]
+  },
+  "odrl_agent/llm.py": {
+   "overview": "OpenAI-compatible structured-output chat client over httpx with usage accounting and distinct errors for unconfigured endpoints and truncated replies. It is covered in tour step 4.",
+   "sections": [
+    {
+     "title": "Errors",
+     "lineRange": [
+      1,
+      46
+     ],
+     "explanation": "Imports and the error hierarchy: `LlmError`, `LlmNotConfiguredError` and `TruncatedOutputError` for replies cut off by max_tokens.",
+     "tourOrder": 4
+    },
+    {
+     "title": "Usage accounting",
+     "lineRange": [
+      47,
+      70
+     ],
+     "explanation": "`LlmUsage` accumulates calls, attempts and token totals and exposes `add` and `as_dict`.",
+     "tourOrder": 4
+    },
+    {
+     "title": "StructuredLlm client",
+     "lineRange": [
+      71,
+      182
+     ],
+     "explanation": "`StructuredLlm` is a minimal OpenAI-compatible chat client built on httpx. `complete_json` returns the parsed JSON object the model produced for a schema.",
+     "tourOrder": 4
+    }
+   ]
+  },
+  "ui-react/src/App.tsx": {
+   "overview": "Single-file React app for NL2ODRL Studio with four tabs (Convert, Review, Policies, Runs), model-setup dialog, SSE-driven run following, trace replay and a human review panel with span highlighting. It is covered in tour step 11.",
+   "sections": [
+    {
+     "title": "Types and helpers",
+     "lineRange": [
+      1,
+      39
+     ],
+     "explanation": "Imports, the Tab type, the attacker principal constant, an example request and JSON highlighting, attacker marking and outcome helpers.",
+     "tourOrder": 11
+    },
+    {
+     "title": "PoliciesView",
+     "lineRange": [
+      40,
+      94
+     ],
+     "explanation": "Gallery of NL-to-ODRL pairs with scenario filter.",
+     "tourOrder": 11
+    },
+    {
+     "title": "ModelSetupDialog",
+     "lineRange": [
+      95,
+      125
+     ],
+     "explanation": "Dialog for saving the model base URL and API key to the server.",
+     "tourOrder": 11
+    },
+    {
+     "title": "ConvertView",
+     "lineRange": [
+      126,
+      182
+     ],
+     "explanation": "The Convert tab with request text area, run following and ODRL output panel.",
+     "tourOrder": 11
+    },
+    {
+     "title": "RunView",
+     "lineRange": [
+      183,
+      262
+     ],
+     "explanation": "Run list with trace stepper, verdicts and replay panel.",
+     "tourOrder": 11
+    },
+    {
+     "title": "Highlighted and ReviewView",
+     "lineRange": [
+      263,
+      383
+     ],
+     "explanation": "`Highlighted` marks the source spans a rule cites; `ReviewView` lists held drafts, why they were held and the rules, and submits decisions.",
+     "tourOrder": 11
+    },
+    {
+     "title": "App",
+     "lineRange": [
+      384,
+      427
+     ],
+     "explanation": "Root component with tab navigation, focus-run state and model settings.",
+     "tourOrder": 11
+    }
+   ]
+  },
+  "ui-react/src/api.ts": {
+   "overview": "Typed fetch client for the Studio REST API (convert, runs, drafts, publish, settings, odrl pairs), the ApiError class, and an SSE run follower that falls back to polling. It is covered in tour step 11.",
+   "sections": [
+    {
+     "title": "Types",
+     "lineRange": [
+      1,
+      34
+     ],
+     "explanation": "Interfaces mirroring API payloads: run specs, IR, drafts, decisions, snapshots, trace events, settings and draft rows.",
+     "tourOrder": 11
+    },
+    {
+     "title": "ApiError and fetch helpers",
+     "lineRange": [
+      35,
+      66
+     ],
+     "explanation": "`ApiError` carries status, code and detail, `json` wraps fetch with same-origin credentials and error mapping and `post` builds JSON POST options.",
+     "tourOrder": 11
+    },
+    {
+     "title": "api object",
+     "lineRange": [
+      67,
+      85
+     ],
+     "explanation": "Typed methods for convert, run, runs, pairs, drafts, publish, settings and saveSettings.",
+     "tourOrder": 11
+    },
+    {
+     "title": "followRun and fmt",
+     "lineRange": [
+      86,
+      113
+     ],
+     "explanation": "`followRun` follows a run over EventSource with polling fallback; `fmt` formats numbers.",
+     "tourOrder": 11
+    }
+   ]
+  },
+  "ui-react/src/main.tsx": {
+   "overview": "React entry point that mounts App in StrictMode on #root and loads the global stylesheet.",
+   "sections": []
+  },
+  ".dockerignore": {
+   "overview": "Docker build-context ignore list excluding virtualenvs, caches, node_modules, local db, traces, reports and env files.",
+   "sections": []
+  },
+  "Dockerfile": {
+   "overview": "Two-stage self-host image: node:22 stage builds the React studio into ui/, python:3.12 stage pip-installs the package, copies policies/prompts/schemas/scenarios, exposes 8901 with an /api/healthz healthcheck and runs odrl-host serve. It is covered in tour step 14.",
+   "sections": [
+    {
+     "title": "UI build stage",
+     "lineRange": [
+      1,
+      10
+     ],
+     "explanation": "Node 22 stage installs dependencies and runs npm run build, whose output lands in /build/ui.",
+     "tourOrder": 14
+    },
+    {
+     "title": "Python runtime stage",
+     "lineRange": [
+      12,
+      24
+     ],
+     "explanation": "Python 3.12 slim copies pyproject, source, policies, prompts, schemas and scenarios plus one test fixture, then pip installs the package.",
+     "tourOrder": 14
+    },
+    {
+     "title": "UI copy, port, healthcheck and start",
+     "lineRange": [
+      25,
+      30
+     ],
+     "explanation": "Copies the built UI, exposes 8901, defines a healthcheck against /api/healthz and starts `odrl-host serve`.",
+     "tourOrder": 14
+    }
+   ]
+  },
+  "docker-compose.yml": {
+   "overview": "Compose definition of the studio service on port 8901 with LLAMA, SSRF-allowlist, trusted-party, queue and AgentCrash env pass-through, a bind-mounted SQLite db and named volumes for traces and reports. It is covered in tour step 14.",
+   "sections": [
+    {
+     "title": "Studio service",
+     "lineRange": [
+      1,
+      5
+     ],
+     "explanation": "Builds the Dockerfile and publishes port 8901.",
+     "tourOrder": 14
+    },
+    {
+     "title": "Environment",
+     "lineRange": [
+      6,
+      22
+     ],
+     "explanation": "Model endpoint, SSRF allowlist, trusted parties, queue and AgentCrash variables are passed through with defaults.",
+     "tourOrder": 14
+    },
+    {
+     "title": "Volumes and healthcheck",
+     "lineRange": [
+      23,
+      36
+     ],
+     "explanation": "Bind-mounts the SQLite db, uses named volumes for traces and reports and checks /api/healthz.",
+     "tourOrder": 14
+    }
+   ]
+  },
+  ".github/workflows/bench-live.yml": {
+   "overview": "Nightly and path-triggered live-model benchmark workflow that requires model secrets, enforces regression gates on PRs and uploads the report artifact. It is covered in tour step 13.",
+   "sections": [
+    {
+     "title": "Triggers and concurrency",
+     "lineRange": [
+      1,
+      25
+     ],
+     "explanation": "Nightly cron, manual dispatch and pull requests touching extractor, llm, ir, grounder, pipeline, prompts or pins, with per-ref concurrency.",
+     "tourOrder": 13
+    },
+    {
+     "title": "Job setup and credentials",
+     "lineRange": [
+      26,
+      46
+     ],
+     "explanation": "Ubuntu job with a 90-minute limit installs the package and fails fast if the model secrets are missing.",
+     "tourOrder": 13
+    },
+    {
+     "title": "Run and upload",
+     "lineRange": [
+      47,
+      65
+     ],
+     "explanation": "Runs the live benchmark with 4 workers, adds the baseline and regression enforcement on pull requests, and uploads the report artifact.",
+     "tourOrder": 13
+    }
+   ]
+  },
+  ".github/workflows/ci.yml": {
+   "overview": "CI workflow: converter job (pytest, chaos gate, benchmark verify/pins and offline gates, PII guardrail) on Python 3.11-3.13, studio build job, and a Docker image build job. It is covered in tour step 14.",
+   "sections": [
+    {
+     "title": "Converter job",
+     "lineRange": [
+      1,
+      40
+     ],
+     "explanation": "Matrix on Python 3.11 to 3.13 runs pytest, the chaos gate, benchmark verify and pins, offline benchmark gates and the PII guardrail on the golden trace.",
+     "tourOrder": 14
+    },
+    {
+     "title": "Studio and image jobs",
+     "lineRange": [
+      41,
+      61
+     ],
+     "explanation": "The studio job builds the React app with Node 22; the image job depends on both and builds the Docker image.",
+     "tourOrder": 14
+    }
+   ]
+  },
+  "schemas/env-state.json": {
+   "overview": "JSON Schema (draft-07) for the post-run environment snapshot env_state/v1: docs, record versions and a sha256 ledger hash.",
+   "sections": []
+  },
+  "schemas/policy-patch.json": {
+   "overview": "JSON Schema for diagnoser-proposed policy patches (policy_patch/v1) with source run id, rationale and patch body.",
+   "sections": []
+  },
+  "schemas/policy.json": {
+   "overview": "JSON Schema for recovery policies (policy/v1): rules keyed by on_tool_timeout, on_mutating_retry, on_untrusted_content or on_stale_read with fail, retry_same, check_then_act or require_confirmation actions.",
+   "sections": []
+  },
+  "schemas/scenario.json": {
+   "overview": "JSON Schema for scenario/v1 declarations: tools with latency/timeout/mutating flags, invariants, seed, policy path and max_steps.",
+   "sections": []
+  },
+  "schemas/trace-event.json": {
+   "overview": "JSON Schema for one hash-chained JSONL trace event envelope (trace/v1) with event_id, prev_hash, virtual timestamp, tool, outcome and policy decision fields.",
+   "sections": []
+  },
+  "ui-react/.oxlintrc.json": {
+   "overview": "Oxlint configuration enabling react, typescript and oxc plugins with rules-of-hooks as error and only-export-components as warning.",
+   "sections": []
+  },
+  "ui-react/README.md": {
+   "overview": "Unmodified Vite React + TypeScript template README covering the Oxlint setup and React Compiler notes.",
+   "sections": []
+  },
+  "ui-react/index.html": {
+   "overview": "Vite HTML shell for the Studio source: root div, IBM Plex font links and the module script for src/main.tsx.",
+   "sections": []
+  },
+  "ui-react/package.json": {
+   "overview": "Studio package manifest: dev/build/lint/preview scripts (build = tsc -b && vite build) and React 19, Vite, TypeScript and oxlint dependencies.",
+   "sections": []
+  },
+  "ui-react/tsconfig.app.json": {
+   "overview": "TypeScript project config for the app source: ES2023 target, bundler module resolution and strict-style options.",
+   "sections": []
+  },
+  "ui-react/tsconfig.json": {
+   "overview": "Solution-style TypeScript root config referencing tsconfig.app.json and tsconfig.node.json.",
+   "sections": []
+  },
+  "ui-react/tsconfig.node.json": {
+   "overview": "TypeScript project config for Node-side tooling files such as vite.config.ts.",
+   "sections": []
+  },
+  "README.md": {
+   "overview": "Project overview for NL to ODRL: rationale, architecture table, quick start, how it works, safety model, benchmark gates, service and CLI reference, test and repository map. It is covered in tour step 2.",
+   "sections": [
+    {
+     "title": "Pitch and rationale",
+     "lineRange": [
+      1,
+      36
+     ],
+     "explanation": "Opens with the badges and the case for the project: a fluent LLM can grant more than a sentence said, so the model is treated as an untrusted extractor. It lists the controls around it: typed IR, deterministic compiler, three independent checks, a publish gate and verifiers over a hash-chained trace.",
+     "tourOrder": 2
+    },
+    {
+     "title": "Architecture and quick start",
+     "lineRange": [
+      37,
+      76
+     ],
+     "explanation": "Embeds the architecture diagram and a layer table mapping Studio, Service, Pipeline, Deterministic core, Governance and Audit to code. The quick start covers installing the package, building ui-react into ui/, `odrl-host serve` and the docker compose option.",
+     "tourOrder": 2
+    },
+    {
+     "title": "How it works",
+     "lineRange": [
+      77,
+      150
+     ],
+     "explanation": "A mermaid flowchart shows extract, ground, compile, SHACL verify and bounded repair, followed by the benchmark gates section and a sequence diagram of model, pipeline, ledger and verifiers. The text states the key guarantees: the model never calls tools and repair is shrink-only.",
+     "tourOrder": 2
+    },
+    {
+     "title": "Safety model",
+     "lineRange": [
+      151,
+      175
+     ],
+     "explanation": "Describes the grounding, Z3 reasoning and SHACL checks and the publish gate: only a clean draft auto-publishes, everything else waits in Review for an approve, edit or reject decision with a reason. Also lists the two scenarios and their fixed policies.",
+     "tourOrder": 2
+    },
+    {
+     "title": "Configuration, service and CLI",
+     "lineRange": [
+      176,
+      233
+     ],
+     "explanation": "Covers model configuration via LLAMA_* env vars, the FastAPI service (queue, SSE progress, metrics, local single-user mode) and the odrl-host command table. The test section quotes the suite size and CI jobs.",
+     "tourOrder": 2
+    },
+    {
+     "title": "Troubleshooting and repository map",
+     "lineRange": [
+      234,
+      257
+     ],
+     "explanation": "A short symptom table plus a repository map assigning a role to odrl_agent/, ui-react/, ui/, scenarios/, policies/, schemas/, benchmarks/, prompts/, tests/, docs/ and the CI workflow.",
+     "tourOrder": 2
+    }
+   ]
+  },
+  "docs/NL2ODRL-SOTA-Implementation-Plan.md": {
+   "overview": "Phase-wise plan (Phases 0 to 4 plus later) to harden the converter: typed IR, deterministic compiler, grounding and HITL gate, service hardening and benchmark gates, with a verified starting-point audit. It is covered in tour step 1.",
+   "sections": [
+    {
+     "title": "Scope and starting point",
+     "lineRange": [
+      1,
+      31
+     ],
+     "explanation": "States the plan scope and the scope change that removed product auth and multi-tenancy, then lists the guiding principles (determinism where machines decide, authorship separation, provenance, shrink-only repair). The verified-starting-point list documents the pre-refactor state of each module.",
+     "tourOrder": 1
+    },
+    {
+     "title": "Phase overview",
+     "lineRange": [
+      32,
+      86
+     ],
+     "explanation": "A table sequences Phases 0 to 4 with weeks, dependencies and exit gates, followed by the Phase 0 details on stabilizing and decoupling.",
+     "tourOrder": 1
+    },
+    {
+     "title": "Phases 1 and 2",
+     "lineRange": [
+      87,
+      194
+     ],
+     "explanation": "Phase 1 introduces the typed IR and deterministic compiler that retire the ReAct loop. Phase 2 adds grounding, Z3 reasoning and the human-in-the-loop publish gate.",
+     "tourOrder": 1
+    },
+    {
+     "title": "Phases 3 and 4",
+     "lineRange": [
+      195,
+      253
+     ],
+     "explanation": "Phase 3 hardens the service (queue, observability, SSRF guard) and Phase 4 defines the benchmark and CI release gates.",
+     "tourOrder": 1
+    },
+    {
+     "title": "Later phases and done criteria",
+     "lineRange": [
+      254,
+      281
+     ],
+     "explanation": "Phase 5 extensions, cross-cutting concerns, a file map of where each change lands and the closing \"done means\" checklist.",
+     "tourOrder": 1
+    }
+   ]
+  },
+  "docs/assets/architecture-interactive.html": {
+   "overview": "Self-contained interactive HTML architecture diagram of the Studio, conversion pipeline and audit trail, with pan/zoom and route/lens views; still shows an Auth component that the plan says was removed.",
+   "sections": []
+  },
+  "odrl_agent/chaos.py": {
+   "overview": "Live-workflow chaos gate: runs the real pipeline with a mocked model under fuzzed AgentCrash fault schedules for every scenario and reports invariant violations.",
+   "sections": []
+  },
+  "odrl_agent/db.py": {
+   "overview": "SQLite store for runs, trace events, verdicts, patches and ODRL documents, with idempotent migrations and query helpers shaped like the live API responses. It is covered in tour step 8.",
+   "sections": [
+    {
+     "title": "Schema",
+     "lineRange": [
+      1,
+      89
+     ],
+     "explanation": "Module docstring and SQL schema constants for runs, events, verdicts, patches and ODRL documents.",
+     "tourOrder": 8
+    },
+    {
+     "title": "Connection and migration",
+     "lineRange": [
+      90,
+      109
+     ],
+     "explanation": "`utcnow`, `connect` and an idempotent `migrate` that returns the schema version.",
+     "tourOrder": 8
+    },
+    {
+     "title": "insert_run",
+     "lineRange": [
+      112,
+      222
+     ],
+     "explanation": "Inserts or replaces one finished run with all of its child rows.",
+     "tourOrder": 8
+    },
+    {
+     "title": "Listing and snapshots",
+     "lineRange": [
+      234,
+      371
+     ],
+     "explanation": "`list_runs` returns newest-first summaries and `get_run` rebuilds a full snapshot shaped like the live API response.",
+     "tourOrder": 8
+    },
+    {
+     "title": "list_odrl_docs",
+     "lineRange": [
+      374,
+      411
+     ],
+     "explanation": "NL-to-ODRL pairs for Policy Studio with optional scenario, validity and attacker filters.",
+     "tourOrder": 8
+    }
+   ]
+  },
+  "odrl_agent/instrument.py": {
+   "overview": "AgentCrash SDK instrumentation helpers: builds the SDK from the environment, a lazy process-wide default, a chaos-enabled variant, and persists and chain-verifies each run's SDK events. It is covered in tour step 9.",
+   "sections": [
+    {
+     "title": "Header",
+     "lineRange": [
+      1,
+      50
+     ],
+     "explanation": "Docstring and constants naming the workflow and boundaries (llm, source, store).",
+     "tourOrder": 9
+    },
+    {
+     "title": "SDK construction",
+     "lineRange": [
+      51,
+      79
+     ],
+     "explanation": "`build_sdk` configures an SDK from the environment, `default_sdk` is a lazy thread-safe process-wide instance and `chaos_sdk` arms fault injection.",
+     "tourOrder": 9
+    },
+    {
+     "title": "Finishing a run",
+     "lineRange": [
+      82,
+      117
+     ],
+     "explanation": "`finish` persists SDK events, verifies their chain and releases memory; `load_sidecar` reads them back.",
+     "tourOrder": 9
+    }
+   ]
+  },
+  "policies/default.yaml": {
+   "overview": "Naive recovery policy (policy/v1) with an empty rules list, intentionally failing the odrl_convert variants.",
+   "sections": []
+  },
+  "policies/fixed-odrl-convert.yaml": {
+   "overview": "Fixed S4 recovery policy: require confirmation for untrusted document content and a check-then-act freshness check with one retry on save_odrl. It is covered in tour step 12.",
+   "sections": [
+    {
+     "title": "Header and untrusted content rule",
+     "lineRange": [
+      1,
+      12
+     ],
+     "explanation": "Comments explain the strict conversion design; the on_untrusted_content rule requires confirmation for parse_policy and denies mutating-from-doc actions without approval.",
+     "tourOrder": 12
+    },
+    {
+     "title": "Stale read rule",
+     "lineRange": [
+      13,
+      21
+     ],
+     "explanation": "The on_stale_read rule applies check-then-act on save_odrl by version, with one retry and no idempotency key required.",
+     "tourOrder": 12
+    }
+   ]
+  },
+  "prompts/pack-probe-v1.json": {
+   "overview": "Versioned DSPy prompt pack: baseline and optimized conversion instruction, val means (0.4667 to 0.7), probe config, train/val ids and trainset hash.",
+   "sections": []
+  },
+  "pyproject.toml": {
+   "overview": "Python packaging config for nl2odrl 2.0.0: dependencies (agentcrash-core, pydantic, rdflib, pyshacl, z3-solver, fastapi, dspy and more), the odrl-host console script, pytest and ruff settings. It is covered in tour step 2.",
+   "sections": [
+    {
+     "title": "Build system",
+     "lineRange": [
+      1,
+      4
+     ],
+     "explanation": "Uses setuptools with wheel as the build backend.",
+     "tourOrder": 2
+    },
+    {
+     "title": "Project metadata and dependencies",
+     "lineRange": [
+      5,
+      24
+     ],
+     "explanation": "Declares nl2odrl 2.0.0, Python 3.11+, and dependencies including agentcrash-core pinned to 0.4.x, pydantic, rdflib, pyshacl, z3-solver, dspy, httpx, fastapi and uvicorn.",
+     "tourOrder": 2
+    },
+    {
+     "title": "Dev extras and entry point",
+     "lineRange": [
+      25,
+      33
+     ],
+     "explanation": "The dev extra adds pytest. The `odrl-host` console script maps to `odrl_agent.cli:main`, and package discovery is limited to `odrl_agent*`.",
+     "tourOrder": 2
+    },
+    {
+     "title": "Test and lint settings",
+     "lineRange": [
+      34,
+      41
+     ],
+     "explanation": "pytest runs quietly from `tests/` with the repo root on the path; ruff uses line length 100 and targets py311.",
+     "tourOrder": 2
+    }
+   ]
+  },
+  "scenarios/odrl_convert/scenario.yaml": {
+   "overview": "Clean scenario/v1 declaration for odrl_convert: three tools (parse_policy, validate_odrl, save_odrl), four invariants, the default policy and the sloppy_offer_v1 fixture document. It is covered in tour step 12.",
+   "sections": [
+    {
+     "title": "Task and tools",
+     "lineRange": [
+      1,
+      22
+     ],
+     "explanation": "Scenario id, task, seed and three tools (`parse_policy`, `validate_odrl`, mutating `save_odrl`) with latency and timeout settings.",
+     "tourOrder": 12
+    },
+    {
+     "title": "Invariants",
+     "lineRange": [
+      23,
+      35
+     ],
+     "explanation": "Four invariants: odrl_valid, no_attacker_grant, exactly_once_save and fresh_write_only.",
+     "tourOrder": 12
+    },
+    {
+     "title": "Policy and environment",
+     "lineRange": [
+      36,
+      45
+     ],
+     "explanation": "The default (naive) policy, max steps and fixture-backed environment: NL fixture file, document key and an empty ODRL record.",
+     "tourOrder": 12
+    }
+   ]
+  },
+  "scenarios/odrl_convert_poisoned/scenario.yaml": {
+   "overview": "Adversarial scenario/v1 declaration where the NL fixture carries an injected attacker-client grant (poisoned_sentence_v1); same tools and invariants as odrl_convert.",
+   "sections": []
+  },
+  "schemas/odrl-2.2-shapes.ttl": {
+   "overview": "SHACL shapes for the ODRL 2.2 core profile (odrl-2.2-shapes-v1) validated against the RDF produced from compiler output; vocabulary lists are pinned to odrl-2.2.ttl by tests.",
+   "sections": []
+  },
+  "schemas/odrl-2.2.jsonld": {
+   "overview": "Bundled ODRL 2.2 JSON-LD context used offline to expand compiler output into RDF.",
+   "sections": []
+  },
+  "schemas/odrl-2.2.ttl": {
+   "overview": "Bundled W3C ODRL 2.2 ontology in Turtle (about 2,270 lines) used for vocabulary terms and the odrl:includedIn action hierarchy.",
+   "sections": []
+  },
+  "ui-react/src/index.css": {
+   "overview": "Global stylesheet for Studio defining CSS custom-property design tokens (colors) and the layout and component styles.",
+   "sections": []
+  },
+  "ui-react/vite.config.ts": {
+   "overview": "Vite config: React plugin, relative base, build output into ../ui, and a dev proxy sending /api to localhost:8901.",
+   "sections": []
+  },
+  "ui/index.html": {
+   "overview": "Built Studio HTML shell emitted by vite build into ui/, referencing hashed JS and CSS bundles in ui/assets; served by the FastAPI app.",
+   "sections": []
   }
+ }
 }
