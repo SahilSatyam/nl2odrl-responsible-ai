@@ -33,6 +33,45 @@ NL → ODRL treats the model as an untrusted extractor and puts code around it:
 
 A median conversion is one model call. Multi-clause inputs get one extra decompose call.
 
+## What makes it state of the art
+
+Most NL-to-ODRL work asks a model to write JSON-LD or Turtle and then checks
+whether it parses. This project combines the current best practices for
+reliable LLM extraction with formal checks, and measures the result on a
+held-out benchmark.
+
+| Practice | How this project applies it |
+|---|---|
+| **Typed IR instead of raw JSON-LD** | The model fills a small Pydantic `PolicyIR` through a JSON-Schema structured-output call. Unknown actions, operands or operators fail at the schema layer, before any ODRL exists. |
+| **Deterministic compilation** | `compiler.py` maps the IR to ODRL 2.2 with real IRIs, typed literals and a bundled local `@context`. SHACL validity comes from construction, not from prompting. |
+| **Full ODRL 2.2 SHACL shapes** | Permissions, prohibitions, obligations, duties, constraints, logical constraints and refinements are all checked, offline. |
+| **Symbolic reasoning** | Z3 finds unsatisfiable constraints and permission/prohibition conflicts, including those hidden by the `odrl:includedIn` action hierarchy. |
+| **Provenance for every rule** | Each rule carries source spans. A permission that cites text absent from the source is dropped. |
+| **Authorship separation** | Injected instructions in the input cannot create grants. The model never holds the publishing step; a deterministic gate or a human does. |
+| **Shrink-only repair** | At most two repair rounds, fed a structured violation report. A repair may narrow a grant, never widen it. |
+| **Honest ambiguity** | Vague time or quantity words, contradictory clauses and dropped grants or denials are flagged for review instead of guessed. |
+| **Verifiable audit trail** | Every run writes a hash-chained trace via `agentcrash-core` (HMAC-signed when `AGENTCRASH_SIGNING_KEY` is set). Verifiers judge the trace, not the agent's own report. |
+| **Measured, gated quality** | 240 stratified cases with gold IRs and a dev/test split by source family. The `bench-live` workflow fails on a false-permission or F1 regression, and a deliberate over-permitting mutant must fail the gates. |
+
+### Measured results (Baseline v1)
+
+Live run of `muse-spark-1.3` over all 240 cases (`benchmarks/v1/baseline_v1.json`, commit `bef6481`):
+
+| Metric | Value |
+|---|---|
+| SHACL pass rate | 1.00 |
+| Span attribution | 1.00 |
+| Behavioral agreement with gold | 0.98 |
+| Checkpoint F1 (entity / action / modality) | 0.90 (0.93 / 0.91 / 0.91) |
+| False-permission rate | 0.054 |
+| False auto-publish rate | 0.017 |
+| Median model calls per conversion | 1 |
+
+Known gaps, from the same run: constraint F1 is 0.64, adversarial-tier
+false-permission rate is 0.17, conflict escape rate is 0.083, and ambiguity
+recall was 0.0. The ambiguity flags described above were added after this
+baseline and are not yet re-measured.
+
 ## Architecture
 
 <a href="https://htmlpreview.github.io/?https://github.com/SahilSatyam/nl2odrl-responsible-ai/blob/develop/docs/assets/architecture-interactive.html">
@@ -129,8 +168,7 @@ Per PR the offline run checks the harness and the pipeline stages
 runs the real model nightly and on changes to prompts, the extractor,
 the LLM client or the pins, and also blocks a false-permission-rate
 increase above 0.5 points or a checkpoint-F1 drop above 0.01 against
-`baseline_v1.json`. Baseline v1 is frozen with `--freeze` from a live
-run; it is not committed until a maintainer has run one.
+`baseline_v1.json`, which was frozen with `--freeze` from a live run.
 
 ## The flagship failure it catches
 
@@ -264,5 +302,5 @@ CI runs the suite on Python 3.11 to 3.13, the chaos gate (`odrl-host chaos`), an
 | `benchmarks/` | Baseline cases and results, smoke set |
 | `prompts/` | DSPy probe instruction pack |
 | `tests/`, `tests/fixtures/` | Test suite and frozen golden traces |
-| `docs/` | Implementation plan and architecture diagram assets |
+| `docs/` | Architecture and sequence diagram assets |
 | `.github/workflows/ci.yml` | Tests, chaos gate and PII guardrail on Python 3.11 to 3.13 |
