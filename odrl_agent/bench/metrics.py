@@ -13,6 +13,8 @@ from typing import Any
 
 from odrl_agent.bench.evaluator import agreement, name_key
 from odrl_agent.grounder import normalize_name
+from odrl_agent.ir import PolicyIR
+from odrl_agent.normalise import normalise
 from odrl_agent.reasoning import includes
 
 CATEGORIES = ("entity", "action", "modality", "constraint")
@@ -138,12 +140,45 @@ def _percentile(values: list[float], q: float) -> float | None:
     return round(ordered[min(len(ordered) - 1, int(len(ordered) * q))], 3)
 
 
+def _duty_keys(ir: dict[str, Any] | None) -> set[tuple]:
+    if not ir:
+        return set()
+    keys: set[tuple] = set()
+    for rule in ir.get("rules", []):
+        mod, act, tgt = rule["modality"], rule["action"], name_key(rule.get("target"))
+        for duty in rule.get("duties", []):
+            keys.add((mod, act, tgt, duty["action"], duty.get("role", "precondition")))
+    return keys
+
+
+def _simple_perm_set(ir_dict: dict[str, Any] | None) -> set[tuple] | None:
+    if not ir_dict:
+        return None
+    try:
+        ir_obj = PolicyIR.model_validate(ir_dict)
+    except Exception:
+        return None
+    norm = normalise(ir_obj)
+    out: set[tuple] = set()
+    for rule in norm.rules:
+        if rule.modality != "permission":
+            continue
+        cons = tuple(sorted(_constraint_key(c.model_dump(mode="json")) for c in rule.constraints))
+        refs = tuple(sorted(_constraint_key(c.model_dump(mode="json")) for c in rule.action_refinements))
+        out.add((rule.action, name_key(rule.target), name_key(rule.assignee or norm.assignee), cons, refs))
+    return out
+
+
 def compute(results: list[dict[str, Any]]) -> dict[str, Any]:
-    """All Phase 4.2 metrics over ``results``. ``None`` means not applicable."""
+    """All Phase 4.2 + Phase 2.4 metrics over ``results``. ``None`` means not applicable."""
     m: dict[str, Any] = {"cases": len(results)}
     m.update(checkpoint_scores(results))
 
-    with_rules = [r for r in results if (r["draft"].get("ir") or {}).get("rules")]
+    with_rules = [
+        r for r in results
+        if (r["draft"].get("ir") or {}).get("rules")
+        and (r["draft"].get("odrl") is not None or r["draft"].get("status") == "failed")
+    ]
     m["shacl_pass_rate"] = _ratio(
         sum(1 for r in with_rules if r["draft"].get("valid")), len(with_rules))
     m["valid_term_rate"] = _ratio(
@@ -164,11 +199,43 @@ def compute(results: list[dict[str, Any]]) -> dict[str, Any]:
 
     agree = reqs = 0
     for r in results:
-        if r["case"]["expect"].get("conflict") or not r["case"]["gold_ir"]["rules"]:
+        gold_ir = r["case"]["gold_ir"]
+        if (
+            r["case"]["expect"].get("conflict")
+            or not gold_ir["rules"]
+            or gold_ir.get("policy_type") == "Offer"
+        ):
             continue
-        a, b = agreement(r["case"]["gold_ir"], r["draft"].get("ir"))
+        a, b = agreement(gold_ir, r["draft"].get("ir"))
         agree, reqs = agree + a, reqs + b
     m["behavioral_agreement"] = _ratio(agree, reqs)
+
+    gold_duties = pred_duties = 0
+    for r in results:
+        gd = _duty_keys(r["case"]["gold_ir"])
+        if not gd:
+            continue
+        pd = _duty_keys(r["draft"].get("ir"))
+        gold_duties += len(gd)
+        pred_duties += len(gd & pd)
+    m["duty_recorded"] = _ratio(pred_duties, gold_duties)
+
+    nf_ok = nf_total = 0
+    for r in results:
+        gold_ir = r["case"]["gold_ir"]
+        if (
+            r["case"]["expect"].get("conflict")
+            or not gold_ir["rules"]
+            or gold_ir.get("policy_type") == "Offer"
+        ):
+            continue
+        g_set = _simple_perm_set(gold_ir)
+        p_set = _simple_perm_set(r["draft"].get("ir"))
+        if g_set is not None:
+            nf_total += 1
+            if p_set == g_set:
+                nf_ok += 1
+    m["normal_form_equivalence"] = _ratio(nf_ok, nf_total)
 
     conflicts = [r for r in results if r["case"]["expect"].get("conflict")]
     m["conflict_escape_rate"] = _ratio(

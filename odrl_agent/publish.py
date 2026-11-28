@@ -32,8 +32,10 @@ from pydantic import ValidationError
 from odrl_agent import db as db_module
 from odrl_agent.compiler import CompileError, compile_ir
 from odrl_agent.ir import PolicyIR
+from odrl_agent.kb import ground_constraints
 from odrl_agent.odrl import contains_attacker_grant, validate_odrl
-from odrl_agent.reasoning import analyze
+from odrl_agent.positions import OPEN_BEHAVIOUR_REASON
+from odrl_agent.reasoning import UNKNOWN_CONSTRAINT, analyze
 
 PUBLICATIONS_SQL = (
     "CREATE TABLE IF NOT EXISTS nl2odrl_publications ("
@@ -157,6 +159,7 @@ def review_draft(
         ) from exc  # fmt: skip
     grounded, span_violations = resolve_spans(ir, source)
     grounded, gate = Grounder().ground(grounded, source)
+    grounded = ground_constraints(grounded)
     widened: list[str] = []
     if edited_ir is not None and isinstance(draft.get("ir"), dict):
         try:
@@ -171,14 +174,21 @@ def review_draft(
         return Review(None, grounded.model_dump(mode="json"), False, [f"compile: {exc}"])
     valid, errors = validate_odrl(doc)
     findings = analyze(grounded)
-    alerts = list(span_violations) + gate.messages()
+    blocking_conflicts = findings.blocking_messages()
+    unknown_alerts = [
+        f"reasoning: {f.code} {f.path}: {f.detail}"
+        for f in findings.unknown
+    ]
+    alerts = list(span_violations) + gate.messages() + unknown_alerts
+    if grounded.behaviour == "open":
+        alerts.append(OPEN_BEHAVIOUR_REASON)
     alerts += [f"ambiguity: {a.kind}: {a.description}" for a in grounded.ambiguities]
     alerts += [f"assumption: {a.field}={a.assumed_value}" for a in grounded.assumptions]
     if edited_ir is None:
         alerts += [f"dropped rule: {r.get('action')} -> {r.get('assignee')}"
                    for r in draft.get("dropped_rules") or []]  # fmt: skip
     return Review(
-        doc, grounded.model_dump(mode="json"), valid, errors, findings.messages(), alerts, widened
+        doc, grounded.model_dump(mode="json"), valid, errors, blocking_conflicts, alerts, widened
     )
 
 

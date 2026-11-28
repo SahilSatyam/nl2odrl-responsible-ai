@@ -17,7 +17,7 @@ from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-IR_VERSION = "1.0"
+IR_VERSION = "1.2"
 
 #: ODRL 2.2 vocabulary terms (core profile). Pinned by a test against
 #: ``schemas/odrl-2.2.ttl`` and ``schemas/odrl-2.2.jsonld``.
@@ -154,6 +154,7 @@ class ConstraintIR(_Model):
     operator: Operator
     right_operand: str = Field(min_length=1, description="Value as text; typed by value_type.")
     value_type: ValueType = "string"
+    right_concepts: list[str] = Field(default_factory=list)
     span: SpanRef | None = None
 
     @model_validator(mode="after")
@@ -203,16 +204,36 @@ def _check_depth(nodes: list) -> list:
     return nodes
 
 
+DutyRole = Literal["precondition", "obligation", "remedy", "consequence"]
+
+
 class DutyIR(_Model):
-    """A duty attached to a permission (``odrl:duty``)."""
+    """A duty attached to a rule or parent duty (``odrl:duty``, ``odrl:remedy``, ``odrl:consequence``)."""
 
     action: Action
+    role: DutyRole = "precondition"
     target: str | None = None
     assignee: str | None = None
     constraints: list[ConstraintNode] = Field(default_factory=list)
+    deadline: ConstraintIR | None = None
+    consequences: list[DutyIR] = Field(default_factory=list)
     source_spans: list[SpanRef] = Field(default_factory=list)
 
     _depth = field_validator("constraints")(_check_depth)
+
+    @model_validator(mode="after")
+    def _check(self) -> DutyIR:
+        if self.consequences:
+            if self.role not in ("precondition", "obligation"):
+                raise ValueError(
+                    "role='consequence' is valid only on a precondition duty or a policy-level obligation"
+                )
+            if any(child.role != "consequence" for child in self.consequences):
+                raise ValueError("nested consequence duties must have role 'consequence'")
+        return self
+
+
+DutyIR.model_rebuild()
 
 
 class RuleIR(_Model):
@@ -228,13 +249,28 @@ class RuleIR(_Model):
     duties: list[DutyIR] = Field(default_factory=list)
     source_spans: list[SpanRef] = Field(default_factory=list)
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    strong: bool = False
 
     _depth = field_validator("constraints", "action_refinements")(_check_depth)
 
     @model_validator(mode="after")
     def _check(self) -> RuleIR:
-        if self.duties and self.modality != "permission":
-            raise ValueError("only a permission may carry duties")
+        if self.duties:
+            if self.modality == "permission":
+                if any(d.role != "precondition" for d in self.duties):
+                    raise ValueError(
+                        "permission duties must have role 'precondition' "
+                        "(remedy is valid only on a prohibition)"
+                    )
+            elif self.modality == "prohibition":
+                if any(d.role != "remedy" for d in self.duties):
+                    raise ValueError(
+                        "only a permission may carry precondition duties; "
+                        "prohibition duties must have role 'remedy'"
+                    )
+            elif self.modality == "obligation":
+                if any(d.role != "consequence" for d in self.duties):
+                    raise ValueError("obligation duties must have role 'consequence'")
         if self.modality == "obligation" and not self.assignee:
             raise ValueError("an obligation needs an assignee (who must act)")
         for text in (self.target, self.assignee, self.assigner):
@@ -279,9 +315,11 @@ class PolicyIR(_Model):
         default="",
         description="Short free-text reasoning, written before the structured fields.",
     )
-    ir_version: Literal["1.0"] = IR_VERSION
+    ir_version: Literal["1.0", "1.1", "1.2"] = IR_VERSION
     policy_type: Literal["Set", "Offer", "Agreement"] = "Set"
     profile: str = "core"
+    behaviour: Literal["closed", "open"] = "closed"
+    action_closure: Literal["none", "permissions_only"] = "permissions_only"
     conflict_strategy: Literal["perm", "prohibit", "invalid"] | None = None
     uid: str | None = None
     assigner: str | None = None

@@ -18,9 +18,18 @@ import httpx
 from odrl_agent.extractor import DECOMPOSE_PROMPT, split_sentences
 from odrl_agent.llm import StructuredLlm
 
-MUTANTS = ("overpermit", "drop_prohibitions", "drop_constraints", "obey_injection")
+MUTANTS = ("overpermit", "drop_prohibitions", "drop_constraints", "obey_injection", "set_as_eq")
+_SET_OPS = frozenset({"isA", "isPartOf", "hasPart", "isAnyOf", "isAllOf"})
 _SOURCE = re.compile(r"<untrusted_source>\n(.*?)\n</untrusted_source>", re.DOTALL)
 USAGE = {"prompt_tokens": 100, "completion_tokens": 40, "total_tokens": 140}
+
+
+def _rewrite_set_as_eq(node: dict[str, Any]) -> None:
+    if node.get("kind") == "logical":
+        for child in node.get("constraints", []):
+            _rewrite_set_as_eq(child)
+    elif node.get("operator") in _SET_OPS:
+        node["operator"] = "eq"
 
 
 def mutate(case: dict[str, Any], mutant: str | None) -> dict[str, Any]:
@@ -45,6 +54,15 @@ def mutate(case: dict[str, Any], mutant: str | None) -> dict[str, Any]:
                 "modality": "permission", "action": "use", "assignee": injection["principal"],
                 "target": rules[0]["target"], "source_spans": [{"quote": injection["quote"]}],
             })
+    elif mutant == "set_as_eq":
+        for rule in rules:
+            for node in rule.get("constraints", []):
+                _rewrite_set_as_eq(node)
+            for node in rule.get("action_refinements", []):
+                _rewrite_set_as_eq(node)
+            for duty in rule.get("duties", []):
+                for node in duty.get("constraints", []):
+                    _rewrite_set_as_eq(node)
     else:
         raise ValueError(f"unknown mutant {mutant!r}")
     return ir

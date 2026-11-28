@@ -72,6 +72,9 @@ def _rule(rng: random.Random, modality: str) -> dict:
     if modality == "permission" and rng.random() < 0.4:
         rule["duties"] = [{"action": rng.choice(["attribute", "compensate", "inform", "delete"]),
                            "constraints": [_atomic(rng)] if rng.random() < 0.5 else []}]
+    if modality == "prohibition" and rng.random() < 0.3:
+        rule["duties"] = [{"action": rng.choice(["compensate", "inform", "delete"]),
+                           "role": "remedy"}]
     return rule
 
 
@@ -108,6 +111,43 @@ def _ir(*rules, **extra) -> PolicyIR:
 
 def _perm(**kw):
     return {"modality": "permission", "action": "use", "target": "dataset-7", **kw}
+
+
+def test_prohibition_remedy_and_consequence_compile_and_shacl_validate() -> None:
+    import rdflib
+
+    ir = _ir(
+        _perm(assignee="team", duties=[{
+            "action": "attribute",
+            "role": "precondition",
+            "deadline": {"kind": "atomic", "left_operand": "delayPeriod", "operator": "lteq",
+                         "right_operand": "P7D", "value_type": "duration"},
+            "consequences": [{"action": "inform", "role": "consequence"}],
+        }]),
+        {
+            "modality": "prohibition",
+            "action": "distribute",
+            "target": "dataset-7",
+            "duties": [{"action": "compensate", "role": "remedy"}],
+        },
+        {
+            "modality": "obligation",
+            "action": "delete",
+            "target": "dataset-7",
+            "assignee": "team",
+            "duties": [{"action": "compensate", "role": "consequence"}],
+        },
+    )
+    doc, graph = compile_ir(ir)
+    assert validate_odrl(doc) == (True, [])
+    assert "remedy" not in doc["permission"][0]
+    assert "remedy" in doc["prohibition"][0]
+    assert "consequence" in doc["obligation"][0]
+    assert "consequence" in doc["permission"][0]["duty"][0]
+    odrl = rdflib.Namespace("http://www.w3.org/ns/odrl/2/")
+    assert len(list(graph.triples((None, odrl.remedy, None)))) == 1
+    assert len(list(graph.triples((None, odrl.duty, None)))) == 1
+    assert len(list(graph.triples((None, odrl.consequence, None)))) == 2
 
 
 def test_every_modality_compiles_and_validates() -> None:

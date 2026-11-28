@@ -362,3 +362,78 @@ def write(directory: Path = BENCH_DIR) -> dict[str, Any]:
     (directory / "manifest.json").write_text(
         json.dumps(manifest, indent=1, ensure_ascii=False) + "\n", "utf-8")
     return manifest
+
+
+def semantics_slice() -> list[dict[str, Any]]:
+    """Small Phase 2 gold-IR slice: one ``isPartOf``, one ``xone``, one ``remedy``."""
+    return [
+        _case(
+            2,
+            "is_part_of",
+            "read",
+            900,
+            "orion-analytics may read inventory-feed-q3 within Europe.",
+            _ir(
+                _rule(
+                    "permission",
+                    "read",
+                    "inventory-feed-q3",
+                    "orion-analytics",
+                    "orion-analytics may read inventory-feed-q3 within Europe",
+                    constraints=[
+                        _atom("spatial", "isPartOf", "Europe", "string", "within Europe")
+                    ],
+                )
+            ),
+        ),
+        _case(
+            3,
+            "xone_purpose",
+            "use",
+            901,
+            "helios-partners may use supplier-catalog exclusively for commercial or non-commercial purposes.",
+            _ir(
+                _rule(
+                    "permission",
+                    "use",
+                    "supplier-catalog",
+                    "helios-partners",
+                    "helios-partners may use supplier-catalog exclusively for commercial or non-commercial purposes",
+                    constraints=[
+                        {
+                            "kind": "logical",
+                            "operator": "xone",
+                            "span": _span("exclusively for commercial or non-commercial purposes"),
+                            "constraints": [
+                                _atom("purpose", "isA", "commercial", "string", "commercial"),
+                                _atom("purpose", "isA", "non-commercial", "string", "non-commercial"),
+                            ],
+                        }
+                    ],
+                )
+            ),
+        ),
+        _case(
+            2,
+            "remedy",
+            "distribute",
+            902,
+            "nimbus-audit must not distribute board-minutes; if violated must compensate.",
+            _ir(
+                _rule(
+                    "prohibition",
+                    "distribute",
+                    "board-minutes",
+                    "nimbus-audit",
+                    "nimbus-audit must not distribute board-minutes",
+                    duties=[
+                        {
+                            "action": "compensate",
+                            "role": "remedy",
+                            "source_spans": [_span("if violated must compensate")],
+                        }
+                    ],
+                )
+            ),
+        ),
+    ]

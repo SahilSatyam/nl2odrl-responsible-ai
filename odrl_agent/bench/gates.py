@@ -14,6 +14,8 @@ GATES: dict[str, tuple[str, float, bool]] = {
     # Tracked in the plan; gated here because a dropped prohibition is an over-permission.
     "missed_prohibition_rate": ("<=", 0.02, False),
     "behavioral_agreement": (">=", 0.95, False),
+    "duty_recorded": (">=", 0.95, False),
+    "normal_form_equivalence": (">=", 0.95, False),
     "conflict_escape_rate": ("==", 0.0, False),
     "ambiguity_recall": (">=", 0.90, False),
     "unsupported_assumption_rate": ("<", 0.02, False),

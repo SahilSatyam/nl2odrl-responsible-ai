@@ -1,22 +1,26 @@
 """Behavioral equivalence: do two policies decide the same access requests alike?
 
-A small deterministic ODRL decision evaluator over the IR (permit iff some
-permission applies and no prohibition applies; prohibition wins). It is not a
-full ODRL semantics engine (that is the Phase 5 FORCE bridge); it covers
-assignee, target, action hierarchy and constraint trees, which is what the
-benchmark's gold policies exercise. Duties and obligations do not change an
-access decision.
+Uses the same three-valued KB + Z3 satisfiability oracle as
+:mod:`odrl_agent.reasoning`, including ``action_refinements`` and KB set
+operators. Duties and obligations do not flip allow/deny (monitored separately via
+``duty_recorded``). Offers are refused (``decide`` returns ``False`` and
+``agreement`` does not score them as access decisions).
 """
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 from typing import Any
 
+from pydantic import TypeAdapter, ValidationError
+
 from odrl_agent.grounder import normalize_name
-from odrl_agent.reasoning import _numeric, includes
+from odrl_agent.ir import ConstraintIR, ConstraintNode
+from odrl_agent.kb import DEFAULT_KBS, SET_OPERATORS
+from odrl_agent.reasoning import _numeric, check_satisfiable, includes
 
 MAX_REQUESTS = 10
 ORDERED = ("integer", "decimal", "date", "dateTime", "duration")
+_NODE_LIST = TypeAdapter(list[ConstraintNode])
 
 
 def name_key(name: str | None) -> str | None:
@@ -29,35 +33,14 @@ def name_key(name: str | None) -> str | None:
     return normalize_name(text)
 
 
-def _holds(node: dict[str, Any], context: dict[str, list[str]]) -> bool:
-    if node.get("kind") == "logical":
-        results = [_holds(child, context) for child in node["constraints"]]
-        op = node["operator"]
-        if op == "or":
-            return any(results)
-        if op == "xone":
-            return sum(results) == 1
-        return all(results)  # and, andSequence
-    given = context.get(node["left_operand"])
-    if given is None:
-        return False
-    vtype, text = given
-    op, bound, bound_type = node["operator"], node["right_operand"], node["value_type"]
-    if bound_type in ORDERED and vtype in ORDERED:
-        left, right = _numeric(vtype, text), _numeric(bound_type, bound)
-        if left is None or right is None:
-            return False
-        return {"eq": left == right, "neq": left != right, "gt": left > right,
-                "gteq": left >= right, "lt": left < right, "lteq": left <= right
-                }.get(op, False)
-    left_s, right_s = normalize_name(text), normalize_name(bound)
-    if op in ("isAnyOf", "isAllOf"):
-        return left_s in {normalize_name(x) for x in bound.split(",")}
-    if op == "isNoneOf":
-        return left_s not in {normalize_name(x) for x in bound.split(",")}
-    if op == "neq":
-        return left_s != right_s
-    return left_s == right_s
+def _operands_in(nodes: list[ConstraintNode]) -> set[str]:
+    out: set[str] = set()
+    for node in nodes:
+        if isinstance(node, ConstraintIR):
+            out.add(node.left_operand)
+        else:
+            out.update(_operands_in(list(node.constraints)))
+    return out
 
 
 def _applies(rule: dict[str, Any], policy: dict[str, Any], request: dict[str, Any]) -> bool:
@@ -69,12 +52,41 @@ def _applies(rule: dict[str, Any], policy: dict[str, Any], request: dict[str, An
         return False
     if not includes(rule["action"], request["action"]):
         return False
-    return all(_holds(c, request.get("context", {})) for c in rule.get("constraints", []))
+    raw_nodes = list(rule.get("constraints", [])) + list(rule.get("action_refinements", []))
+    if not raw_nodes:
+        return True
+    try:
+        parsed = _NODE_LIST.validate_python(raw_nodes)
+    except ValidationError:
+        return False
+
+    context = request.get("context", {}) or {}
+    req_constraints: list[ConstraintIR] = []
+    present_ops: set[str] = set()
+    for lo, given in context.items():
+        if not isinstance(given, (list, tuple)) or len(given) != 2:
+            continue
+        vtype, text = given
+        try:
+            req_constraints.append(
+                ConstraintIR(
+                    left_operand=lo,  # type: ignore[arg-type]
+                    operator="eq",
+                    right_operand=str(text),
+                    value_type=vtype,  # type: ignore[arg-type]
+                )
+            )
+            present_ops.add(lo)
+        except ValidationError:
+            continue
+
+    missing = frozenset(_operands_in(parsed) - present_ops)
+    return check_satisfiable(parsed, req_constraints, missing_operands=missing) == "sat"
 
 
 def decide(policy: dict[str, Any] | None, request: dict[str, Any]) -> bool:
     """True when ``policy`` (an IR dump) permits ``request``."""
-    if not policy:
+    if not policy or policy.get("policy_type") == "Offer":
         return False
     rules = policy.get("rules", [])
     if any(_applies(r, policy, request) for r in rules if r["modality"] == "prohibition"):
@@ -111,8 +123,8 @@ def _atoms(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _contexts(rule: dict[str, Any]) -> list[dict[str, list[str]]]:
-    """Contexts that sit on, below and above every bound in ``rule``."""
-    atoms = _atoms(rule.get("constraints", []))
+    """Contexts that sit on, below and above every bound (plus KB sub/disjoint probes)."""
+    atoms = _atoms(list(rule.get("constraints", [])) + list(rule.get("action_refinements", [])))
     if not atoms:
         return [{}]
     contexts = []
@@ -125,6 +137,24 @@ def _contexts(rule: dict[str, Any]) -> list[dict[str, list[str]]]:
             else:
                 ctx[atom["left_operand"]] = ["string", bound if k == 0 else f"{bound}-other"]
         contexts.append(ctx)
+
+    # Probe KB sub-concepts and disjoint concepts for set operators (e.g. isPartOf vs eq).
+    base_ctx = dict(contexts[0])
+    for atom in atoms:
+        lo, op, bound = atom["left_operand"], atom["operator"], atom["right_operand"]
+        kb = DEFAULT_KBS.get(lo)
+        if kb is None or op not in SET_OPERATORS:
+            continue
+        concepts = kb.ground(bound, op) or []
+        for g in concepts:
+            for sub in kb.strictly_under(g)[:1]:
+                probe = dict(base_ctx)
+                probe[lo] = ["string", sub]
+                contexts.append(probe)
+            for disj in kb.disjoint_with(g)[:1]:
+                probe = dict(base_ctx)
+                probe[lo] = ["string", disj]
+                contexts.append(probe)
     return contexts
 
 
@@ -160,6 +190,8 @@ def requests_for(policy: dict[str, Any]) -> list[dict[str, Any]]:
 
 def agreement(gold: dict[str, Any], predicted: dict[str, Any] | None) -> tuple[int, int]:
     """(agreeing requests, total requests) of ``predicted`` against ``gold``."""
+    if gold.get("policy_type") == "Offer":
+        return 0, 0
     requests = requests_for(gold)
     agree = sum(decide(gold, r) == decide(predicted, r) for r in requests)
     return agree, len(requests)

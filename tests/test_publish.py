@@ -73,8 +73,13 @@ def test_conflicting_draft_cannot_be_approved_only_fixed_by_edit(monkeypatch, tm
     still_bad = copy.deepcopy(draft["ir"])
     assert _decide(client, rk, h, decision="edit", reason="x", ir=still_bad).status_code == 422
 
+    strategy_only = copy.deepcopy(draft["ir"])
+    strategy_only["conflict_strategy"] = "prohibit"
+    assert _decide(client, rk, h, decision="edit", reason="strategy only", ir=strategy_only).status_code == 422
+
     fixed = copy.deepcopy(draft["ir"])
     fixed["conflict_strategy"] = "prohibit"
+    fixed["rules"] = [r for r in fixed["rules"] if r["modality"] != "permission"]
     resp = _decide(client, rk, h, decision="edit", reason="prohibition wins", ir=fixed)
     assert resp.status_code == 200, resp.text
     out = resp.json()

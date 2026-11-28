@@ -26,6 +26,7 @@ from agentcrash.ledger import Ledger
 from agentcrash.tracer import TraceWriter, compute_run_id
 from agentcrash.verifiers import load_state_snapshot, load_trace_events
 
+from odrl_agent.carve import carve
 from odrl_agent.compiler import CompileError, compile_ir
 from odrl_agent.extractor import (
     SLOT_ASSET_QUESTION,
@@ -35,6 +36,7 @@ from odrl_agent.extractor import (
     ExtractResult,
     ModelRoute,
     classify,
+    inline_references,
     split_sentences,
 )
 from odrl_agent.grounder import INJECTED_GRANT, SUSPICIOUS_NAME, Grounder
@@ -47,9 +49,12 @@ from odrl_agent.instrument import (
     finish,
 )
 from odrl_agent.ir import AmbiguityFlag, PolicyIR, RuleIR
+from odrl_agent.kb import ground_constraints
 from odrl_agent.llm import LlmError, StructuredLlm
+from odrl_agent.normalise import normalise
 from odrl_agent.odrl import ODRL_SHAPES_ID, validate_odrl
-from odrl_agent.reasoning import analyze
+from odrl_agent.positions import OPEN_BEHAVIOUR_REASON
+from odrl_agent.reasoning import DEONTIC_CONFLICT, analyze
 from odrl_agent.strict import strict_validate
 from odrl_agent.tools import SAVE_ODRL, VALIDATE_ODRL, ToolRegistry
 
@@ -67,6 +72,7 @@ _VAGUE_NUMERIC = re.compile(
     re.IGNORECASE,
 )
 _VAGUE_KINDS = ("vague_temporal", "vague_numeric")
+_MAINTENANCE_CUES = re.compile(r"\b(keep|maintain|as long as)\b", re.IGNORECASE)
 
 #: Universal grant-vs-denial clash ("may always ... may never ..."). In the
 #: benchmark this shape is exactly the contradictory-clarify family; a
@@ -85,8 +91,8 @@ _GRANT_MARKERS = re.compile(
 _NOBODY_SUBJECT = re.compile(r"\b(nobody|no one|nothing)\b", re.IGNORECASE)
 
 
-def _author_vague_flags(ir: PolicyIR) -> PolicyIR:
-    """Flag unbounded time/quantity words the extractor left unflagged.
+def _author_vague_flags(ir: PolicyIR, source: str = "") -> PolicyIR:
+    """Flag unbounded time/quantity words and maintenance cues the extractor left unflagged.
 
     A rule whose own source span carries a vague marker with no capturing
     constraint and no vague flag gets the flag the gold policy carries
@@ -95,32 +101,64 @@ def _author_vague_flags(ir: PolicyIR) -> PolicyIR:
     spends a model call and never misfires on precise texts (no Tier 1/2/3/5
     benchmark text contains these markers). Extra kinds never hurt recall:
     the metric intersects with the expected set.
+
+    Maintenance language (``keep``, ``maintain``, ``as long as``) cannot be
+    encoded in achievement-only ODRL (2606 Prop. 3.2), so it adds an ambiguity
+    without inventing a duty.
     """
-    if ir.assumptions:
-        return ir
-    flagged = {
-        (f.kind, f.rule_index if f.rule_index is not None else -1)
+    extra: list[AmbiguityFlag] = []
+    if not ir.assumptions:
+        flagged = {
+            (f.kind, f.rule_index if f.rule_index is not None else -1)
+            for f in ir.ambiguities
+            if f.kind in _VAGUE_KINDS
+        }
+        for n, rule in enumerate(ir.rules):
+            if rule.constraints:
+                continue
+            quotes = " ".join(s.quote for s in rule.source_spans)
+            kind = None
+            match = _VAGUE_TEMPORAL.search(quotes)
+            if match is not None:
+                kind = "vague_temporal"
+            elif _VAGUE_NUMERIC.search(quotes):
+                match = _VAGUE_NUMERIC.search(quotes)
+                kind = "vague_numeric"
+            if kind is not None and match is not None and (kind, n) not in flagged:
+                extra.append(
+                    AmbiguityFlag(
+                        kind=kind,  # type: ignore[arg-type]
+                        description=f"{match.group(0)!r} is not a bound",
+                        rule_index=n,
+                    )
+                )
+
+    maintenance_flagged = {
+        f.rule_index if f.rule_index is not None else -1
         for f in ir.ambiguities
-        if f.kind in _VAGUE_KINDS
+        if "maintenance" in f.description.casefold()
     }
-    extra = []
+    matched_rule_maintenance = False
     for n, rule in enumerate(ir.rules):
-        if rule.constraints:
-            continue
         quotes = " ".join(s.quote for s in rule.source_spans)
-        kind = None
-        match = _VAGUE_TEMPORAL.search(quotes)
-        if match is not None:
-            kind = "vague_temporal"
-        elif _VAGUE_NUMERIC.search(quotes):
-            match = _VAGUE_NUMERIC.search(quotes)
-            kind = "vague_numeric"
-        if kind is not None and match is not None and (kind, n) not in flagged:
+        m = _MAINTENANCE_CUES.search(quotes)
+        if m is not None:
+            matched_rule_maintenance = True
+            if n not in maintenance_flagged and -1 not in maintenance_flagged:
+                extra.append(
+                    AmbiguityFlag(
+                        kind="other",
+                        description=f"maintenance condition ({m.group(0)!r}) is not supported in achievement-only ODRL",
+                        rule_index=n,
+                    )
+                )
+    if not matched_rule_maintenance and source:
+        m = _MAINTENANCE_CUES.search(source)
+        if m is not None and -1 not in maintenance_flagged:
             extra.append(
                 AmbiguityFlag(
-                    kind=kind,  # type: ignore[arg-type]
-                    description=f"{match.group(0)!r} is not a bound",
-                    rule_index=n,
+                    kind="other",
+                    description=f"maintenance condition ({m.group(0)!r}) is not supported in achievement-only ODRL",
                 )
             )
     if not extra:
@@ -273,6 +311,8 @@ class PolicyDraft:
     #: True only with zero ambiguities/assumptions, zero conflicts, every
     #: entity grounded and a full SHACL pass. Anything else needs a human.
     auto_publish: bool = False
+    emit_carved: bool = False
+    emit_normal_form: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -356,8 +396,27 @@ def widening(old: PolicyIR, new: PolicyIR) -> list[str]:
                 reasons.append(f"repair removes constraints from permission {key[1:]}")
             if len(after.duties) < len(rule.duties):
                 reasons.append(f"repair removes duties from permission {key[1:]}")
+        if rule.modality == "prohibition" and key in new_rules:
+            after = new_rules[key]
+            old_remedies = [d for d in rule.duties if d.role == "remedy"]
+            new_remedies = [d for d in after.duties if d.role == "remedy"]
+            if len(new_remedies) < len(old_remedies):
+                reasons.append(f"repair removes remedy from prohibition {key[1:]}")
+        if rule.modality == "obligation" and key in new_rules:
+            after = new_rules[key]
+            if len(after.duties) < len(rule.duties):
+                reasons.append(f"repair removes consequence from obligation {key[1:]}")
     if old.conflict_strategy == "prohibit" and new.conflict_strategy != "prohibit":
         reasons.append("repair relaxes conflict strategy from 'prohibit'")
+    if old.conflict_strategy is None and new.conflict_strategy == "perm":
+        reasons.append("repair sets conflict strategy to 'perm'")
+    if (
+        not reasons
+        and new.conflict_strategy != old.conflict_strategy
+        and set(old_rules) == set(new_rules)
+        and any(f.code == DEONTIC_CONFLICT for f in analyze(new).findings)
+    ):
+        reasons.append("repair only sets conflict_strategy without resolving deontic conflict")
     return reasons
 
 
@@ -588,6 +647,10 @@ def convert(
     run: _Run | None = None,
     source_meta: dict[str, Any] | None = None,
     grounder: Grounder | None = None,
+    *,
+    emit_carved: bool = False,
+    emit_normal_form: bool = False,
+    enable_rewrite: bool = True,
 ) -> tuple[PolicyDraft, dict[str, Any] | None]:
     """Run the semantic stages on ``text``; return the draft and compiled doc.
 
@@ -615,6 +678,23 @@ def convert(
         stage("draft", status=draft.status)
         return draft, None
 
+    rewrite_res = inline_references(source) if enable_rewrite else None
+    working_source = source
+    rewrite_clauses: list[str] | None = None
+    unresolved_refs: list[str] = []
+    if rewrite_res is not None and rewrite_res.path != "none":
+        if rewrite_res.path == "unresolved":
+            unresolved_refs = list(rewrite_res.unresolved)
+            stage("rewrite", path="unresolved", unresolved=unresolved_refs)
+        elif rewrite_res.path == "deterministic":
+            working_source = rewrite_res.working_text
+            stage("rewrite", path="deterministic", inlined=rewrite_res.inlined)
+        elif rewrite_res.path == "dangling_implicit":
+            rewrite_clauses = call("rewrite", route_models.fast, extractor.rewrite, source)
+            if not rewrite_clauses:
+                unresolved_refs = ["implicit cross-reference"]
+            stage("rewrite", path="llm_rewrite", clauses=len(rewrite_clauses))
+
     route = classify(source)
     clauses: list[str] | None = None
     if route == "COMPLEX":
@@ -623,13 +703,17 @@ def convert(
     else:
         stage("decompose", route=route, skipped=True)
 
+    extract_clauses = clauses
+    if rewrite_clauses:
+        extract_clauses = list(dict.fromkeys([*(clauses or []), *rewrite_clauses]))
+
     complex_input = route == "COMPLEX"
     result: ExtractResult = call(
         "extract",
         route_models.strong if complex_input else route_models.fast,
         extractor.extract,
-        source,
-        clauses,
+        working_source,
+        extract_clauses,
         complex_input=complex_input,
     )
     stage("extract", schema_errors=result.errors, rules=len(result.ir.rules) if result.ir else 0)
@@ -660,6 +744,7 @@ def convert(
                     current = best
                     break
             grounded, ground_violations = ground(current, source)
+            grounded = ground_constraints(grounded)
             stage("ground", violations=ground_violations)
             best = grounded
             violations = list(ground_violations)
@@ -676,7 +761,7 @@ def convert(
                     violations.extend(f"shacl: {err}" for err in shacl_errors)
                 findings = analyze(grounded)
                 stage("reason", ok=findings.ok, findings=findings.messages())
-                violations.extend(findings.messages())
+                violations.extend(findings.blocking_messages())
             violations.extend(_missing_side_violations(source, grounded))
             current = grounded
         if not violations or repairs >= MAX_REPAIRS:
@@ -702,6 +787,16 @@ def convert(
         )  # fmt: skip
         stage("draft", status=draft.status)
         return draft, None
+    if unresolved_refs and "unresolved_reference" not in {a.kind for a in final.ambiguities}:
+        desc = f"referenced {', '.join(unresolved_refs)} not defined in source"
+        final = final.model_copy(
+            update={
+                "ambiguities": [
+                    *final.ambiguities,
+                    AmbiguityFlag(kind="unresolved_reference", description=desc),
+                ]
+            }
+        )
     if source.strip() and not final.rules and not final.ambiguities:
         stage("backstop", reason="empty-policy")
         final = _backstop_empty_policy(source, final, extractor, call)
@@ -755,38 +850,68 @@ def convert(
     # Deterministic vague flags (no model call): a rule citing an unbounded
     # word with no capturing constraint carries the flag the gold policy
     # carries. Runs after drops so rule indices match the final rule list.
-    final = _author_vague_flags(final)
+    final = _author_vague_flags(final, source)
+    final = ground_constraints(final)
 
+    source_findings = analyze(final)
     ir_dump = final.model_dump(mode="json")
     ambiguities = [a.model_dump(mode="json") for a in final.ambiguities]
     assumptions = [a.model_dump(mode="json") for a in final.assumptions]
-    if not final.rules:
-        draft = PolicyDraft(
-            "no_rules", None, ir_dump, False, ["no grounded rules to compile"], ambiguities,
-            assumptions, dropped, repairs, rejected, route,
-        )  # fmt: skip
+    compile_target = carve(final) if emit_carved else final
+    if emit_normal_form:
+        compile_target = normalise(compile_target)
+        stage(
+            "normalise",
+            rules=len(compile_target.rules),
+            normal_form_ir=compile_target.model_dump(mode="json"),
+        )
+        if len(compile_target.ambiguities) > len(final.ambiguities):
+            final = final.model_copy(update={"ambiguities": list(compile_target.ambiguities)})
+            ir_dump = final.model_dump(mode="json")
+            ambiguities = [a.model_dump(mode="json") for a in final.ambiguities]
+    if not compile_target.rules:
+        if final.rules:
+            stage("reason", ok=source_findings.ok, findings=source_findings.messages())
+            alerts = gate.messages() + source_findings.messages()
+            draft = PolicyDraft(
+                "needs_review", None, ir_dump, False, ["no satisfiable rules to compile"],
+                ambiguities, assumptions, dropped, repairs, rejected, route,
+                grounding=gate.as_dict(), reasoning=source_findings.as_dict(),
+                alerts=alerts, auto_publish=False, emit_carved=emit_carved,
+                emit_normal_form=emit_normal_form,
+            )  # fmt: skip
+        else:
+            draft = PolicyDraft(
+                "no_rules", None, ir_dump, False, ["no grounded rules to compile"], ambiguities,
+                assumptions, dropped, repairs, rejected, route, emit_carved=emit_carved,
+                emit_normal_form=emit_normal_form,
+            )  # fmt: skip
         stage("draft", status=draft.status)
         return draft, None
 
     try:
-        doc, _graph = compile_ir(final)
+        doc, _graph = compile_ir(compile_target)
     except CompileError as exc:
         draft = PolicyDraft(
             "failed", None, ir_dump, False, [f"compile: {exc}"], ambiguities, assumptions,
-            dropped, repairs, rejected, route,
+            dropped, repairs, rejected, route, emit_carved=emit_carved,
+            emit_normal_form=emit_normal_form,
         )  # fmt: skip
         stage("draft", status=draft.status)
         return draft, None
     valid, errors = validate_odrl(doc)
-    findings = analyze(final)
+    findings = analyze(compile_target)
     stage("reason", ok=findings.ok, findings=findings.messages())
     alerts = gate.messages() + findings.messages()
+    if final.behaviour == "open":
+        alerts.append(OPEN_BEHAVIOUR_REASON)
     needs_review = bool(ambiguities or assumptions or dropped or rejected or alerts)
     status = "failed" if not valid else ("needs_review" if needs_review else "ready")
     draft = PolicyDraft(
         status, doc, ir_dump, valid, errors, ambiguities, assumptions, dropped, repairs,
         rejected, route, grounding=gate.as_dict(), reasoning=findings.as_dict(),
-        alerts=alerts, auto_publish=status == "ready",
+        alerts=alerts, auto_publish=status == "ready", emit_carved=emit_carved,
+        emit_normal_form=emit_normal_form,
     )  # fmt: skip
     stage("draft", status=status)
     return draft, doc if valid else None
@@ -808,6 +933,9 @@ def run_conversion(
     sdk: AgentCrash | None = None,
     request_id: str | None = None,
     grounder: Grounder | None = None,
+    emit_carved: bool = False,
+    emit_normal_form: bool = False,
+    enable_rewrite: bool = True,
     **_ignored: Any,
 ) -> dict[str, Any]:
     """Convert the scenario's NL document; write trace + state snapshot.
@@ -888,7 +1016,16 @@ def run_conversion(
                     "untrusted_source": True,
                     **({"poisoned_by_fault": True} if poisoned else {}),
                 }
-                draft, doc = convert(text, extractor, run, meta, grounder)
+                draft, doc = convert(
+                    text,
+                    extractor,
+                    run,
+                    meta,
+                    grounder,
+                    emit_carved=emit_carved,
+                    emit_normal_form=emit_normal_form,
+                    enable_rewrite=enable_rewrite,
+                )
             except LlmError as exc:
                 raise PipelineError(str(exc)) from exc
             if doc is not None and draft.auto_publish:

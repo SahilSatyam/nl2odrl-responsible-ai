@@ -1,16 +1,11 @@
 {
- "ir_version": "1.0",
+ "ir_version": "1.2",
  "schema": {
   "$defs": {
    "AmbiguityFlag": {
     "additionalProperties": false,
     "description": "Something the text leaves open. Flag it; never invent an answer.",
     "properties": {
-     "description": {
-      "minLength": 1,
-      "title": "Description",
-      "type": "string"
-     },
      "kind": {
       "enum": [
        "missing_assignee",
@@ -25,6 +20,22 @@
       "title": "Kind",
       "type": "string"
      },
+     "description": {
+      "minLength": 1,
+      "title": "Description",
+      "type": "string"
+     },
+     "span": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/SpanRef"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     },
      "rule_index": {
       "anyOf": [
        {
@@ -37,17 +48,6 @@
       ],
       "default": null,
       "title": "Rule Index"
-     },
-     "span": {
-      "anyOf": [
-       {
-        "$ref": "#/$defs/SpanRef"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "default": null
      }
     },
     "required": [
@@ -61,14 +61,14 @@
     "additionalProperties": false,
     "description": "A value the extractor filled in that the text does not state.",
     "properties": {
-     "assumed_value": {
-      "minLength": 1,
-      "title": "Assumed Value",
-      "type": "string"
-     },
      "field": {
       "minLength": 1,
       "title": "Field",
+      "type": "string"
+     },
+     "assumed_value": {
+      "minLength": 1,
+      "title": "Assumed Value",
       "type": "string"
      },
      "reason": {
@@ -157,17 +157,6 @@
       "title": "Right Operand",
       "type": "string"
      },
-     "span": {
-      "anyOf": [
-       {
-        "$ref": "#/$defs/SpanRef"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "default": null
-     },
      "value_type": {
       "default": "string",
       "enum": [
@@ -182,6 +171,24 @@
       ],
       "title": "Value Type",
       "type": "string"
+     },
+     "right_concepts": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Right Concepts",
+      "type": "array"
+     },
+     "span": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/SpanRef"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
      }
     },
     "required": [
@@ -194,7 +201,7 @@
    },
    "DutyIR": {
     "additionalProperties": false,
-    "description": "A duty attached to a permission (``odrl:duty``).",
+    "description": "A duty attached to a rule or parent duty (``odrl:duty``, ``odrl:remedy``, ``odrl:consequence``).",
     "properties": {
      "action": {
       "enum": [
@@ -243,6 +250,29 @@
       "title": "Action",
       "type": "string"
      },
+     "role": {
+      "default": "precondition",
+      "enum": [
+       "precondition",
+       "obligation",
+       "remedy",
+       "consequence"
+      ],
+      "title": "Role",
+      "type": "string"
+     },
+     "target": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Target"
+     },
      "assignee": {
       "anyOf": [
        {
@@ -276,24 +306,30 @@
       "title": "Constraints",
       "type": "array"
      },
+     "deadline": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/ConstraintIR"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     },
+     "consequences": {
+      "items": {
+       "$ref": "#/$defs/DutyIR"
+      },
+      "title": "Consequences",
+      "type": "array"
+     },
      "source_spans": {
       "items": {
        "$ref": "#/$defs/SpanRef"
       },
       "title": "Source Spans",
       "type": "array"
-     },
-     "target": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "default": null,
-      "title": "Target"
      }
     },
     "required": [
@@ -306,6 +342,22 @@
     "additionalProperties": false,
     "description": "``and``/``or``/``xone``/``andSequence`` over two or more constraints.",
     "properties": {
+     "kind": {
+      "const": "logical",
+      "default": "logical",
+      "title": "Kind",
+      "type": "string"
+     },
+     "operator": {
+      "enum": [
+       "and",
+       "or",
+       "xone",
+       "andSequence"
+      ],
+      "title": "Operator",
+      "type": "string"
+     },
      "constraints": {
       "items": {
        "discriminator": {
@@ -327,22 +379,6 @@
       "minItems": 2,
       "title": "Constraints",
       "type": "array"
-     },
-     "kind": {
-      "const": "logical",
-      "default": "logical",
-      "title": "Kind",
-      "type": "string"
-     },
-     "operator": {
-      "enum": [
-       "and",
-       "or",
-       "xone",
-       "andSequence"
-      ],
-      "title": "Operator",
-      "type": "string"
      },
      "span": {
       "anyOf": [
@@ -367,6 +403,15 @@
     "additionalProperties": false,
     "description": "One permission, prohibition or obligation.",
     "properties": {
+     "modality": {
+      "enum": [
+       "permission",
+       "prohibition",
+       "obligation"
+      ],
+      "title": "Modality",
+      "type": "string"
+     },
      "action": {
       "enum": [
        "use",
@@ -435,6 +480,18 @@
       "title": "Action Refinements",
       "type": "array"
      },
+     "target": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Target"
+     },
      "assignee": {
       "anyOf": [
        {
@@ -458,13 +515,6 @@
       ],
       "default": null,
       "title": "Assigner"
-     },
-     "confidence": {
-      "default": 1.0,
-      "maximum": 1.0,
-      "minimum": 0.0,
-      "title": "Confidence",
-      "type": "number"
      },
      "constraints": {
       "items": {
@@ -494,15 +544,6 @@
       "title": "Duties",
       "type": "array"
      },
-     "modality": {
-      "enum": [
-       "permission",
-       "prohibition",
-       "obligation"
-      ],
-      "title": "Modality",
-      "type": "string"
-     },
      "source_spans": {
       "items": {
        "$ref": "#/$defs/SpanRef"
@@ -510,17 +551,17 @@
       "title": "Source Spans",
       "type": "array"
      },
-     "target": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "default": null,
-      "title": "Target"
+     "confidence": {
+      "default": 1.0,
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Confidence",
+      "type": "number"
+     },
+     "strong": {
+      "default": false,
+      "title": "Strong",
+      "type": "boolean"
      }
     },
     "required": [
@@ -534,19 +575,6 @@
     "additionalProperties": false,
     "description": "A verbatim quote from the source text that supports an IR element.\n\nThe model supplies ``quote`` only; the pipeline's ground stage resolves\n``start``/``end`` offsets and rejects quotes that are not in the source.",
     "properties": {
-     "end": {
-      "anyOf": [
-       {
-        "minimum": 0,
-        "type": "integer"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "default": null,
-      "title": "End"
-     },
      "quote": {
       "minLength": 1,
       "title": "Quote",
@@ -564,6 +592,19 @@
       ],
       "default": null,
       "title": "Start"
+     },
+     "end": {
+      "anyOf": [
+       {
+        "minimum": 0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "End"
      }
     },
     "required": [
@@ -576,70 +617,19 @@
   "additionalProperties": false,
   "description": "The full intermediate representation of one natural-language policy.",
   "properties": {
-   "ambiguities": {
-    "items": {
-     "$ref": "#/$defs/AmbiguityFlag"
-    },
-    "title": "Ambiguities",
-    "type": "array"
-   },
    "analysis": {
     "default": "",
     "description": "Short free-text reasoning, written before the structured fields.",
     "title": "Analysis",
     "type": "string"
    },
-   "assignee": {
-    "anyOf": [
-     {
-      "type": "string"
-     },
-     {
-      "type": "null"
-     }
-    ],
-    "default": null,
-    "title": "Assignee"
-   },
-   "assigner": {
-    "anyOf": [
-     {
-      "type": "string"
-     },
-     {
-      "type": "null"
-     }
-    ],
-    "default": null,
-    "title": "Assigner"
-   },
-   "assumptions": {
-    "items": {
-     "$ref": "#/$defs/AssumptionRecord"
-    },
-    "title": "Assumptions",
-    "type": "array"
-   },
-   "conflict_strategy": {
-    "anyOf": [
-     {
-      "enum": [
-       "perm",
-       "prohibit",
-       "invalid"
-      ],
-      "type": "string"
-     },
-     {
-      "type": "null"
-     }
-    ],
-    "default": null,
-    "title": "Conflict Strategy"
-   },
    "ir_version": {
-    "const": "1.0",
-    "default": "1.0",
+    "default": "1.2",
+    "enum": [
+     "1.0",
+     "1.1",
+     "1.2"
+    ],
     "title": "Ir Version",
     "type": "string"
    },
@@ -658,12 +648,40 @@
     "title": "Profile",
     "type": "string"
    },
-   "rules": {
-    "items": {
-     "$ref": "#/$defs/RuleIR"
-    },
-    "title": "Rules",
-    "type": "array"
+   "behaviour": {
+    "default": "closed",
+    "enum": [
+     "closed",
+     "open"
+    ],
+    "title": "Behaviour",
+    "type": "string"
+   },
+   "action_closure": {
+    "default": "permissions_only",
+    "enum": [
+     "none",
+     "permissions_only"
+    ],
+    "title": "Action Closure",
+    "type": "string"
+   },
+   "conflict_strategy": {
+    "anyOf": [
+     {
+      "enum": [
+       "perm",
+       "prohibit",
+       "invalid"
+      ],
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Conflict Strategy"
    },
    "uid": {
     "anyOf": [
@@ -676,10 +694,55 @@
     ],
     "default": null,
     "title": "Uid"
+   },
+   "assigner": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Assigner"
+   },
+   "assignee": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Assignee"
+   },
+   "rules": {
+    "items": {
+     "$ref": "#/$defs/RuleIR"
+    },
+    "title": "Rules",
+    "type": "array"
+   },
+   "ambiguities": {
+    "items": {
+     "$ref": "#/$defs/AmbiguityFlag"
+    },
+    "title": "Ambiguities",
+    "type": "array"
+   },
+   "assumptions": {
+    "items": {
+     "$ref": "#/$defs/AssumptionRecord"
+    },
+    "title": "Assumptions",
+    "type": "array"
    }
   },
   "title": "PolicyIR",
   "type": "object"
  },
- "sha256": "436343a3c1be7393c060382f7bf644cc94c8c0686f312a02f8c5ec27289ab452"
+ "sha256": "0fa3744ff285e6a9cc2bedb14b5fb2dc956ad6a3190763036f7cb91c7f722755"
 }

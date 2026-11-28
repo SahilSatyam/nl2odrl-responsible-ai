@@ -23,7 +23,13 @@ def _sha(text: str) -> str:
 
 
 def current() -> dict[str, Any]:
-    pack = extractor.SYSTEM_PROMPT + "\n--\n" + extractor.DECOMPOSE_PROMPT
+    pack = (
+        extractor.SYSTEM_PROMPT
+        + "\n--\n"
+        + extractor.DECOMPOSE_PROMPT
+        + "\n--\n"
+        + extractor.REWRITE_PROMPT
+    )
     schema = json.dumps(ir_json_schema(), sort_keys=True)
     return {
         "model": extractor.DEFAULT_MODEL,

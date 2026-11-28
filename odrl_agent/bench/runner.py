@@ -30,6 +30,11 @@ def load_cases(directory: Path = generate.BENCH_DIR) -> list[dict[str, Any]]:
     return cases
 
 
+def load_semantics_slice() -> list[dict[str, Any]]:
+    """Return the small Phase 2 gold-IR slice (``isPartOf``, ``xone``, ``remedy``)."""
+    return generate.semantics_slice()
+
+
 def run_case(case: dict[str, Any], factory: LlmFactory, model: str | None) -> dict[str, Any]:
     llm = factory()
     route = ModelRoute(model, model) if model else ModelRoute()
@@ -37,8 +42,12 @@ def run_case(case: dict[str, Any], factory: LlmFactory, model: str | None) -> di
     error = None
     try:
         # trusted_parties=[]: a party counts as grounded only if the text names it.
-        draft, _doc = convert(case["nl"], Extractor(llm, route), grounder=Grounder(
-            trusted_parties=[]))
+        draft, _doc = convert(
+            case["nl"],
+            Extractor(llm, route),
+            grounder=Grounder(trusted_parties=[]),
+            emit_normal_form=True,
+        )
     except LlmError as exc:
         error = f"{type(exc).__name__}: {exc}"
         draft = PolicyDraft("failed", None, None, False, [error], [], [])

@@ -49,6 +49,7 @@ UNSAT = [
     [c("percentage", "gt", "100", "decimal")],
     [c("elapsedTime", "gt", "P1Y", "duration"), c("elapsedTime", "lt", "P30D", "duration")],
     [c("purpose", "eq", "research", "string"), c("purpose", "eq", "marketing", "string")],
+    [c("spatial", "isAnyOf", "EU", "string"), c("spatial", "isNoneOf", "EU", "string")],
     [{"kind": "logical", "operator": "and", "constraints": [
         c("count", "gt", "10", "integer"), c("count", "lt", "5", "integer")]}],
     [{"kind": "logical", "operator": "xone", "constraints": [
@@ -69,7 +70,6 @@ SAT = [
     [c("purpose", "eq", "research", "string"), c("purpose", "neq", "marketing", "string")],
     [{"kind": "logical", "operator": "or", "constraints": [
         c("count", "gt", "10", "integer"), c("count", "lt", "5", "integer")]}],
-    [c("spatial", "isAnyOf", "EU", "string"), c("spatial", "isNoneOf", "EU", "string")],
 ]  # fmt: skip
 
 
@@ -107,9 +107,13 @@ def test_same_action_permission_and_prohibition_conflict() -> None:
     assert codes(rule("permission", "read"), rule("prohibition", "read")) == [DEONTIC_CONFLICT]
 
 
-def test_broad_prohibition_against_narrow_permission_conflicts() -> None:
-    found = codes(rule("permission", "distribute"), rule("prohibition", "use"))
-    assert found == [HIERARCHY_CONFLICT]
+def test_broad_prohibition_does_not_conflict_with_narrow_permission_or_duty() -> None:
+    perm = rule("permission", "read", duties=[{"action": "attribute"}])
+    prohib = rule("prohibition", "use", constraints=[c("purpose", "eq", "commercial", "string")])
+    found = codes(perm, prohib)
+    assert found == []
+    assert HIERARCHY_CONFLICT not in found
+    assert OBLIGATION_CONFLICT not in found
 
 
 def test_narrow_prohibition_under_broad_permission_is_an_exception_not_a_conflict() -> None:
@@ -123,9 +127,9 @@ def test_prohibition_without_assignee_applies_to_everyone() -> None:
 
 
 @pytest.mark.parametrize("strategy", ["perm", "prohibit", "invalid"])
-def test_conflict_strategy_resolves_permission_prohibition(strategy: str) -> None:
+def test_conflict_strategy_does_not_suppress_exact_action_conflict(strategy: str) -> None:
     rules = (rule("permission", "read"), rule("prohibition", "read"))
-    assert codes(*rules, conflict_strategy=strategy) == []
+    assert codes(*rules, conflict_strategy=strategy) == [DEONTIC_CONFLICT]
 
 
 def test_disjoint_parties_targets_or_windows_do_not_conflict() -> None:

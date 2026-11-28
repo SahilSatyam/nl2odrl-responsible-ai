@@ -195,6 +195,13 @@ def test_widening_detects_removed_restrictions() -> None:
                                           conflict_strategy="prohibit"))
     assert widening(base, narrower) == []
 
+    remedy_base = PolicyIR.model_validate(ir(
+        rule(action="distribute", modality="prohibition",
+             duties=[{"action": "compensate", "role": "remedy"}]),
+    ))
+    remedy_gone = PolicyIR.model_validate(ir(rule(action="distribute", modality="prohibition")))
+    assert any("removes remedy" in r for r in widening(remedy_base, remedy_gone))
+
 
 def test_ungrounded_prohibition_is_kept() -> None:
     reply = ir(rule(), rule(action="distribute", modality="prohibition", quote="not in text"))
@@ -475,3 +482,20 @@ def test_vague_word_with_real_bound_gets_no_flag() -> None:
     draft, _, calls = run(text, [constrained])
     assert calls == 1 and draft.status == "ready"
     assert draft.ambiguities == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "research-team may read dataset-7 provided they keep it encrypted.",
+        "research-team may read dataset-7 provided they maintain encryption.",
+        "research-team may read dataset-7 as long as it stays encrypted.",
+    ],
+)
+def test_maintenance_cues_flag_ambiguity_and_invent_no_duty(text: str) -> None:
+    reply = ir(rule(action="read", target="dataset-7", assignee="research-team", quote=text))
+    draft, doc, calls = run(text, [reply])
+    assert calls == 1
+    assert draft.status == "needs_review" and not draft.auto_publish
+    assert any("maintenance" in a["description"] for a in draft.ambiguities)
+    assert doc is not None and "duty" not in doc["permission"][0]

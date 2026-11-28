@@ -133,7 +133,7 @@ def test_report_identity_block(cases, offline) -> None:
     [
         ("overpermit", {"false_permission_rate"}),
         ("drop_prohibitions", {"missed_prohibition_rate"}),
-        ("drop_constraints", {"constraint_f1"}),
+        ("drop_constraints", {"constraint_f1", "duty_recorded"}),
     ],
 )
 def test_mutant_models_fail_the_gates(cases, mutant, must_fail) -> None:
@@ -141,6 +141,61 @@ def test_mutant_models_fail_the_gates(cases, mutant, must_fail) -> None:
     m = metrics.compute(results)
     broken = {r["metric"] for r in gates.failed(gates.evaluate(m, live=False))}
     assert must_fail <= broken, (mutant, broken)
+
+
+def test_semantics_slice_passes_oracle_and_fails_set_as_eq_mutant() -> None:
+    slice_cases = runner.load_semantics_slice()
+    assert len(slice_cases) == 3
+
+    good = runner.run_all(slice_cases, lambda: oracle.oracle_llm(slice_cases))
+    m_good = metrics.compute(good)
+    assert m_good["duty_recorded"] == 1.0
+    assert m_good["normal_form_equivalence"] == 1.0
+    assert m_good["behavioral_agreement"] == 1.0
+    assert m_good["constraint_f1"] == 1.0
+    applicable_good = [
+        r for r in gates.evaluate(m_good, live=False) if r["value"] is not None
+    ]
+    assert not gates.failed(applicable_good), applicable_good
+
+    bad = runner.run_all(slice_cases, lambda: oracle.oracle_llm(slice_cases, "set_as_eq"))
+    m_bad = metrics.compute(bad)
+    broken = {r["metric"] for r in gates.failed(gates.evaluate(m_bad, live=False))}
+    assert {"normal_form_equivalence", "behavioral_agreement", "constraint_f1"} <= broken
+
+
+def test_decide_uses_kb_and_action_refinements_and_ignores_duties() -> None:
+    policy = {
+        "policy_type": "Agreement",
+        "assigner": "steward",
+        "assignee": "team-a",
+        "rules": [
+            {
+                "modality": "permission",
+                "action": "print",
+                "target": "ds",
+                "assignee": "team-a",
+                "constraints": [
+                    {"kind": "atomic", "left_operand": "spatial", "operator": "isPartOf",
+                     "right_operand": "Europe", "value_type": "string"},
+                ],
+                "action_refinements": [
+                    {"kind": "atomic", "left_operand": "resolution", "operator": "lteq",
+                     "right_operand": "300", "value_type": "integer"},
+                ],
+                "duties": [{"action": "attribute"}],
+            }
+        ],
+    }
+    ok_req = {"assignee": "team-a", "action": "print", "target": "ds",
+              "context": {"spatial": ["string", "France"], "resolution": ["integer", "150"]}}
+    bad_res = {"assignee": "team-a", "action": "print", "target": "ds",
+               "context": {"spatial": ["string", "France"], "resolution": ["integer", "600"]}}
+    bad_place = {"assignee": "team-a", "action": "print", "target": "ds",
+                 "context": {"spatial": ["string", "bavaria"], "resolution": ["integer", "150"]}}
+    assert evaluator.decide(policy, ok_req) is True
+    assert evaluator.decide(policy, bad_res) is False
+    assert evaluator.decide(policy, bad_place) is False
 
 
 def test_prompt_injection_mutant_is_stopped_for_plain_names(cases) -> None:

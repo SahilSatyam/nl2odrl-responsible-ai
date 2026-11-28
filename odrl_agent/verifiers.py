@@ -46,6 +46,7 @@ ODRL_GATE_IDS = (
     "no_deontic_conflict",
     "grounded_principals",
     "exactly_once_publish",
+    "positions_complete",
 )
 
 __all__ = [
@@ -61,6 +62,7 @@ __all__ = [
     "NoLostUpdate",
     "OdrlShaclValid",
     "OdrlValid",
+    "PositionsComplete",
     "get_verifier",
     "register_odrl_verifiers",
     "register_verifier",
@@ -330,6 +332,40 @@ class ExactlyOncePublish:
         )
 
 
+class PositionsComplete:
+    """Every published policy yields complete UFO-L legal positions (Phase 2.3)."""
+
+    id = "positions_complete"
+
+    def check(self, trace: list[dict[str, Any]], state: dict[str, Any]) -> Verdict:
+        del state
+        from odrl_agent.positions import OPEN_BEHAVIOUR_REASON, report as positions_report
+
+        saves = _committed_saves(trace)
+        if not saves:
+            return Verdict(self.id, True, "nothing published")
+        ir = _draft_ir(trace)
+        if ir is None:
+            return Verdict(self.id, False, "published without a draft IR for position report")
+        if ir.behaviour == "open":
+            return Verdict(self.id, False, OPEN_BEHAVIOUR_REASON)
+        rep = positions_report(ir)
+        summary = rep["summary"]
+        if summary.get("Permission", 0) != summary.get("NoRight", 0):
+            return Verdict(self.id, False, "permission/no-right correlative mismatch")
+        if summary.get("Duty-to-Omit", 0) != summary.get("Right-to-Omission", 0):
+            return Verdict(self.id, False, "prohibition duty-to-omit/right-to-omission mismatch")
+        if summary.get("Power", 0) != summary.get("Subjection", 0):
+            return Verdict(self.id, False, "remedy power/subjection correlative mismatch")
+        if summary.get("Immunity", 0) != summary.get("Disability", 0):
+            return Verdict(self.id, False, "strong permission immunity/disability mismatch")
+        return Verdict(
+            self.id,
+            True,
+            f"{len(rep['positions'])} legal position(s) instantiated cleanly",
+        )
+
+
 def register_odrl_verifiers() -> None:
     """Register the ODRL invariants (idempotent).
 
@@ -346,6 +382,7 @@ def register_odrl_verifiers() -> None:
     register_verifier(NoDeonticConflict())
     register_verifier(GroundedPrincipals())
     register_verifier(ExactlyOncePublish())
+    register_verifier(PositionsComplete())
 
 
 register_odrl_verifiers()

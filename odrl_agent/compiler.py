@@ -92,8 +92,13 @@ def _duty(duty: DutyIR) -> dict[str, Any]:
         out["target"] = mint_iri(duty.target, ASSET_PREFIX)
     if duty.assignee:
         out["assignee"] = mint_iri(duty.assignee, PARTY_PREFIX)
-    if duty.constraints:
-        out["constraint"] = [_constraint(node) for node in duty.constraints]
+    constraints = [_constraint(node) for node in duty.constraints]
+    if duty.deadline is not None:
+        constraints.append(_constraint(duty.deadline))
+    if constraints:
+        out["constraint"] = constraints
+    if duty.consequences:
+        out["consequence"] = [_duty(child) for child in duty.consequences]
     return out
 
 
@@ -116,7 +121,13 @@ def _rule(rule: RuleIR, index: int, policy: PolicyIR) -> dict[str, Any]:
     if rule.constraints:
         out["constraint"] = [_constraint(node) for node in rule.constraints]
     if rule.duties:
-        out["duty"] = [_duty(duty) for duty in rule.duties]
+        prop_map = {"precondition": "duty", "remedy": "remedy", "consequence": "consequence"}
+        by_role: dict[str, list[dict[str, Any]]] = {}
+        for duty in rule.duties:
+            prop = prop_map.get(duty.role)
+            if prop:
+                by_role.setdefault(prop, []).append(_duty(duty))
+        out.update(by_role)
     return out
 
 
@@ -159,12 +170,37 @@ def compile_doc(ir: PolicyIR) -> dict[str, Any]:
     return doc
 
 
+def _count_duty_roles(duties: list[DutyIR]) -> tuple[int, int, int]:
+    duty_n = remedy_n = conseq_n = 0
+    for d in duties:
+        if d.role == "precondition":
+            duty_n += 1
+        elif d.role == "remedy":
+            remedy_n += 1
+        elif d.role == "consequence":
+            conseq_n += 1
+        sub_d, sub_r, sub_c = _count_duty_roles(d.consequences)
+        duty_n += sub_d
+        remedy_n += sub_r
+        conseq_n += sub_c
+    return duty_n, remedy_n, conseq_n
+
+
 def _verify_graph(ir: PolicyIR, graph: rdflib.Graph) -> None:
     """Fail loudly when JSON-LD processing dropped anything we emitted."""
+    duty_n = remedy_n = conseq_n = 0
+    for r in ir.rules:
+        d, rem, con = _count_duty_roles(r.duties)
+        duty_n += d
+        remedy_n += rem
+        conseq_n += con
     expected = {
         "permission": sum(1 for r in ir.rules if r.modality == "permission"),
         "prohibition": sum(1 for r in ir.rules if r.modality == "prohibition"),
         "obligation": sum(1 for r in ir.rules if r.modality == "obligation"),
+        "duty": duty_n,
+        "remedy": remedy_n,
+        "consequence": conseq_n,
     }
     for name, count in expected.items():
         found = len(list(graph.triples((None, _ODRL[name], None))))

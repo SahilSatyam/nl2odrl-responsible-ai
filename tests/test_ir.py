@@ -77,6 +77,16 @@ def test_valid_ir_round_trips_through_json() -> None:
         (_ir(constraints=[{"kind": "logical", "operator": "or", "constraints": [_atomic()]}]),
          "at least 2"),
         (_ir(modality="prohibition", duties=[{"action": "inform"}]), "only a permission"),
+        (_ir(modality="permission", duties=[{"action": "compensate", "role": "remedy"}]),
+         "role 'precondition'"),
+        (_ir(modality="permission", duties=[{"action": "inform", "role": "consequence"}]),
+         "role 'precondition'"),
+        (_ir(modality="obligation", assignee="team",
+             duties=[{"action": "compensate", "role": "remedy"}]), "role 'consequence'"),
+        (_ir(modality="prohibition", duties=[{
+            "action": "compensate", "role": "remedy",
+            "consequences": [{"action": "inform", "role": "consequence"}]}]),
+         "precondition duty or a policy-level obligation"),
         (_ir(modality="obligation", assignee=None), "obligation needs an assignee"),
         (_ir(target="   "), "must not be blank"),
         (_ir(unknown_field=1), "Extra inputs"),
@@ -180,6 +190,40 @@ def test_wire_schema_accepts_one_logical_level_ir_accepts_more() -> None:
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(nested, wire_schema())
     jsonschema.validate(nested, wire_schema(2))
+
+
+def test_duty_roles_and_deadline_validate() -> None:
+    remedy_ir = PolicyIR.model_validate({
+        "rules": [
+            {
+                "modality": "prohibition",
+                "action": "distribute",
+                "target": "dataset-7",
+                "duties": [{
+                    "action": "compensate",
+                    "role": "remedy",
+                    "deadline": _atomic("delayPeriod", "lteq", "P14D", "duration"),
+                }],
+            },
+            {
+                "modality": "obligation",
+                "action": "delete",
+                "target": "dataset-7",
+                "assignee": "team",
+                "duties": [{"action": "inform", "role": "consequence"}],
+            },
+        ]
+    })
+    assert remedy_ir.rules[0].duties[0].role == "remedy"
+    assert remedy_ir.rules[0].duties[0].deadline is not None
+    assert remedy_ir.rules[1].duties[0].role == "consequence"
+
+    nested = PolicyIR.model_validate(_ir(duties=[{
+        "action": "attribute",
+        "role": "precondition",
+        "consequences": [{"action": "compensate", "role": "consequence"}],
+    }]))
+    assert nested.rules[0].duties[0].consequences[0].role == "consequence"
 
 
 def test_extractor_sends_the_wire_schema() -> None:
