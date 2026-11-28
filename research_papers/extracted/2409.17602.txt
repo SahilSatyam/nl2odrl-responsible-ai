@@ -1,0 +1,1064 @@
+# SOURCE: 2409.17602.pdf
+# PAGES: 21
+
+
+
+===== PAGE 1 / 21 =====
+
+Open Digital Rights Enforcement Framework (ODRE): from
+descriptive to enforceable policies
+Andrea Cimminoa, Juan Cano-Benitoa, Ra´ul Garc´ıa-Castroa
+a{andreajesus.cimmino,juan.cano,r.garcia}@upm.es Ontology Engineering Group, Universidad
+Polit´ecnica de Madrid, Madrid, Spain
+Abstract
+From centralised platforms to decentralised ecosystems, like Data Spaces, sharing data
+has become a paramount challenge. For this reason, the definition of data usage policies
+has become crucial in these domains, highlighting the necessity of effective policy en-
+forcement mechanisms. The Open Digital Rights Language (ODRL) is a W3C standard
+ontology designed to describe data usage policies, however, it lacks built-in enforcement
+capabilities, limiting its practical application. This paper introduces the Open Digital
+Rights Enforcement (ODRE) framework, whose goal is to provide ODRL with enforce-
+ment capabilities. The ODRE framework proposes a novel approach to express ODRL
+policies that integrates the descriptive ontology terms of ODRL with other languages that
+allow behaviour specification, such as dynamic data handling or function evaluation. The
+framework includes an enforcement algorithm for ODRL policies and two open-source
+implementations in Python and Java. The ODRE framework is also designed to support
+future extensions of ODRL to specific domain scenarios. In addition, current limitations
+of ODRE, ODRL, and current challenges are reported. Finally, to demonstrate the en-
+forcement capabilities of the implementations, their performance, and their extensibility
+features, several experiments have been carried out with positive results.
+Keywords:
+Open Digital Rights Language, Privacy Policies, ODRL Enforcement
+1. Introduction
+In recent decades, proposals for sharing and consuming data from a set of wide-
+ranging domains among different actors have evolved; from large centralised data plat-
+forms to decentralised ones [1].
+Many of these proposals follow a policy-based ap-
+proach [2]; such as European Data Spaces [3]. On the one hand, they rely on a vocabulary
+that is used to unequivocally specify conditions and terms set by the data owner under
+which such data can be used by a third party, and, on the other hand, they rely on
+a software mechanism that must verify whether these conditions are met, that is, an
+enforcement procedure implementation. Some of these proposals are standards, such as
+XACML [4] or ODRL [5]. However, not all of them provide enforcement, and some are
+only tailored to describe usage policies without the enforcement capabilities, like ODRL.
+The Open Digital Rights Language (ODRL) is a W3C standard ontology that pro-
+vides the vocabulary to describe policies in decentralised ecosystems, such as the Web,
+promoting data sovereignty.
+The ODRL vocabulary is widespread in numerous data
+Preprint submitted to Computers & Security
+September 27, 2024
+arXiv:2409.17602v1  [cs.CR]  26 Sep 2024
+
+
+===== PAGE 2 / 21 =====
+
+sharing contexts as a mechanism to describe data licences [6], for example, extending
+ODRL to support GDPR privacy policies [7]; which entails specifying certain abstract
+conditions to reuse data that cannot be enforced computationally. However, this stan-
+dard goes beyond and allows describing more fine-grained enforceable conditions to use
+data (for example, data can be accessed only during the night), and actions are allowed
+to be performed on such data if conditions are met [8]. Due to this reason, this standard
+is a candidate in many data-centric initiatives, such as European Data Spaces [9].
+However, the ODRL standard has only promoted a vocabulary to define its policies,
+but it lacks an enforcement specification.
+Therefore, policies cannot be evaluated to
+allow or deny data usage or invoke actions that must be taken if the constraints of these
+policies are met whether a third party actor requests the usage of a data resource [10].
+Due to this reason, from the practical point of view, ODRL cannot be used to ensure
+the usage of data by third parties in the terms described by a data owner or to take the
+actions set by them [11].
+In addition, as ODRL policies are now endowed with this standard, they lack privacy
+in certain scenarios since they require stone-written conditions in its policies leading to
+privacy leak information, and, also, they lack a dynamic data handling mechanism which
+can also lead to privacy leaks. For instance, a policy based on geofencing that allows
+reading certain data to an actor if he/she is inside a place would show explicitly the
+geometry of such place (privacy leak) and will have no mechanism to handle the ever-
+changing GPS position of the actor (dynamic data) and, therefore, the GPS data will
+need to be continuously written also explicitly in the policy (privacy leak).
+In this article, the Open Digital Rights Enforcement (ODRE) framework is presented;
+which aims to extend the ODRL standard encompassing its ontology with enforcing
+features so policies described the ODRL vocabulary can be enforced. First, the article
+presents a novel approach on how these policies should be written so that they are not
+only descriptive, but also enforceable.
+This approach finds its roots in the way that
+behaviour and representation are addressed by the different types of grammar depending
+on the Chomsky classification [12] and how Model (behaviour) and View (representation)
+are separated in the template engines [13]. The bottom line idea is to consider that
+ODRL policies are written with a descriptive language, and rely on adding one or more
+abstract languages to allow express behaviour, such as dynamic data values injection
+(data interpolation) or functions evaluation. To this end, a comprehensive analysis of the
+different types of policies that can be written and using different languages is presented,
+as well as some implementation languages that could be used.
+Following this approach, the article then presents an implementation-agnostic algo-
+rithm, or procedure, that aligns with the ODRL standard vocabulary to enforce ODRL
+policies. This algorithm checks that the data usage restrictions described in the policies
+are met and then, if necessary, invokes related actions described in such policies. In addi-
+tion, the algorithm is tailored with a mechanism for handling dynamic data (preventing
+privacy leaks) and counts with the necessary extension points to adapt ODRL policies
+to domain-specific scenarios. As part of the framework, a small extension of the ODRL
+has been developed and published 1 to showcase the extensibility feature of the enforcing
+algorithm.
+1https://w3id.org/def/odre-time
+2
+
+
+===== PAGE 3 / 21 =====
+
+For instance, the aforementioned geofencing policy requires firstly to extend the
+ODRL vocabulary to express the actor GPS position as a point and, also, to express
+the place as a geometry. Secondly, it requires a new functionality for the enforcement
+that is able to check whether the point is within the geometry. Finally, the policy must
+be written in a way that does not reveal the geometry or the GPS point, but it can be
+enforced with these values. Note that the enforcing algorithm and the ODRL vocabulary,
+or any extension, must be coupled.
+Finally, to prove the implementation-agnostic nature of the algorithm, the article
+reports two implementations published as open source; one based on Python2 and the
+other on Java 3. These implementations have been tested with the same 24 unit tests
+each, and the time they required to enforce 24 different policies is reported. These tests
+and their related policies check different features of the implementations, such as their
+extensibility or implementation of the ODRL vocabulary.
+The rest of this article is structured as follows. Section 2 introduces the ODRE frame-
+work approach to express ODRL policies so that they can become enforceable; Section 3
+presents the ODRE framework algorithm to enforce policies with a running example
+and reports limitations of ODRE, ODRL and future challenges; Section 4 presents two
+implementations of the ODRE enforce algorithm along with some experimental results;
+Section 5 presents a survey of related proposals from the literature; finally, Section 6
+presents a discussion about ODRL and its usage in practical scenarios and the conclu-
+sions of the article.
+2. Classification of ODRL enforceable policies
+ODRL is an ontology that provides the vocabulary to describe or express usage
+policies following the model depicted in Figure 1. From now on, the prefix odrl: for
+the ODRL ontology namespace4 is assumed. These policies may have a set of rules;
+which may denote permission, duty, or prohibition.
+Regardless of their type, rules
+consist of an action and a set of constraints that encode the conditions under which
+the action must be performed. The constraints have three main descriptive elements:
+an operator, a left operand, and a right operand. The operands must be either con-
+cepts defined in the ontology that represent a certain information that is not explic-
+itly written in the policy (for example, odrl:dateTime5 represents the current date
+with time), or data constants that have a value and a xsd datatype6 (for example,
+{“@value”:“2018−01−01”, “@type”:“xsd:dateTime”}). Operators are always concepts
+defined in the ontology and represent predicates, i.e., functions that always output a
+Boolean result.
+In order to enforce an ODRL policy, first its operands, which are ontology concepts,
+must be replaced in the policy by a data constant with the information they stand for.
+In the case of odrl:dateTime, a constant representing the actual date and time; which
+will look similar to the one shown above. Then, the operator must be computed taking
+2https://pypi.org/project/pyodre/
+3https://github.com/ODRE-Framework/odre-java
+4http://www.w3.org/ns/odrl/2/
+5https://www.w3.org/TR/odrl-vocab/#term-dateTime
+6https://www.w3.org/TR/xmlschema11-2/
+3
+
+
+===== PAGE 4 / 21 =====
+
+Figure 1: ODRL vocabulary, extracted from [5]
+the left and right operands as input. In the event the operator provides a positive result
+(true), the action of the policy must be taken; this may involve running some code,
+like for the operator, or notifying a third party (either a person or a software) who will
+perform such action.
+Note that ODRL policies are expressed in the W3C standard format RDF [14] which
+allows expressing concepts as triplets without any functionality or behaviour, and the
+ODRL ontology only narrows down the terms that a policy expressed in RDF can contain.
+As a result, it is necessary to wrap or transform the descriptive terms of the ODRL
+ontology into another language that can be interpreted and, therefore, that can replace
+operands for respective constants, evaluate operators, or run actions. In order to achieve
+this goal, the authors classify the ODRL policies into the following types depending on
+the ancillary language used.
+The policies expressed in RDF with the ODRL ontology will be classified as ∅−Level
+and the language used to write them as descriptive language (in this case RDF with the
+terms from the ODRL ontology), and those expressed with an interpreted language clas-
+sified as A−Level. The result of interpreting an A−Level policy is a Usage Decision;
+that specifies a set of actions that should be performed either as part of the enforce-
+ment procedure or by notifying a third party who must perform them. These actions are
+present in the Usage Decision if their related constraints were enforced positively (true).
+Note that ∅−Level and A−Level policies must show no differences in terms of lexi-
+4
+
+
+===== PAGE 5 / 21 =====
+
+con, they both contain terms from the ODRL ontology, i.e., the descriptive language, as
+shown by Listing 1. However, the interpreted language couples certain terms (highlighted
+in Listing 1) from the descriptive language (i.e., ontology terms) with certain function-
+alities and, therefore, is able to interpret them and produce an enforcement result, i.e.,
+Usage Decision.
+It is worth to mention that the terms that the interpreted language
+recognises must exist in the descriptive language, that is, the ontology.
+{"@context": "...",
+"@type": "Policy",
+"uid": "https://upm.es/policy/1",
+"permission": [{
+"target": "https://jsonplaceholder.typicode.com/users/1",
+"action": "read",
+"constraint": [{
+"leftOperand": "dateTime",
+"operator": "gt",
+"rightOperand": { "@value": "2018-01-01T00:40:30", "@type": "xsd:
+dateTime" }
+},{
+"leftOperand": "media",
+"operator": "eq",
+"rightOperand": { "@value": "online", "@type": "xsd:string" }
+}]
+}]}
+Listing 1: A sample, ∅−Level or A−Level, policy that grants usage if datetime and
+media are greater or equals, respectively, to a certain value
+Under certain circumstances, policies may need to contain certain terms that do not
+belong to the ODRL ontology and, instead, refer to data variables whose values shall
+be given by whoever is enforcing the policy; e.g., a third party an actor. These poli-
+cies, classified as B1−Level, require an additional level of expressiveness provided by an
+additional language that wraps the A−Level policies, that is, the interpolated language.
+This language only allows to use terms that refer to data variables.
+Note that B1−Level policies, and following levels, introduce differences in terms of
+lexicon since they need to express terms outside the ODRL ontology and, therefore,
+these policies are written mixing RDF with the interpolated language. An example of
+a B1−Level policy is shown by Listing 2. The interpolated language used in the policy,
+which is highlighted, is Freemarker7.
+{"@context": "...",
+"@type": "Policy",
+"uid": "https://upm.es/policy/1",
+"permission": [{
+7https://freemarker.apache.org/docs/dgui_misc_alternativesyntax.html
+5
+
+
+===== PAGE 6 / 21 =====
+
+"target": "https://jsonplaceholder.typicode.com/users/1",
+"action": "read",
+"constraint": [{
+"leftOperand": { "@value": "[=requestToken]", "@type": "xsd:string"
+},
+"operator": "eq",
+"rightOperand": { "@value": "eyJhbGciO...", "@type": "xsd:string" }
+}]
+}]
+}
+Listing 2: A sample B1−Level policy that grants usage if data variable (requester-
+Token) is equals to a certain value
+Most of the time, the interpolated language counts with more expressiveness than
+just terms to refer to data variables; providing additional ones for data flow control, it-
+erative statements, or custom procedures that are defined relying only on this language;
+in this case, the policy is classified as B2−Level and the language is known as templated
+language, which is a richer or enhanced interpolated language.
+Listing 3 shows a B2−Level policy expressed with an extended version of the templated
+language from Listing 2. Note that this policy contains several procedures concatenated
+after the procedure called now, which returns current time, and an variable creation using
+assign. Note that, in this language, control terms are preceded by the token [# whereas
+data variables are preceded by the token [=.
+{"@context": "...",
+"@type": "Policy",
+"uid": "https://upm.es/policy/1",
+"permission": [{
+"target": "https://jsonplaceholder.typicode.com/users/1",
+"action": "read",
+"constraint": [{
+[#assign timeVar=.now?time?iso("Europe/Rome")?replace(’\\+.*’,’’, ’r’)]
+"leftOperand":
+{ "@value": "[=timeVar]", "@type": "xsd:time" },
+"operator": "gt",
+"rightOperand": { "@value": "08:00:00", "@type": "xsd:time" }
+}]
+}]}
+Listing 3: A sample C-Level policy that grants usage if the current time is greater
+than 08:00 AM
+Finally, policies may be wrapped into a higher abstract language that is able to code
+complex behaviour, these are known as C−Level policies. This complex behaviour can
+be written using a coded language and passed as a term of the templated language or the
+coded language can literally wrap the policy; which will be a data variable in the coded
+6
+
+
+===== PAGE 7 / 21 =====
+
+language. In the former case, no new languages besides the templated language will ap-
+pear explicitly written in the policy. In the latter case, no reference to this complex
+behaviour will appear in the policy. It is recommended to avoid this last case since it
+may evolve in adding usage restrictions (i.e., constraints) in the code without appearing
+in the policy and, therefore, not using the ODRL ontology to express them. Conditions
+as constraints for the usage of a certain resource must always be expressed with the terms
+from the ODRL ontology.
+Listing 4 shows a sample C−Level policy that relies on the complex function request
+(highlighted in blue) that performs a GET request to a remote API. This function is
+not implemented, and is not possible to be implemented, with a templated language as
+procedure. Instead it has to be written using a coded language, such as Python or Java,
+and passed as term to the templated language. After getting the data from the API, the
+policy filters its results and injects a fragment of data as a left operand of the policy.
+[#-- Data access --]
+[#assign weather=request("GET", https://api.open-meteo.com/v1/forecast?
+latitude=40.4050099&longitude=-3.839519&hourly=temperature_2m)]
+[#-- Data handling --]
+[#assign tmp="ERROR"]
+[#list weather.hourly.time as elem]
+[#if elem?contains("T"+currentTime) || elem?contains("T0"+currentTime)]
+[#assign tmp=weather.hourly.temperature_2m[elem?index]]
+[#break]
+[/#if]
+[/#list]
+{"@context": "...",
+"@type": "Set",
+"@type": "Policy",
+"uid": "https://upm.es/policy/1",
+"permission": [{
+"target": "https://jsonplaceholder.typicode.com/users/1",
+"action": "read",
+"constraint": [{
+"leftOperand":
+{ "@value": "[=tmp]", "@type": "xsd:float"},
+"operator": "gt",
+"rightOperand":
+{ "@value": "35", "@type": "xsd:float" }
+} ]
+}]}
+Listing 4: A sample C−Level policy that grants usage if temperature from external
+API is above 35º
+Figure 2 shows the hierarchy between these languages and possible choices to imple-
+ment them. Note that the enforcement occurs with the interpreted language, which is
+the only one that cannot be omitted. Instead, the rest of the language layers on top of it,
+7
+
+
+===== PAGE 8 / 21 =====
+
+which are optional, are used to handle input dynamic data (interpolated and templated
+languages) or to handle events outside the policy and use their data (coded languages).
+In fact, when a C−Policy is enforced, it must produce a B2−Level or B1−Level pol-
+icy. Similarly, when B2−Level is enforced, a B1−Level policy is produced, and when
+B1−Level is enforced a A−Level policy. The only policies which result after the en-
+forcement is a Usage Decision are the A−Level policies.
+C-Level
+(Coded)
+B2-Level
+(Templated)
+B1-Level
+(Interpolated)
+A-Level
+(Interpreted)
+ø-Level
+(Descriptive)
+RDF and ODRL
+Jinja, Freemarker,...
+Enforcement 
+output
+Enforcement 
+languages
+Enforcement 
+languages types
+Python, or Java, or
+others with Jinja,
+Freemarker, ...
+Enforcement 
+extension points
+SPARQL, Python, ...
+Usage 
+Decision
+B2-Level
+B1-Level
+A-Level
+Interpretation 
+of terms with
+ new functions
+New template 
+procedures
+New template 
+functions 
+from code
+New ontology
+ terms
+Figure 2: ODRL enforcement hierarchy, languages, and extension points
+On the other hand, Figure 2 shows several languages that can be used to implement
+these language layers. Note that although A−Level policies do not introduce new terms
+outside the ODRL ontology lexicon, when they need to be enforced, its interpretable
+terms (operands, operators, and actions) must be extracted and expressed with the in-
+terpreted language so that they can be evaluated and produce a result. In order to extract
+these terms, a JSON Path or a SPARQL query can be used. As interpreted language
+many choices exists, for instance the SPARQL query language [15] or even Python, as
+long as they implement functions and these can be coupled with the terms that appear
+in the policies. The next section delve into the details of the necessary algorithm to en-
+force these policies regardless of the implementation language, and two implementations
+are reported and tested. One relying on SPARQL as interpreted language, Freemarker as
+templated language and Java as coded language. The other relies on Python as interpreted
+language, Jinja as templated language and Python as coded language.
+Note that the approach described in this section also provides different extension
+points, as shown in Figure 2. This feature is paramount since ODRL is general purpose-
+based, and specific domains will need to extend the ODRL policies to adapt to new
+usage conditions.
+To this end, first the descriptive language must be extended, that
+is, the ODRL ontology, by adding new terms following the good and well-established
+ontological practices for it [16]. Then, it is necessary to implement new functions in the
+interpreted language and couple them to the new terms created in the ontology. These
+two extension points allow practitioners to adapt ODRL to new domains.
+The templated language can be extended with new procedures, which are functions
+8
+
+
+===== PAGE 9 / 21 =====
+
+defined with the same templated language. These are helpful for encoding repetitive and
+complex data handling processes into a single procedure that can be called several times;
+note that such procedures are defined within the policy. Finally, the coded language can
+extend the functions that the templated language can use. However, practitioners must
+be careful using the templated language and coded language as well as their extensions,
+as they can define usage restrictions using these languages instead of relying on ODRL
+ontology terms. The usage conditions must always be express uniquely with terms from
+the ODRL ontology, or extensions of it, and always handled with the interpreted language.
+The interpolated, templated, and coded languages are only meant, and must only be used,
+to handle dynamic data or hide stone-written data values to avoid leakage of private
+information.
+3. Enforcement Algorithm
+This section presents the ODRE framework algorithm endowed for enforcing ODRL
+policies expressed the approach explained in the previous section. However, before delve
+into the details, several concepts used by the algorithm must be defined.
+Policy. Pi is defined as a policy written with the terms from the ODRL ontology
+(or any ontological extension of it) and which level is denoted by i that takes as value
+the letter of the level it represents, for instance, an A−Level policy is denoted as PA. In
+the case the policy level is unknown, or does not matter (it could be either A, B1, B2,
+or C), the policy is denoted as P∗.
+Policy reduction. Reducing a policy is the process of enforcing any policy which
+level is above A−Level (B1, B2, or C levels) and producing as output an A−Level policy.
+To this end, the procedure reduce is defined, which receives as input a policy P∗, a set
+M that contains data variables and their values, and a set F that contains function vari-
+ables and their implementations with a coded language. Both sets can be empty in the
+case no dynamic data is handled or no functions are implemented with the coded language.
+Policy filtering. Three filtering operations are needed to enforce a given policy. To
+this end, the procedures rules, constrais, and action are defined. The first, rules, takes
+as argument an A−Level policy and returns a set Rid containing all the ids of every
+rule written in the policy; each of one denoted as rid. The second, constrais, takes as
+argument an A−Level policy and the id of a rule it contains (rid); produces as result a
+set CR containing tuples of the form (o, oL, oR) where o is an operator, oL and oR are its
+left and right operand respectively. The third, action, takes as argument an A−Level
+policy and the id of a rule it contains (rid); provides as result the action associated to
+that rule denoted by a.
+Policy transformation. In order to enforce the constrains of a policy these have
+to be expressed into an interpreted language. To this end, the transformConstraints
+procedure is defined; which takes as argument the set CR that contains tuples of the
+form (o, oL, oR) being o an operator, and being oL and oR its left and right operand
+respectively. As a result, transformConstraints produces a policy expressed using an
+interpreted language denoted by PI.
+9
+
+
+===== PAGE 10 / 21 =====
+
+In order to enforce actions, these must be translated into an interpreted language as
+long as such language supports that action, i.e., it knows how to interpret it. To this end,
+the supported procedure is defined; which takes as argument an action a and returns a
+Boolean value indicating whether such action is supported by the interpreted language.
+Also, the procedure transformAction is defined that takes as input the action a and
+returns such action expressed with the interpreted language, AI so it can be evaluated.
+Policy Evaluation. A policy expressed using an interpreted language, denoted by
+PI, can be evaluated producing a Boolean value as a result. The procedure evaluate is
+defined so that it receives as argument a policy PI written with the interpreted language,
+and outputs a value d that can be true or false.
+Perform Action. An action expressed using an interpreted language, denoted by AI,
+can be evaluated (a.k.a performed) producing a result. Note that only actions coupled
+with procedures in the interpreted language can be evaluated. The procedure perform
+is defined so that it receives as argument an action AI written with the interpreted lan-
+guage, and outputs any value as a result of performing such action denoted by V. Note
+that the result may be an empty value.
+Usage Decision. After an A−Level policy is enforced, a Usage Decision is pro-
+vided. This concept, denoted by D, is a set of tuples filled during the evaluation of the
+different constraints written in the policy and denoted by CR. The tuples of the Usage
+Decision D have as the first element the action a, the value of the second element may
+differ depending on one of the following scenarios. If the action a is not supported by the
+interpretedlanguage, i.e., supports(a) is false, the second element of the tuple is filled
+with the same action a so a third party is informed about the fact that the action is
+not performed by the algorithm. When the action a is coupled with a procedure in the
+interpretedlanguage, i.e., supports(a) is true, then the tuple contains as second argu-
+ment the result of performing such action.
+Taking the previously defined concepts as granted, Algorithm 1 presents the ODRE
+framework enforcement algorithm. The algorithm takes as input a policy P∗, a set of data
+variables and their values (M), and a set of function variables and their implementations
+(F). As a result, the algorithm produces a Usage Decision set (D).
+The algorithm first reduces the input policy P∗to an A−Level policy (line 2). To
+this end, it relies on the reduce procedure which, on the one hand, replaces the data and
+function variables written in the policy with either the interpolated or templated language
+with their values encoded in the sets M or F, respectively. On the other hand, reduce
+enforces the policy that, as a result, obtains a A−Level one. Note that if the input is
+already a A−Level policy, reduce has no effect since it only works on the interpolated or
+templated languages.
+Then, the algorithm extracts and iterates over the rules ids (Rid) written in the
+reduced policy PA (lines 3-4). For each rule (rid) the algorithm fills the set of usage
+decisions D (lines 4-16). To this end, first, it extracts the constraints written in the
+policy that are associated with each of the specific rules extracted based on their id (rid)
+(line 5).
+The algorithm then translates these constraints into a policy written in an
+interpreted language and evaluates it (lines 6-7). In the event that the evaluation returns
+10
+
+
+===== PAGE 11 / 21 =====
+
+Algorithm 1: ODRE Enforcement algorithm
+Data: P∗, M, F
+Result: D
+1 D ←∅;
+2 PA ←reduce(P∗, M, F);
+3 Rid ←rules(PA);
+4 for rid ∈Rid do
+5
+CR ←constraints(PA, rid);
+6
+PI ←transformConstraints(CR);
+7
+d ←evaluate(PI);
+8
+if d then
+9
+a ←action(PA, rid);
+10
+if supported(a) then
+11
+AI ←transformAction(a);
+12
+V ←perform(AI);
+13
+D ←D ∪{(a, V )};
+14
+end
+15
+else
+16
+D ←D ∪{(a, a)};
+17
+end
+18
+end
+19 end
+a value d that is true, the algorithm extracts the action associated with it; otherwise it
+outputs an empty Usage Decision D (lines 8).
+In the case where d is true and once the action a is extracted, the algorithm checks if
+this action is supported by the interpreted language by means of the supported procedure
+(line 10). If the action is eligible for enforcement, it is translated and expressed in the
+interpreted language by means of the procedure transformAction and then enforced
+with the procedure perform. The result of performing the action V is included in the
+Usage Decision as the tuple (a, V ) (lines 11-13). On the contraty, if the action is not
+eligible for enforcement, the Usage Decision as the tuple (a, a) (line 16), so a third party
+is informed that the action was not performed by the algorithm either because it cannot
+be performed as a specific action because it is too abstract or because the third party is
+responsible for performing it.
+3.1. Running Sample
+In order to provide a running sample using Algorithm 1, let us assume two imple-
+mentations that use Python and SPARQL as interpreted language, respectively, and
+Freemarker as templated language. Table 1 shows a glance of how Algorithm 1 would en-
+force the policies of Listing 1, Listing 2, Listing 3, and Listing 4. For this running sample,
+it is also assumed as input of Algorithm 1 the values {“requestToken” : “eyJhbGciO...”}
+for the set M and the set F containing the function request implemented with a Java
+method (since Listing 4 is expressed with Freemarker that supports Java-coded functions
+as coded language).
+11
+
+
+===== PAGE 12 / 21 =====
+
+Table 1 presents three columns.
+The first, common to both implementations, is
+named CR : reduced constraints and displays the result running the filtering procedure
+constraints for each policy; i.e., the line 5 from Algorithm 1. It is important to mention
+that before running the constraints procedure the algorithm has also run procedures
+reduce and rules. The result of the constraints procedure is the tuple (o, oL, oR) where
+o is an operator, oL and oR are its left and right operands, respectively. It is worth
+mentioning that the left operand of Listing 2 had its [= requestToken] Freemarker
+variable replaced by the value from M under the same name, the left operand of Listing 3
+had its [= timeV ar] Freemarker variable replaced with the current time injected by the
+Freemarker engine, and, finally, Listing 4 had its [= tmp] variable replaced with the value
+provided by the API which was retrieved with the request function implemented with
+Java and passed through the set F to the Algorithm 1.
+Table 1: An enforcement running sample using Python and SPARQL as interpreted languages
+Policy
+CR: reduced constraints
+PI : Python Interpreted Policy
+PI : SPARQL Interpreted Policy
+Policy in
+Listing 1
+{(odrl:gt, odrl:dateTime,
+“2018-01-01T00:40:30”ˆˆxsd:dateTime ),
+(odrl:eq, odrl:media,
+“online”ˆˆxsd:string ) }
+odrl gt(odrl datetime(), cast dateTime(“2018-01-01T00:40:30”))
+and odrl eq(odrl media(), cast string(“online”))
+SELECT ?ruleId { BIND (
+fnc:now() >xsd:dateTime(“2018-01-01T00:40:30”) AND
+fnc:media() == xsd:string(“online”)
+AS ?ruleId) }
+Policy in
+Listing 2
+{ (eq, “eyJhbGciO...”ˆˆxsd:string,
+“eyJhbGciO...”ˆˆxsd:string)}
+odrl eq(cast string(“eyJhbGciO...”),
+cast string(“eyJhbGciO...”) }
+SELECT ?ruleId { BIND (
+xsd:string(“eyJhbGciO”) == xsd:string(“eyJhbGciO...”)
+AS ?ruleId) }
+Policy in
+Listing 3
+{ (gt,“13:30”ˆˆxsd:time,
+“08:00:00”ˆˆxsd:time) }
+odrl gt(cast time(“13:30”), cast time(“08:00:00”))
+SELECT ?ruleId { BIND (
+xsd:time(“13:30”) > xsd:time(“08:00:00”)
+AS ?ruleId) }
+Policy in
+Listing 4
+{ (gt,“32”ˆˆxsd:float,
+“35”ˆˆxsd:float) }
+odrl gt(cast float(“32”), cast float(“35”))
+SELECT ?ruleId { BIND (
+xsd:float(“32”) > xsd:float(“35”)
+AS ?ruleId) }
+The second and third columns of Table 1 present the result of running the transform-
+Constraints procedure on line 6 of Algorithm 1 for each policy shown in Listings 1 to 4.
+The result is an equivalent policy PI expressed according to an interpreted language; in
+the case of the second column is Python and in the case of the third column is SPARQL.
+For Python, it can be observed that a possible implementation of the procedures
+transformConstraints and transformAction may rewrite each of the reduced con-
+straints CR as a set of binary functions where the name of the function is the operator
+and as an argument the operands; then these constraints are concatenated with the
+Python Logical Operator and.
+Note that each operand, left or right, is casted into
+a Python type that is equivalent to their xsd type. This step is crucial since certain
+operands act differently depending on the types; e.g., comparing two dates is not the
+same as comparing dates with time.
+For implementing the evaluate procedure, the eval Python function 8 may be used.
+Note that, for enforcing policies from Listings 1 to 4, it is also crucial to have implemented
+in Python the functions that appear in the Python Interpreted Policy column, such as
+odrl datetime or cast datetime. The eval native Python function will try to invoke these
+functions when evaluating the policies from Python Interpreted Policies.
+For SPARQL, it can be observed that a possible implementation of the transform-
+Constraints procedure may wrap each of the reduced constraints CR as a SELECT
+query with one BIND statement; which would concatenate every constraint with the
+AND operator from SPARQL. The same approach can be taken for the implementation
+of transformAction. Note that the constraints are rewritten as custom binary SPARQL
+8https://www.w3schools.com/python/ref_func_eval.asp
+12
+
+
+===== PAGE 13 / 21 =====
+
+functions, which is why their prefix changes to fnc. Also, note that the xsd types are
+preserved for the same casting reasons as mentioned above. For implementing the evalue
+procedure, any SPARQL library can be used insofar as it supports extension of the lan-
+guage with native functions; which is needed to implement non-SPARQL native functions
+fnc:now and fnc:media. Note that SPARQL needs less custom functions, as it already
+supports most of the operations needed. For example, the native operand >, or ==,
+already support dates or numbers as arguments.
+3.2. Discussion: limitations and challenges ahead
+Once the approach on how to express the ODRL policies to enforce them and handle
+dynamic data is presented (Section 2) and Algorithm 1, it is important to analyse and
+highlight several limitations: about the ODRL vocabulary and how it affects Algorithm 1
+and about our proposal. In addition, future challenges are discussed.
+ODRE bad practices: The approach presented in the article presents a drawback
+that may imply having different ODRL policies that may seem different but are the
+same. In addition, these policies would not clearly codify the constraints under which a
+resources can be used. This is due to the fact that certain policies may mix RDF and an
+interpolated or templated language which may also inject some behaviour using a coded
+language. Specifying these constraints without the semantics provided by the ODRL
+ontology is possible but is a bad practice since, on the one hand, looses the goal of using
+an ontology that provides a unequivocally definition of a concept, and, on the other hand,
+makes policies harder to compare, understand by a person, or to write since they will
+enclose a large amount of behaviour with languages different from the descriptive.
+Synchronous vs asynchronous enforcement: the enforcement of a policy may
+happen synchronously; whether someone desires to access a certain resource and then the
+enforcement procedure is invoked. Alternatively, enforcement may occur asynchronously,
+the constraints of a policy are continuously evaluated and when they enforce positively
+their related action is performed. Note that these two methods are not exclusive and,
+instead, there should be policies that must be enforced synchronously and others asyn-
+chronously. To this end, ODRL lacks of the semantics to label this feature in a policy and
+it will be a future challenge to tackle. Also, the Algorithm 1 from the ODRE framework
+has been endowed and tested only to perform synchronous enforcement.
+ODRL abstract definitions: the ODRL vocabulary presents some important limi-
+tations in terms of expressiveness for its operands, operators, and actions. Some of them
+have abstract definition and, therefore, it is almost impossible to implement them or,
+several implementations may drastically differ one from the other depending on the par-
+ticular use case. For instance, the action read can be interpreted as gaining the access
+to a certain API or as if the result of the enforcement is the output of reading such API;
+other interpretations are also possible, as if someone can read in the physically world a
+document. This issue can be handled using ODRE by relying on the interpolated/tem-
+plated language however, this also entails losing certain semantics as already explained
+before. This can be view as a benefit that ODRE offers, but also, as a bad practice.
+The only approach to solve this issue correctly, without losing semantics or incurring
+in bad practices, is to extend the ODRL ontology to such specific use cases, providing
+operands, operators, and actions that are unequivocally described and, therefore, can
+only be implemented and interpreted in a unique way.
+13
+
+
+===== PAGE 14 / 21 =====
+
+ODRL binary predicates: the ODRL ontology defines the constraints as an ele-
+ment that relates to two operands and an operator. In other words, the operators are
+terms designed to consider only two inputs, i.e., the left and right operands. This may
+be a limitation in the case other operators are needed and, these, require more operators
+than two. For instance, a policy that grants usage if two WGS84 coordinates are located
+in a proximity threshold of less than 1 Km. To express such policy it will be necessary
+to define an operator that considers the two coordinates and the threshold of proximity,
+i.e., three input arguments.
+To tackle this issue, it would seem as a good idea to define a new operator that sup-
+ports a third operand; however, how to name this new operand is a challenge itself, since
+the current semantics for operands are left and right. If we scale the input of operators to
+have N-ary predicates, this problem becomes even more complex. In addition, operands
+hold no order for the operator explicitly; which is also a potential problem particularly
+for N-ary predicates. As before, this issue can be addressed using ODRE and relying
+on the interpolated/templated language, however, although it may partially solve this
+problem, it will also entail the bad practice explained in the first place.
+ODRL 0-ary operands and actions: the ODRL standard presents operands as
+constant values or as ontology terms that must be interpreted and replaced during the
+enforcement with a value. Nevertheless, the current representation of these operands
+is limited since they assume that such operands require no input to produce an output
+value. For instance, odrl:dateTime requires no input to provide the current date with
+time. Far from practical scenarios, some operands may require input values to operate
+correctly and this, as it is now endowed the ODRL ontology, can not be specified. For
+instance, odrl:dateTime may require as input the timezone to provide the correct date
+and time. Similar to operands, ODRL standard presents actions as ontology terms that
+must be interpreted. However, these actions may also require some input information
+to be performed. These kind of scenarios are currently out of the scope of ODRL but,
+as it has been adopted in wide spread scenarios like Data Spaces, is a challenge ahead.
+In addition to this, a challenge ahead is to consider having operands that have as input
+nested operands, or actions that take as input some operand. As before, this issue can
+be addressed using ODRE and relying on the interpolated/templated language, however,
+although it may partially solve this problem, it will also entail the bad practice explained
+in the first place.
+ODRL Stone-written conditions: the ODRL ontology relies on terms that are
+defined as left or right operands to specify data that is not specifically written in the policy
+but somehow must be used or considered when enforcing.
+However, the information
+output as result of interpreting these terms is always compared to data conditions, usually
+right operands, that are constant. For instance, the policy from Listing 1 compares the
+dateTime left operand with the constant 2018-01-01. Note that the latter value is stone
+written in the policy and readable if the policy is accessed, leading to a potential privacy
+leak. Although this issue may seem not important, if we have a look at the policy from
+Listing 2 one can soon realise how leaking a token API is a severe security breach.
+In addition, in the ODRL ontology, there is an unclear specification of where the
+data come from. For example, with the dateTime left operand it can be assumed that
+is the date and time of the system that runs the enforcement algorithm. However, the
+policy shown in the Listing 2 clearly needs the input of a person, that is, the token,
+and should rely on a third-party API to check if the token exists instead of having the
+14
+
+
+===== PAGE 15 / 21 =====
+
+stone-written value as the right operand. In other words, policies may require data from
+the system that runs the enforcement algorithm, data from the person trying to access
+a resource, and data coming from a third party entity (service or person). However, this
+issue is not addressed by the ODRL standard or their ontology, which is an important
+challenge. The ODRE approach provides technical support for this problem by relying
+on the interpolated, templated or coded languages. Note that in these cases, the bad
+practice explained in the first place is not happening since no semantic is bypassed with
+terms outside the ontology.
+ODRL Responsibilities: since the ODRL standard has only promoted the ODRL
+ontology and the enforcement is currently out of the scope of this standard, there is
+lack expressiveness about the responsibilities related to a policy. For instance, who must
+perform an action written in the policy? is the enforcement algorithm or an external
+actor?; who is the responsible of checking the constraints of a policy?, a third-party
+actor (that may be an enforcement algorithm), a local enforcement algorithm, or a shared
+task?; which actors are eligible to try to use a resource and thus trigger the enforcement
+algorithm?. Considering the operand odrl : spatial that stands for geospatial named
+area who is the responsible of providing such data? There is an unclear answer to all
+these questions and how these responsibilities should be specified.
+4. Evaluation
+In order to evaluate Algorithm 1 and prove that the ODRE approach is language
+agnostic, which means that different languages can be used as interpreted, interpolated,
+templated, or coded, two implementations are provided: pyodre and odre−java. Both
+implementations are published on GitHub and distributed as open-source under the
+APACHE 2.0 licence. Pyodre9 relies on Python as interpreted language, Jinja2 as inter-
+polated and templated language, and Python as coded language. This implementation is
+also distributed through the pip package installer10. The odre−java11 relies on SPARQL
+as interpreted language, Freemarker as interpolated and templated language, and Java as
+coded language. This implementation is distributed through maven central12.
+Both implementations cover most of the operands from ODRL, namely:
+odrl:lt,
+odrl:lteq, odrl:eq, odrl:neq, odrl:gt, odrl:gteq.
+Also, they implement the left operand
+odrl:dateTime. In addition, to prove the extensibility of our proposal, a small extension
+of the ODRL vocabulary about time has been created. The ontology of this extension is
+available at https://w3id.org/def/odre-time#, let us assume otime as its prefix. The
+ontology extension includes a new operand named otime:time that provides the current
+time, a new operator otime:between that returns true if the current time is between the
+ones specified as the left and right operands. Finally, as another extension, the action
+dummy:read has been provided to test the enforcement of the actions. This action reads
+a dummy API and provides as output its result. Note that this action has no ontology
+related, since it has been created only to show how actions can be enforced but is not
+meant to be used in real scenarios.
+9https://github.com/ODRE-Framework/odre-python
+10https://pypi.org/project/pyodre/
+11https://github.com/ODRE-Framework/odre-java
+12https://central.sonatype.com/artifact/io.github.odre-framework/odre-core
+15
+
+
+===== PAGE 16 / 21 =====
+
+In order to test these implementations, 24 policies have been defined using the fol-
+lowing criterion: 6 policies defined as the left and right operands a constant and each
+one tested one of the operators lt, lteq, eq, neq, gt, gteq; 6 policies defined with the left
+operand odrl:dateTime and each tested one of the previous operators; 6 policies defined
+with the left operand otime:time and each tested one of the previous operators; 1 pol-
+icy defined two constants and tested the otime:between operand; 1 policy defined two
+constants and tested the dummy:read; and, finally, 4 policies used the their templated
+language to inject values or functions (implemented with Python or Java depending on
+the implementation).
+Then, these policies were used to define 24 unit tests in both
+Python13 and Java14 to test their respective implementations.
+0
+0.005
+0.01
+0.015
+0.02
+0.025
+0.03
+test_interpolation_function_left_eq
+test_interpolation_variable_left_eq
+test_extension_action
+test_constant_neq
+test_datetime_eq
+test_extension_operand_gt
+test_interpolation_variable_right_eq
+test_datetime_gt
+test_interpolation_function_right_eq
+test_datetime_lteq
+test_constant_gt
+test_extension_operand_lt
+test_constant_eq
+test_extension_operand_lteq
+test_datetime_gteq
+test_constant_lteq
+test_constant_gteq
+test_extension_operand_eq
+test_extension_operand_neq
+test_datetime_lt
+test_extension_operator
+test_datetime_neq
+test_extension_operand_gteq
+test_constant_lt
+Python Mean (seconds)
+Java Mean (seconds)
+Figure 3: ODRL enforcement duration in seconds for Python and Java implementations
+In addition to running the unit tests successfully, the time it takes to carry out the
+enforcement has been analysed. To this end, each unitary test was run 15 times and the
+seconds they took recorded. The first five measurements were discarded as warm-up,
+13https://github.com/ODRE-Framework/odre-python/tree/main/test
+14https://github.com/ODRE-Framework/odre-java/blob/main/src/test/java/tests/odre
+16
+
+
+===== PAGE 17 / 21 =====
+
+and the rest were averaged and compared between implementations. Figure 3 displays
+these results, showing the results obtained by the Python and Java implementations to
+run the same policy in seconds.
+It can be observed that, in general, both implementations enforce all the policing in
+less than 0.03 seconds. It is worth mentioning that in general, the Java implementation
+behaves better than python with the exception of test extension action, the difference
+observed can be due to the fact that such policy performed a request to an API and
+Java handles this functionality with streams, increasing the running time. For the sake
+of reproducibility, and following the FAIR principles, a frozen version of the implementa-
+tions have been uploaded to the Zenodo repository15, along with two reports about the
+implementations and instructions for each on how reproduce these experiments.
+5. Related Work
+The definition of policies for the usage of data resources has been extensively analysed
+by researchers [17]. However, it is important to differentiate between two types of research
+proposals; those focussing on the description of these policies and related challenges, and
+those focussing on the enforcement of these policies [18]. In addition, another feature to
+take into account when analysing proposals similar to ODRE is the fact that they rely, or
+not, on standards vocabularies to express the policies. In this article, the proposals are
+narrowed down to those that rely on policies expressed with the W3C ODRL standard
+and which scope is the enforcement of ODRL policies, discarding the rest as out of scope.
+The proposals related to enforcement are numerous [11, 19], in order to ease their review,
+the authors have classified them into the following types:
+Theoretical enforcement - these are proposals that promote theoretical ideas to
+perform the enforcement of ODRL policies, or challenges, but without implementations
+to support their claims. The proposal of Munoz-Arcentales et al. [20] presents the need
+for flexible usage control solutions that can be adapted and used in different scenarios,
+but enforcing ODRL is out of the scope. The proposal of Cirillo et al. [21] rely on a subset
+of ODRL and does not tackle how to enforce the ODRL policies, but instead, policies
+expressed with an extended version of ODRL for specific use cases. The proposal of Cirillo
+et al. [21] is not considered to enforce ODRL since it does not support policies expressed
+only with ODRL terms.
+The proposal of Akaichi et al. [3] presents an architecture
+to handle ODRL policies in scenarios that require dynamic constraints (addressing the
+limitation ODRL Stone-written conditions). Their proposal focuses on a specific client-
+server scenario and do not delve in the details of how to express the ODRL policies from
+a generic point of view of the enforcement. In addition, their proposal extends the ODRL
+ontology in such a way that their solution works only with it. Finally, their proposal is
+theoretical and has no implementation related.
+Discussion: some of these proposals [20, 21] do not actually aim to support ODRL
+enforcement but, instead, use a subset of the ODRL for certain limited scenarios not
+promoting a general purpose enforcement solution. Furthermore, these two proposals do
+not provide a generic algorithm for enforcing ODRL. The proposal closer to ODRE is
+the one of Akaichi et al. [3] since they addressed one of the limitations that also ODRE
+15https://zenodo.org/records/13735971
+17
+
+
+===== PAGE 18 / 21 =====
+
+tackles. However their proposal is not generic for the ODRL ontology or any extensions
+of it. In addition, they provide no generic algorithm for enforcing ODRL.
+Practical enforcement - these are proposals available on the Web. ODRL-PAP16
+promotes an enforcement engine in the context of the DOME-Marketplace project17. The
+MOSAICroWN Policy Engine18 is built in the context of the MOSAICrOWN project19.
+Both of the previous proposals are a specific solutions for projects and have their own
+vocabulary based on ODRL, but different from the ODRL standard vocabulary.
+Discussion: Although these proposals perform the enforcement, the policies they
+support is limited and are not ODRL policies expressed with the standard ontology.
+Furthermore, as major drawback these proposals are not related to research papers and
+do not provide any procedure pseudo-code to reproduce their results.
+Traverse enforcing - these are proposals focussing on the enforcement of ODRL
+policies by traversing the policies into another vocabulary to express policies that support
+enforcement [11]. Some proposals focus on aligning ODRL with the XACML standard [4]
+and its architecture [22]. However, although these proposals may benefit from the en-
+forcement of XACML, it is not possible to fully align ODRL with XACML and, therefore,
+this approach can be suitable for certain scenarios but not as a general solution to en-
+force ODRL; which is the goal of our article. Another similar approach was proposed
+by Hosseinzadeh et al. [23]; which consists of translating ODRL policies into MYDATA
+Policy Language20. Another approach was proposed in a position article that opened
+the possibility of enforcing ODRL policies as mappings [24]. These are commonly used
+to translate heterogeneous data sources into RDF [14], i.e., the format of the ODRL
+policies. Again, this proposal is suitable for certain scenarios but has major drawbacks,
+the most important one is that the policies must always be expressed mixing the terms
+from ODRL and the mapping language.
+Discussion: These are the proposals closer to the one presented in this article, how-
+ever, they do not provide a general algorithm to enforce ODRL using the standard vocab-
+ulary, or extensions of it, as presented in Section 2. These proposals rely on translating
+ODRL policies into others expressed with vocabularies that have enforcing capabilities.
+In other words, these proposals rely on translating ∅−Level policies expressed with the
+ODRL ontology into a different, yet somehow equivalent, ∅−Level policy expressed with
+another vocabulary. This approach has to main drawbacks, on the one hand, the ODRL
+vocabulary is not fully equivalent to others (and vice versa) and thus not any ODRL
+policy can be translated, on the other hand, in the case of extending ODRL it will be
+necessary to extend also the vocabulary to which the policies will be translated and their
+enforcement algorithms. As a result, these approaches are suitable for certain scenarios
+but do not provide a genuine enforcement procedure for ODRL and, instead, rely on the
+enforcement of other proposals.
+The approach of using a metalanguage to enforce ODRL policies presented in our
+previous article [24] was the basis to build the ODRE framework. However, the approach
+presented by Cano-Benito et al. [24] only considered the policies B1−Level or above
+16https://github.com/wistefan/odrl-pap
+17https://dome-marketplace.eu
+18https://github.com/mosaicrown/policy-engine
+19https://mosaicrown.eu
+20https://developer.mydata-control.de/language/
+18
+
+
+===== PAGE 19 / 21 =====
+
+policies and did not provide the analysis presented in Section 2. In addition, no algorithm
+was provided.
+To the best of the author’s knowledge, this article is the first presenting a generic
+enforcement procedure with an algorithm for ODRL policies that supports the standard
+and provides several extension mechanisms. In addition, in the articles reviewed in this
+section, the different key points discussed in the section 6 have not been tackled by the
+authors. In conclusion, the ODRE framework presents a novel approach to support the
+ODRL standard and allow ODRL enforcement; which is a feature demanded for this
+standard [11].
+6. Conclusions
+In this article, the ODRE framework has been presented including: a novel approach
+to write and classify ODRL policies enabling their enforcement, a generic enforcement
+algorithm, and two implementations. In addition, an analysis on the current limitations
+of ODRE and ODRL has been presented along with future challenges. Previous propos-
+als have delved into how to enforce ODRL: some exclusively from the theoretical point
+of view, others providing only implementations without research articles, and others
+traversing the enforcement to other initiatives. These latest proposals have mainly relied
+on translating ODRL policies into other vocabularies that already supported enforce-
+ment (such as XACML). However, these proposals fall short when used to enforce any
+ODRL policy, since the expressiveness (operands, operators, actions, and more) present
+in the ODRL ontology does not always exist in that target vocabulary. To the best of
+our knowledge, ODRE is the first proposal that provides a solution to enforce ODRL
+and is flexible enough to support future extensions of ODRL for specific domain chal-
+lenges. In addition, the experiments carried out prove that the implementations perform
+enforcement efficiently for real-world scenarios.
+In the future, the authors will address the limitations of ODRL and try to tackle
+challenges identified; such as defining N-ary operators or operands or addressing how
+to express synchronous and asynchronous enforcement in policies and extend ODRE to
+support the second. In addition, specific extensions will be developed for the time and
+geospatial domains. Regarding ODRE limitations, the authors plan to publish good-
+practices and guidelines documentation to prevent bad practices. Finally, the authors
+will analyse the impact on the enforcement that may produce using ODRL with other
+related vocabularies, preferably standard, such as the Data Privacy Vocabulary21 (DPV)
+to enrich the expressiveness of usage and privacy use cases.
+Acknowledgments
+This work is partially funded by the European Union’s Horizon 2020 Research and In-
+novation Programme through the AURORAL project, Grant Agreement No. 101016854.
+21https://w3c.github.io/dpv/dpv/
+19
+
+
+===== PAGE 20 / 21 =====
+
+References
+[1] F. Kelbert, A. Pretschner, Towards a policy enforcement infrastructure for distributed usage con-
+trol, in: Proceedings of the 17th ACM Symposium on Access Control Models and Technologies,
+SACMAT ’12, Association for Computing Machinery, New York, NY, USA, 2012, p. 119–122.
+doi:10.1145/2295136.2295159.
+URL https://doi.org/10.1145/2295136.2295159
+[2] M. Henze, L. Hermerschmidt, D. Kerpen, R. H¨außling, B. Rumpe, K. Wehrle, User-driven privacy
+enforcement for cloud-based services in the internet of things, in: 2014 International Conference on
+Future Internet of Things and Cloud, 2014, pp. 191–196. doi:10.1109/FiCloud.2014.38.
+[3] I. Akaichi, W. Slabbinck, J. A. Rojas, C. Van Gheluwe, G. Bozzi, P. Colpaert, R. Verborgh, S. Kir-
+rane, Interoperable and continuous usage control enforcement in dataspaces, in: The Second In-
+ternational Workshop on Semantics in Dataspaces, co-located with the Extended Semantic Web
+Conference, 2024.
+[4] O. Standard, extensible access control markup language (xacml) version 3.0, A:(22 January 2013).
+URl: http://docs. oasis-open. org/xacml/3.0/xacml-3.0-core-spec-os-en. html (2013).
+[5] R. I. Monegraph, S. Villata, ODRL Information Model 2.2 (2018).
+[6] V. Rodr´ıguez-Doncel, A. G´omez-P´erez, N. Mihindukulasooriya, Rights declaration in linked data,
+in: Proceedings of the Fourth International Conference on Consuming Linked Data - Volume 1034,
+COLD’13, CEUR-WS.org, Aachen, DEU, 2013, p. 158–169.
+[7] M. De Vos, S. Kirrane, J. Padget, K. Satoh, Odrl policy modelling and compliance checking, in:
+Rules and Reasoning: Third International Joint Conference, RuleML+ RR 2019, Bolzano, Italy,
+September 16–19, 2019, Proceedings 3, Springer, 2019, pp. 36–51.
+[8] S. Steyskal, A. Polleres, Defining expressive access policies for linked data using the odrl ontology
+2.0, in: Proceedings of the 10th International Conference on Semantic Systems, SEM ’14, Associa-
+tion for Computing Machinery, New York, NY, USA, 2014, p. 20–23. doi:10.1145/2660517.2660530.
+URL https://doi.org/10.1145/2660517.2660530
+[9] A. Eitel, C. Jung, R. Brandst¨adter, A. Hosseinzadeh, S. Bader, C. K¨uhnle, P. Birnstill, G. Brost,
+M. Gall, F. Bruckner, et al., Usage control in the international data spaces, Aufl. IDS Association,
+Berlin (2021).
+[10] M. G. Kebede, G. Sileno, T. Van Engers, A critical reflection on odrl, in: V. Rodr´ıguez-Doncel,
+M. Palmirani, M. Araszkiewicz, P. Casanovas, U. Pagallo, G. Sartor (Eds.), AI Approaches to the
+Complexity of Legal Systems XI-XII, Springer International Publishing, Cham, 2021, pp. 48–61.
+[11] I. Akaichi, S. Kirrane, Usage control specification, enforcement, and robustness: A survey (2022).
+arXiv:2203.04800.
+[12] N. Chomsky, Aspects of the Theory of Syntax, no. 11, MIT press, 2014.
+[13] T. J. Parr, Enforcing strict model-view separation in template engines, in: Proceedings of the 13th
+international conference on World Wide Web, 2004, pp. 224–233.
+[14] F. Manola, E. Miller, B. McBride, et al., Rdf primer, W3C recommendation 10 (1-107) (2004) 6.
+[15] S. Harris, A. Seaborne, SPARQL 1.1 Query Language (2013).
+[16] M. C. Su´arez-Figueroa, A. G´omez-P´erez, M. Fernandez-Lopez, The neon methodology framework:
+A scenario-based methodology for ontology development, Applied ontology 10 (2) (2015) 107–145.
+[17] J. M. del ´Alamo, D. S. Guam´an, B. Garc´ıa, A. Diez, A systematic mapping study on automated
+analysis of privacy policies, Computing 104 (9) (2022) 2053–2076. doi:10.1007/s00607-022-01076-3.
+URL https://doi.org/10.1007/s00607-022-01076-3
+[18] J. Leicht, M. Heisel, A survey on privacy policy languages: Expressiveness concerning data pro-
+tection regulations, in: 2019 12th CMI Conference on Cybersecurity and Privacy (CMI), 2019, pp.
+1–6. doi:10.1109/CMI48017.2019.8962144.
+[19] S. Kirrane, S. Villata, M. d’Aquin, Privacy, security and policies: A review of problems and solutions
+with semantic web technologies, Semantic Web 9 (2) (2018) 153–161. doi:10.3233/SW-180289.
+URL https://doi.org/10.3233/SW-180289
+[20] A. Munoz-Arcentales, S. L´opez-Pernas, A. Pozo, A. Alonso, J. Salvach´ua, G. Huecas, Data usage
+and access control in industrial data spaces: Implementation using fiware, Sustainability 12 (9)
+(2020). doi:10.3390/su12093885.
+URL https://www.mdpi.com/2071-1050/12/9/3885
+[21] F. Cirillo, B. Cheng, R. Porcellana, M. Russo, G. Solmaz, H. Sakamoto, S. P. Romano, Intentkeeper:
+Intent-oriented data usage control for federated data analytics, in: 2020 IEEE 45th Conference on
+Local Computer Networks (LCN), 2020, pp. 204–215. doi:10.1109/LCN48667.2020.9314823.
+20
+
+
+===== PAGE 21 / 21 =====
+
+[22] T. Dam, A. Krimbacher, S. Neumaier, Policy patterns for usage control in data spaces (2023).
+arXiv:2309.11289.
+[23] A. Hosseinzadeh, A. Eitel, C. Jung, A systematic approach toward extracting technically enforceable
+policies from data usage control requirements., in: ICISSP, 2020, pp. 397–405.
+[24] J. Cano-Benito, A. Cimmino, R. Garc´ıa-Castro, Injecting data into odrl privacy policies dynami-
+cally with rdf mappings, in: Companion Proceedings of the ACM Web Conference 2023, WWW
+’23 Companion, Association for Computing Machinery, New York, NY, USA, 2023, p. 246–249.
+doi:10.1145/3543873.3587358.
+URL https://doi.org/10.1145/3543873.3587358
+21

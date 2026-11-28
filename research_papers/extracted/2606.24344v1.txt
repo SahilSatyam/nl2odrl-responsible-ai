@@ -1,0 +1,883 @@
+# SOURCE: 2606.24344v1.pdf
+# PAGES: 16
+
+
+
+===== PAGE 1 / 16 =====
+
+D.M. Mustafa et al.
+What Does ODRL Mean? A Cross-Level
+Ontological Grounding of Permissions,
+Prohibitions, and Duties in UFO-L
+Daham M. MUSTAFA a,d,1, Christoph LANGE a,d, Giancarlo GUIZZARDI b,
+Diego COLLARANA a,c, Christoph QUIX a,d and Stefan DECKER a,d
+aFraunhofer FIT, Sankt Augustin, Germany
+bUniversity of Twente, The Netherlands
+cUniversidad Privada Boliviana, Bolivia
+dRWTH Aachen University, Aachen, Germany
+Abstract. ODRL policy evaluators produce verdicts, but say nothing about the nor-
+mative positions a policy brings into existence, the authority structures those posi-
+tions presuppose, or who holds the power to declare a norm violated. We formulate
+the Cross-Level Design Principle: any normative language with violable, conse-
+quential norms requires both conduct-level positions (Permission, Duty, Right, No
+right) and competence-level positions (Power, Subjection, Immunity, Disability).
+Applying this to ODRL, we establish that prohibition is sanctioned (violation pos-
+sible and consequential), that permission is underspecified across its behaviour
+parameter (open vs. closed world), and that the formal semantics covers achieve-
+ment obligations only. We ground ODRL in UFO-L, mapping each activated rule
+to a simple legal relator and extending coverage from two to eight legal positions;
+violation-declaration authority, implicit in every existing evaluator, becomes an ex-
+plicit Power, Subjection pair. All axioms are mechanically verified in Isabelle/HOL
+and across a 39-problem benchmark under Vampire, E, and Z3.
+Keywords. ODRL, UFO-L, Foundational Ontology, Legal Positions, Normative
+Systems, Deontic Logic, Data Spaces
+1. Introduction
+The Open Digital Rights Language (ODRL) [1] is a policy language standardised by
+W3C.2 It has been adopted by the European Data Spaces [2,3,4] as the lingua franca
+for expressing data usage and data access policies over shared assets. ODRL provides
+both an information model and an ontology [1] specifying how policies, rules, and con-
+straints are structured. The Formal Semantics specifies the behaviour of an ODRL Eval-
+uator, a software component that determines, given a set of policies and a state of the
+world, which rules are active, which actions are permitted or prohibited, and which obli-
+gations have been fulfilled or violated [5,6]. The evaluator’s output is a verdict: active,
+violated, fulfilled, or not-set [5].
+1Corresponding
+Author.
+Emails:
+daham.mohammed.mustafa@fit.fraunhofer.de;
+christoph.lange-bever@fit.fraunhofer.de
+2Benchmark available at https://github.com/Daham-Mustaf/odrl-ufol-grounding
+arXiv:2606.24344v1  [cs.LO]  23 Jun 2026
+
+
+===== PAGE 2 / 16 =====
+
+D.M. Mustafa et al. /
+Consider :KulturPortal, an events portal that obtains the same theater show-
+time records for a cultural event from two Data Space providers, the theaters
+:BerlinerEnsemble and :DeutschesTheater, via separate connectors and contracts.
+Each issues an odrl:Agreement prohibiting redistribution of its showtimes, but with a
+different remedy: :BerlinerEnsemble demands compensation, :DeutschesTheater
+demands deletion of the copy.
+:BE-Agreement a odrl:Agreement ;
+odrl:prohibition [
+odrl:assignee :KulturPortal ;
+odrl:assigner :BerlinerEnsemble ;
+odrl:action
+odrl:distribute ;
+odrl:target
+:BE-Showtimes ;
+odrl:remedy [
+# if violated:
+odrl:action
+odrl:compensate ;# pay theater
+odrl:assignee
+:BerlinerEnsemble ] ] .
+:DT-Agreement a odrl:Agreement ;
+odrl:prohibition [
+odrl:assignee :KulturPortal ;
+odrl:assigner :DeutschesTheater ;
+odrl:action
+odrl:distribute ;
+odrl:target
+:DT-Showtimes ;
+odrl:remedy [
+# if violated:
+odrl:action
+odrl:delete ;
+# destroy copy
+odrl:assignee
+:KulturPortal ] ] .
+:KulturPortal distributes both datasets. The ODRL Evaluator reports violated for
+both policies, but cannot determine by whose normative authority either remedy is en-
+forceable: it sees the remedy assignees but has no account of which provider holds the
+Power to declare a violation and demand remedy performance. Neither prohibition car-
+ries a constraint, so both are unconditionally active; since the regulated action was per-
+formed, both reach violated [5]. Each prohibition specifies a remedy, but the Formal
+Semantics defines no evaluation procedure for remedy duties and the Evaluation Re-
+port remains unspecified [5]. The evaluator goes no further: it cannot determine (i) by
+what normative standing either provider may demand remedy performance, or (ii) what
+normative standing grounds either remedy, because the normative positions that would
+license these answers (Figure 1, Row 6), each provider’s Right to Omission and their
+Power to declare a violation, are absent from both policy graphs.
+What normative positions exist when an ODRL policy is in force, and what author-
+ity structures do those positions presuppose? The absence of an answer has four concrete
+manifestations: (P1) the behaviour parameter selects between evaluation regimes that
+create ontologically incompatible normative positions, with no account of which posi-
+tions exist under each setting; (P2) violation-declaration authority is absent from the pol-
+icy graph and silently delegated to implementors, causing incompatible runtime determi-
+nations across deployments; (P3) every prohibition entails a Right to demand omission
+for the assigner, yet neither evaluator nor policy graph represents it, leaving remedy se-
+lection without a normative basis; and (P4) no existing vocabulary enables governance
+frameworks to declare sanctioning authority at policy-authoring time.
+We use UFO-L as a foundational ontology to determine what kinds of things exist
+when a policy is in force, not to give ODRL a formal-semantics denotation. We then
+ground ODRL in UFO-L [7,8] to address these problems: P1 by ontologically character-
+ising both behaviour regimes; P2 and P4 by constituting a Power–Subjection pair at ac-
+tivation; and P3 by surfacing the assigner’s Right to Omission as an entailed correlative,
+extending evaluator coverage from two to eight legal positions.
+
+
+===== PAGE 3 / 16 =====
+
+D.M. Mustafa et al. /
+ODRL rule
+Evaluator sees
+Grounding reveals
+odrl-l: term
+odrl:Permission
+Permission
+Permission
++ No Right
+odrl-l:
+PermissionRelator
+odrl:Prohibition
+Duty to Omit
+Duty to Omit
++ Right to Omission
+odrl-l:
+ProhibitionRelator
+odrl:Duty
+Duty to Act
+Duty to Act
++ Right to Action
+odrl-l:
+ObligationRelator
+odrl:Prohibition
++ odrl:remedy
+Duty to Omit
+(violated?)
+Duty to Omit
++ Right to
+Omission
++ Power
++ Subjection
+odrl-l:
+hasRemedy†
+odrl:Permission
+(strong)
+Permission
+(unprotected?)
+Permission
++ No Right
++ Immunity
++ Disability
+odrl-l:
+stronglyPermitted†
+:pol1 vs :pol2
+distinct IRIs,
+same content
+violated (each)
+(nothing further)
+ρR1(:ProviderA)̸
+= ρR2(:ProviderB)
+Power per assigner
+odrl-l:
+hasRemedy†
+requires odrl-l: →
+Figure 1. From an ODRL rule to its UFO-L grounding and the odrl-l: profile term. Each row reads left
+to right: the ODRL rule, what a native ODRL evaluator computes, the full simple legal relator the grounding
+reveals, and the odrl-l: term needed to represent it (Table 1). Shading: native ODRL; conduct - and
+competence -level positions; dashed outlines mark the odrl-l: profile. Bold marks positions absent from the
+evaluator’s output; (?) marks where the evaluator halts; † marks the two ODRL extension points. A prohibition
+with a remedy (row 4) and a strong permission (row 5) each found a conduct relator and a competence relator
+at one activation event. Row 6 instantiates the motivating scenario of Section 1: distinct remedy relators per
+assigner make violation-declaration authority provider-specific.
+2. Background
+2.1. Open Digital Rights Language ODRL
+An ODRL policy π = ⟨P,F,D⟩consists of three disjoint rule sets: odrl:Permission
+rules P, odrl:Prohibition rules F, and odrl:Duty rules D. Each rule r = ⟨a,x,y,t,C⟩
+specifies an action type a, an assignee x, an assigner y, a target t, and a constraint setC [1].
+The action a is a type of act rather than a token, since granting a normative position over
+a single past token event would be ontologically incoherent: a policy regulates a kind of
+act, not one completed occurrence of it. The target t, by contrast, is a particular resource
+(a token), while the assignee x and assigner y may be either particular agents (tokens, as
+in an odrl:Agreement) or role types (as in an odrl:Offer).
+ODRL defines three odrl:Policy subclasses by the degree to which parties are
+identified [1]. An odrl:Agreement binds two identified particular agents, creating a bi-
+lateral normative bond. An odrl:Offer is binding erga omnes (toward all): the assigner
+
+
+===== PAGE 4 / 16 =====
+
+D.M. Mustafa et al. /
+is identified while the assignee is the community satisfying the offer’s conditions [9]; it
+must not be evaluated by an ODRL Evaluator [5]. An odrl:Set is type-level: it creates
+no binding bond and falls outside the scope of this grounding [1]. odrl:Permission
+allows an action when all constraints are satisfied. odrl:Prohibition disallows
+an action but remains violable: the prohibited action is performable and its perfor-
+mance triggers violated [5]. odrl:Duty obliges an action: fulfilled upon per-
+formance and violated when performance is no longer possible [5]. Duties appear
+in four structural roles: policy-level obligations (odrl:obligation), permission con-
+ditions (odrl:duty), prohibition remedies (odrl:remedy), and failure consequences
+(odrl:consequence) [1]. The remedy and consequence roles form a cascade defined
+in the information model [1]: if the prohibition is infringed, all remedy Duties MUST
+be fulfilled; if a remedy Duty is not fulfilled, its consequence Duties become active. The
+Formal Semantics defines no activation procedure for either [5]. When a Permission and
+Prohibition co-apply, the odrl:conflict property selects a resolution strategy: perm,
+prohibit, or invalid (default) [1]. An ODRL rule prescribes; a legal position exists.
+odrl:Permission, odrl:Prohibition, and odrl:Duty are policy-graph nodes, au-
+thored by a policy writer, evaluated by an ODRL Evaluator. The legal positions these
+rules generate are ontological individuals that inhere in the parties at activation: they are
+not verdicts but normative facts about who may, must, or can do what, and in relation to
+whom.
+The Formal Semantics defines behaviour as an optional evaluator input [5] governing
+how unmentioned actions are treated: under open, silence implies permission; under
+closed (the default), silence implies prohibition. Its ontological significance is that these
+two settings create incompatible normative positions.
+ODRL Profiles [1] extend the vocabulary with new terms (e.g. Rule subclasses) defined
+on top of the Core Vocabulary; a Policy names the Profile(s) it uses via profile.
+2.2. UFO-L: Foundational Ontology of Legal Positions
+UFO-L [7,8] extends the Unified Foundational Ontology [10] with a formal theory of
+legal concepts based on Alexy’s account of legal positions [11]. A moment is an exis-
+tentially dependent particular inhering in exactly one bearer; by the non-migration prin-
+ciple [10, a67] it cannot migrate between bearers. An externally dependent moment in-
+heres in one entity while remaining existentially dependent on a mereologically disjoint
+entity. A relator is a mereological aggregate of externally dependent moments [9]: each
+constituent moment inheres in its own bearer while depending on the counterparty, and
+the relator is their mereological sum, capturing the bilateral normative bond as a single
+ontological individual, founded by a unique event [10, a77]. Mediation is a derived no-
+tion, not a primitive: a relator mediates two entities precisely when it has parts inhering
+in each of them [12, p. 240].
+Legal positions are moments borne by agents, classified as Legal Entitlements (positions
+implying an advantage) or Legal Burdens/Lacks (positions implying a constraint) [9].
+Positions are always paired as correlatives within a simple legal relator bundling exactly
+one such pair [9]: at conduct level (governing what agents may, must, or must not do)
+the four types are Permission–No Right and Right–Duty; at competence level (govern-
+ing the authority to bring normative positions into or out of existence through institu-
+tional acts [11,9]) they are Power–Subjection and Immunity–Disability. Their mapping to
+
+
+===== PAGE 5 / 16 =====
+
+D.M. Mustafa et al. /
+ODRL is shown in Table 1. Disability denies Power, rendering institutional acts void [8].
+Immunity can arise from any source that constitutionally entrenches a position against
+revocation [8]. Legal relators are always brought into existence by a competent agent’s
+Power [8], motivating the cross-level design principle.
+3. Deontic Analysis of ODRL: Permission, Prohibition, and Duty
+Permission, Prohibition, and Duty are the only ODRL constructs that generate norma-
+tive positions between parties; Asset and Party are structural relata, and Constraint an
+activation condition that determines when a rule applies but creates no legal position [1].
+3.1. Permission: Underspecified Between Weak and Strong
+Strong permission persists under policy modification and requires an Immunity blocking
+any subsequent prohibition, a competence-level position [8,11]. In UFO-L terms, Per-
+mission to Act and Duty to Omit are opposites: they cannot be co-borne by the same
+agent over the same action and target. Under behaviour=open, undeclared actions carry
+no positive normative position: the evaluator’s default is a convention, not a granted Per-
+mission. Under behaviour=closed, each declared permission creates a Permission–
+No Right relator. However, the Formal Semantics defines no persistence protection [5]:
+closed-world evaluation is consistent with but not equivalent to strong permission. The
+behaviour parameter therefore selects between ontologically incompatible normative
+positions, a distinction invisible to the evaluator but explicit in the UFO-L account (P1).
+3.2. Prohibition: Provably Sanctioned
+Prohibitions are either regimented, violation structurally impossible or sanctioned, vio-
+lation possible but consequential.
+Proposition 3.1. ODRL prohibition is sanctioned: the prohibited action remains per-
+formable and its performance triggers normative consequences.
+Proof. Assume regimentation. Then [1], ‘if the Prohibition has been infringed by the
+action being exercised, then all remedies MUST be fulfilled”, describes an unreachable
+scenario, rendering odrl:remedy permanently inactivatable. Yet the Recommendation
+defines, exemplifies, and requires implementors to support it [1]. Contradiction. The For-
+mal Semantics confirms independently via an explicit violated state [5]. Since pro-
+hibition is sanctioned and violation triggers a reparative duty, any complete grounding
+requires a competence-level Power–Subjection pair to ground the violation-to-remedy
+transition (P2).
+3.3. Duty: Achievement Semantics Only
+Obligations divide into three types by their satisfier [13,14]: achievement (satisfied by a
+bounded event), maintenance (satisfied by an ongoing state), and process (satisfied by
+a continuous activity). Events cannot be ongoing, since being ongoing is a temporary
+property incompatible with the timeless character of events [14].
+
+
+===== PAGE 6 / 16 =====
+
+D.M. Mustafa et al. /
+Proposition 3.2. The ODRL Formal Semantics covers achievement obligations only;
+maintenance and process obligations lack evaluation semantics.
+Proof sketch. The three-state semantics, fulfilled upon a single performance event,
+violated when performance is no longer possible, not-set otherwise [5], presupposes
+an event-bounded satisfier. Maintenance and process obligations have no such satisfier:
+the evaluator defines no transition for a persisting state or an ongoing activity.
+4. Cross-Level Design Principle
+Any complete ontological grounding of ODRL requires competence-level legal posi-
+tions. All results are conditional on three axioms formalising UFO-L [8]. A1 normative
+state changes require a triggering institutional event; A2 such events require a competent
+agent; A3 competence is a Power–Subjection pair. These axioms hold under both regu-
+lative and constitutive readings of norm activation: even constitutive rules presuppose a
+prior creation event grounded in an agent’s Power [8].
+Definition 4.1 (Level-Complete and Cross-Level). Let N be a normative concept and L a
+level of legal positions (either conduct or competence). A set of legal positions H is an
+adequate characterization of N relative to axiom set A if H entails all normative con-
+sequences of N under any model extension consistent with A . A normative consequence
+of N is a legal position entailed by N; quantifying over model extensions makes ade-
+quacy robust, requiring H to keep entailing those positions as further rules are added,
+not only in one fixed model. N is level-complete at L if it has an adequate characterization
+using only positions from L. N is cross-level if every adequate characterization requires
+positions from both conduct and competence levels.
+Proposition 4.1 (Weak Permission is Conduct-Level-Complete). Relative to A1–
+A3, weak permission for an assignee x to perform an action a on a target t,
+granted by an assigner y, is adequately characterised at the conduct level by
+{Permission(x,a,t),NoRight(y,a,t)} (here x bears a Permission to Act and y the correl-
+ative No Right over a on t): no competence-level positions are required. This establishes
+that the cross-level requirement is non-trivial: only violable and consequential concepts
+require competence-level positions.
+Theorem 4.1 (Strong Permission is Cross-Level). Relative to A1–A3, strong permission
+of x to perform a on t, granted by y, has no adequate characterization using conduct-level
+positions alone.
+Theorem 4.2 (Sanctioned Prohibition is Cross-Level). Relative to A1–A3, sanctioned
+prohibition has no adequate characterization using conduct-level positions alone. A norm
+is violable if the regulated action remains performable despite the norm; it is consequen-
+tial if violation activates a reparative normative position.
+Theorem 4.3 (Violable Norms Require Both Levels). Relative to A1–A3, any norm that
+is (i) violable and (ii) consequential has no adequate characterization using conduct-level
+positions alone.
+
+
+===== PAGE 7 / 16 =====
+
+D.M. Mustafa et al. /
+Principle 1 (Cross-Level Design). Any normative language with violable, consequential
+norms must provide competence-level positions (Power, Subjection, Immunity, Disabil-
+ity) alongside conduct-level ones (Permission, Duty, Right, No right): a conduct-only
+vocabulary cannot ground violation-to-consequence transitions regardless of implemen-
+tation.
+Since ODRL prohibition is sanctioned (Proposition 3.1) and remedies are normative con-
+sequences of violation by definition [1], Theorem 4.3 entails that any complete ground-
+ing of ODRL requires competence-level positions. The Berliner Ensemble prohibition of
+Section 1 is exactly such a norm: its remedy is enforceable only if some party holds the
+Power to declare the violation, a competence-level position that no conduct-only vocab-
+ulary supplies (grounded concretely in Example 5.1).
+5. Formal Grounding of ODRL in UFO-L
+Each activated ODRL rule maps to a simple legal relator (Section 2.2), the minimal
+adequate grounding required by Theorem 4.3: a single rule creates exactly one correlative
+pair of legal positions, and a simple legal relator bundles exactly one such pair [8]. A
+forbearance rfr(a) is the omission of action a: in UFO-L, refraining from performing a
+is a perdurant of kind omission, distinct from act a [7]. Accordingly, a Duty to refrain
+from a is a Duty to Omit a, and its correlative is a Right to Omission of a. We use
+Forbearance to denote the sort of all omissions; Act and Forbearance are disjoint sorts
+with rfr(a) ∈Forbearance for every a ∈Act, and the map rfr is injective. We write decl(a)
+for the institutional act of declaring a violation of a; decl maps Act to Act injectively.
+Throughout, the eight legal positions are written in a three-place form: Permission(x,a,t)
+reads “x bears a Permission to Act over action a on target t”, and likewise for Duty,
+Right, NoRight, Power, Subj, Immunity, and Disability.
+Each active rule becomes a two-party legal relationship: one position for the assignee
+and the matching correlative for the assigner.
+Definition 5.1 (Rules as Simple Legal Relators).
+Permission ρP : Permission(x,a,t)∧NoRight(y,a,t),
+a ∈Act
+Strong permission ρI : Immunity(x,a,t)∧Disability(y,a,t)
+[if strong(p)]
+Prohibition ρF : Duty(x,rfr(a),t)∧Right(y,rfr(a),t),
+rfr(a) ∈Forbearance
+Prohibition remedy ρR : Power(y,decl(a),t)∧Subj(x,decl(a),t)
+[if has rem(f)]
+Duty ρD : Duty(x,a,t)∧Right(y,a,t),
+a ∈Act
+Each rule founds exactly one relator via founds (the conduct relators ρP,ρF,ρD); addi-
+tionally, a prohibition with odrl:remedy founds ρR via founds rem, and a strong per-
+mission founds ρI via founds imm, both at the same activation event. The distinct predi-
+cates keep the two relators separate.
+
+
+===== PAGE 8 / 16 =====
+
+D.M. Mustafa et al. /
+Table 1. ODRL rules, UFO-L relators, and legal positions surfaced at activation [8]. • correlative; ■added by
+grounding; † profile extension (odrl-l:); EE = assignee; ER = assigner.
+ODRL rule
+Relator Position
+Bearer
+Level
+odrl:Perm. (weak)
+ρP
+Permission to Act
+EE
+conduct
+No Right •
+ER
+conduct
+odrl:Perm. (strong†) +ρI
+Immunity ■†
+EE
+competence
+Disability ■†
+ER
+competence
+odrl:Prohibition
+ρF
+Duty to Omit
+EE
+conduct
+Right to Omission •
+ER
+conduct
+odrl:Proh.+remedy† +ρR
+Power ■†
+ER
+competence
+Subjection ■†
+EE
+competence
+odrl:Duty
+ρD
+Duty to Act
+EE
+conduct
+Right to Action •
+ER
+conduct
+Strong perm. founds ρP (weak row) and ρI at same event (Ax5.2). †odrl-l:hasRemedy (Ax5.4); odrl-l:stronglyPermitted (Ax5.2). Im-
+munity not exclusive to strong permission [8]. Founding: ρP,ρF ,ρD via founds; ρI via founds imm; ρR via founds rem.
+5.1. Resolving Underspecifications
+Proposition 5.1 (Open-World Normative Vacuum). Under behaviour=open, for any
+action a not regulated by a rule in π, the position set Pos(π,e) (Definition 5.2) contains
+no Permission, No Right, Duty, or Right over ⟨a,t⟩for any bearer.
+P1: Behaviour parameter.
+Proposition 5.1 establishes that under open the open-world
+default is a runtime convention with no ontological counterpart in A . Under closed,
+each declared permission creates relator ρP; adding Immunity(x,a,t)∧Disability(y,a,t)
+realises strong permission persisting under subsequent normative change (Theorem 4.1).
+The behaviour parameter is thus a choice between ontologically incompatible norma-
+tive positions, not merely a configuration switch.
+P2: Violation authority.
+For every prohibition with a remedy, the grounding adds
+Power(y,decl(a),t) ∧Subj(x,decl(a),t), surfacing the evaluator’s implicit role as nor-
+mative authority. The Power constituted at activation licenses y not only to declare the
+violation directly but also to delegate sanctioning competence to a third party, creating
+a new Power–Subjection pair in another agent via a normative transfer act [8]. Gover-
+nance frameworks can thereby specify which party holds violation-declaration authority
+for which prohibitions (Theorem 4.2).
+P3: Assigner correlatives.
+The grounding surfaces a Right to Omission for every as-
+signer of a prohibition and a Right to an Action for every assigner of a duty (Table 1, Ax-
+iom 5.3). These correlatives are ontologically entailed but absent from the ODRL evalu-
+ator: without them, no reasoner can identify whose normative standing grounds a given
+remedy, even when dataset identity is known.
+P4: Normative authority.
+The Power–Subjection pair constituted at activation (Ax-
+iom 5.4) makes violation-declaration authority explicit, enabling data sovereignty repre-
+sentation in governance frameworks.
+
+
+===== PAGE 9 / 16 =====
+
+D.M. Mustafa et al. /
+5.2. First-Order Axiomatization
+Each axiom answers the same question: when an ODRL rule activates, what legal indi-
+viduals come into existence? The answer is always a simple legal relator that bundles
+one correlative pair, one position per party, founded by the activation event and aggre-
+gated via partOf. Predicate key. ODRL rule (policy graph): P(p)/Proh(f)/obl(d) = Per-
+mission/Prohibition/Duty rule node (obl, the Duty rule, is distinct from Duty, the UFO-
+L Duty position); aee(r,x)/aer(r,y) = r has assignee x / assigner y; act(r,a) = r regu-
+lates action type a; tgt(r,t) = r has target token t; has rem(f) = f carries odrl:remedy;
+strong(p) = p is strongly permitted (profile extension, §5.3). Activation and founding
+(events): activates(e,r) = e activates r [5]; founds/founds rem/founds imm = conduct /
+remedy / immunity founding of a relator by a rule at an event. UFO-L relator and mo-
+ments (ontology): Rel(ρ) = ρ is a UFO-L legal relator; ODRLRel(ρ) = ρ is a relator
+founded by an ODRL rule; bearer(m,x) = moment m inheres in x; partOf(m,ρ) = m is
+part of relator ρ; cnt(m,a,t) = m has normative content over action type a and target t.
+We inherit from UFO the relator mediation relation: a relator ρ mediates x and y iff it
+has parts inhering in x and y respectively [12, p. 240], derived from partOf and bearer,
+not re-axiomatised here.
+Activating a permission creates a relator in which the assignee holds a Permission to Act
+and the assigner the correlative No Right, both over the same action and target.
+Axiom 5.1 (Permission Relator Weak).
+∀p,x,y,a,t,e. P(p)∧aee(p,x)∧aer(p,y)∧act(p,a)∧tgt(p,t)∧activates(e, p) →
+∃ρP,l,n. Rel(ρP)∧founds(e,ρP, p)∧Permission(l)∧bearer(l,x)∧cnt(l,a,t)
+∧partOf(l,ρP)∧NoRight(n)∧bearer(n,y)∧cnt(n,a,t)∧partOf(n,ρP)
+A strong permission also founds a second relator at the same activation event: besides the
+permission relator ρP (Permission–No Right, Axiom 5.1), it founds the immunity relator
+ρI, which gives the assignee an Immunity and the assigner the correlative Disability.
+Axiom 5.2 (Permission Relator Strong).
+∀p,x,y,a,t,e. P(p)∧strong(p)∧aee(p,x)∧aer(p,y)∧act(p,a)∧tgt(p,t)∧activates(e, p) →
+∃ρI,im,db. Rel(ρI)∧founds imm(e,ρI, p)∧Immunity(im)∧bearer(im,x)∧cnt(im,a,t)∧
+partOf(im,ρI)∧Disability(db)∧bearer(db,y)∧cnt(db,a,t)∧partOf(db,ρI)
+Activating a prohibition creates the prohibition relator ρF, in which the assignee owes
+a Duty to Omit the action a (its content is the omission rfr(a), not a) and the assigner
+holds the correlative Right to that omission.
+Axiom 5.3 (Prohibition Relator—Conduct).
+∀f,x,y,a,t,e. Proh(f)∧aee(f,x)∧aer(f,y)∧act(f,a)∧tgt(f,t)∧activates(e, f) →
+∃ρF,d,c. Rel(ρF)∧founds(e,ρF, f)∧Duty(d)∧bearer(d,x)∧cnt(d,rfr(a),t)∧
+partOf(d,ρF)∧Right(c)∧bearer(c,y)∧cnt(c,rfr(a),t)∧partOf(c,ρF)
+
+
+===== PAGE 10 / 16 =====
+
+D.M. Mustafa et al. /
+A prohibition with a remedy founds a competence-level relator ρR: the assigner gains
+a standing Power to declare a violation (over decl(a)) and the assignee the correlative
+Subjection.
+Axiom 5.4 (Prohibition Relator—Remedy).
+∀f,x,y,a,t,e. Proh(f)∧has rem(f)∧aee(f,x)∧aer(f,y)∧
+act(f,a)∧tgt(f,t)∧activates(e, f) →
+∃ρR, pw,s. Rel(ρR)∧founds rem(e,ρR, f)∧
+Power(pw)∧bearer(pw,y)∧cnt(pw,decl(a),t)∧partOf(pw,ρR)∧
+Subj(s)∧bearer(s,x)∧cnt(s,decl(a),t)∧partOf(s,ρR)
+Activating an obligation creates the duty relator ρD, in which the assignee owes a Duty
+to Act on a and the assigner holds the correlative Right to that action.
+Axiom 5.5 (Obligation Relator).
+∀d,x,y,a,t,e. obl(d)∧aee(d,x)∧aer(d,y)∧act(d,a)∧tgt(d,t)∧activates(e,d) →
+∃ρD,du,c. Rel(ρD)∧founds(e,ρD,d)∧Duty(du)∧bearer(du,x)∧cnt(du,a,t)∧
+partOf(du,ρD)∧Right(c)∧bearer(c,y)∧cnt(c,a,t)∧partOf(c,ρD)
+For each founding mode a rule founds one relator at a given event (and each relator has
+one founding event); since the modes differ, founding in two modes yields two separate
+relators.
+Axiom 5.6 (Unique Founding). For fd ∈{founds,founds rem,founds imm}:
+∀r,ρ1,ρ2,e. fd(e,ρ1,r)∧fd(e,ρ2,r) →ρ1 = ρ2
+∀r,e1,e2,ρ. fd(e1,ρ,r)∧fd(e2,ρ,r) →e1 = e2
+(Non-migration and temporal non-overlap.)
+A relator is an ODRL relator when a rule of the matching kind founds it: any rule via
+founds, a prohibition via founds rem, a permission via founds imm.
+Axiom 5.7 (ODRL Relator Typing).
+∀e,ρ,r. fd(e,ρ,r)∧G(r) →ODRLRel(ρ)
+where (fd,G) ∈{(founds, P∨Proh∨obl), (founds rem, Proh), (founds imm, P)}.
+Axiom 5.8 (ODRL Relator Is a Relator).
+∀ρ. ODRLRel(ρ) →Rel(ρ)
+
+
+===== PAGE 11 / 16 =====
+
+D.M. Mustafa et al. /
+Within an ODRL relator each correlative pair comes as a matched unit: one side is
+present, and unique, exactly when its correlative is, so a relator never holds half a pair or
+a duplicate.
+Axiom
+5.9
+(Correlativity).
+For
+each
+correlative
+pair
+(X,Y)
+∈
+{(Permission,NoRight),(Duty,Right),(Power,Subj),(Immunity,Disability)},
+every
+ODRL simple legal relator ρ contains exactly one position from that pair over the same
+content [8]. For all ρ,a,t with ODRLRel(ρ):
+(∃!u. X(u)∧partOf(u,ρ)∧cnt(u,a,t))
+↔(∃!v. Y(v)∧partOf(v,ρ)∧cnt(v,a,t))
+Axiom 5.10 (Normative Position Incompatibility). No agent can simultaneously bear a
+Permission to Act and a Duty to Omit over the same ⟨a,t⟩. This is a normative fact in-
+dependent of UFO type disjointness, which governs whether a single moment individual
+can have two types, not whether a bearer can hold two distinct moments of incompatible
+types:
+∀l,d,x,a,t. Permission(l)∧bearer(l,x)∧cnt(l,a,t)∧
+Duty(d)∧bearer(d,x)∧cnt(d,rfr(a),t) →⊥
+Corollary 5.1 (Permission–Duty Conflict Within a Relator). No ODRL simple legal
+relator ρ contains both a Permission to Act and a Duty to Omit over the same ⟨a,t⟩for
+the same bearer. (Immediate from Axiom 5.10.)
+Axiom 5.11 (Disability Precludes Prohibition Creation).
+∀f,x,y,a,t. Proh(f)∧aee(f,x)∧aer(f,y)∧act(f,a)∧tgt(f,t)
+→¬∃db. Disability(db)∧bearer(db,y)∧cnt(db,a,t)
+Predicate shorthand. We write Permission(x,a,t) for ∃l.Permission(l)∧bearer(l,x)∧
+cnt(l,a,t); analogously for Duty, Right, NoRight, Power, Subj, Immunity, Disability.
+Definition 5.2 (Position Instantiation). For policy π = ⟨P,F,D⟩and activation event
+e, the position set Pos(π,e) is the set of legal position instances entailed by A =
+{Axioms 5.1–5.11}:
+Pos(π,e) = {q | A ∪{activates(e,r) | r ∈π } |= q}
+The term grounding is reserved for the ontological interpretation of ODRL in UFO-L;
+Pos(π,e) is the instantiation operation deriving concrete position individuals at a specific
+activation.
+Proposition 5.2 (Evaluator Soundness and Incompleteness). Under closed: evaluator
+permits a for x on t ⇒Permission(x,a,t) ∈Pos(π,e). Under both settings: prohibition
+activation ⇒Duty(x,rfr(a),t); prohibition with remedy ⇒Power(y,decl(a),t). The con-
+verse fails: Pos(π,e) additionally entails No Right, Right to Omission, Immunity, and
+Disability (Table 1). The evaluator is thus sound but not complete: four of the eight en-
+tailed positions are absent from the Evaluation Report.
+
+
+===== PAGE 12 / 16 =====
+
+D.M. Mustafa et al. /
+Example 5.1 (:BE-Agreement grounded). Activating :BE-Agreement (assignee
+:KulturPortal, assigner :BerlinerEnsemble, action odrl:distribute, target
+:BE-Showtimes) founds two relators at one event, kept distinct by Axiom 5.6. Ax-
+iom 5.3 founds the conduct relator ρF: :KulturPortal a Duty to Omit (content
+rfr(odrl:distribute)), :BerlinerEnsemble the correlative Right to Omission. As it
+carries a remedy, Axiom 5.4 founds the competence relator ρR: :BerlinerEnsemble a
+Power over decl(odrl:distribute) (to declare a violation), :KulturPortal the cor-
+relative Subjection. :DT-Agreement founds its own ρR for :DeutschesTheater, so
+the two theaters hold distinct violation-declaration Powers, the authority left implicit by
+the evaluator’s two violated verdicts (Section 1).
+5.3. The ODRL Legal Profile
+The grounding motivates a companion OWL profile, the ODRL Legal Profile
+(odrl-l:)3, enabling policy authors to assert competence-level positions at author-
+ing time (P4). The profile defines 15 classes (1 abstract position supertype, the
+8 leaf classes of Table 1, 1 abstract relator root, and 5 concrete relator classes) and
+8 properties. The two ODRL extension points († in Table 1) are odrl-l:hasRemedy
+and odrl-l:stronglyPermitted. Three OWL approximation limits apply, all stem-
+ming from OWL’s lack of function symbols and its decidable description-logic frag-
+ment: rfr(a) forbearances are not representable (no term for the omission as content);
+stronglyPermitted carries no OWL entailment (an annotation flag, since founding the
+immunity relator by Axiom 5.2 is a rule OWL cannot derive); and Axioms 5.9 and 5.10
+require full FOL (a unique-existence biconditional over shared content, and a contradic-
+tion over rfr-related content).
+6. Evaluation
+We encode the axioms of Section 5.2 in three independent systems: TPTP/FOF for
+Vampire 5.0.0 [15] and E 3.2.5 [16], SMT-LIB 2 (UF) for Z3 4.15.4 [17], and Is-
+abelle/HOL [18], which verifies all axioms and the corollary, the sanctioned-prohibition
+lifecycle, and Proposition 5.2. The benchmark has 39 problems over 36 identifiers
+(GRND001–036), three of which carry two variants for the open/closed-world, sanc-
+tioned/regimented, and with/without-immunity contrasts. Each problem is emitted as a
+TPTP/FOF file, an SMT-LIB 2 file, and a Turtle policy over DRK culture-dataspace enti-
+ties [19], and inlines only the axioms it needs: entailment problems confirm those axioms
+are sufficient, discriminating problems that they are not too strong.
+Consistency. The full axiom set is satisfiable, witnessed by a minimal finite model (one
+odrl:Permission, two agents) from Vampire’s finite-model schedule. Entailment.
+Each problem derives a grounding claim from a strict subset of axioms, including the
+three clauses of Proposition 5.2 and the cross-level chain behind Theorem 4.3. One in-
+stantiates the motivating scenario of Section 1: activating drk:BerlinerEnsemble’s
+prohibition over drk:TheaterShowtimeDataset derives exactly the Power that li-
+censes violation declaration.
+Discriminating. These witness the ontological distinctions an evaluator cannot express:
+open- vs. closed-world permission, sanctioned vs. regimented prohibition, weak vs.
+3https://w3id.org/odrl-legal/
+
+
+===== PAGE 13 / 16 =====
+
+D.M. Mustafa et al. /
+Table 2. Axiom coverage matrix. Each row reports the SZS status of problems that exercise that axiom (pos-
+sibly alongside others). ×n: the axiom is a schema with n FOL instances, each tested by a dedicated problem.
+Thm = theorem; Uns = unsatisfiable; Sat = satisfiable [20].
+Axiom (Ref)
+SZS
+Axiom (Ref)
+SZS
+perm-relator-weak (Ax5.1)
+Thm
+correlativity ×4 (Ax5.9)
+Thm/Uns
+perm-relator-strong (Ax5.2)
+Thm/Uns
+cross-relator (Ax5.10)
+Uns
+proh-relator-conduct (Ax5.3) Thm/Uns
+disability-block (Ax5.11)
+Uns
+proh-relator-remedy (Ax5.4)
+Thm
+odrl-rel-is-rel (Ax5.8)
+Thm
+obl-relator
+(Ax5.5)
+Thm/Sat
+A1–A3
+Thm
+unique-founding ×6 (Ax5.6)
+Thm
+consistency
+(—)
+Sat
+odrl-rel-typing ×3 (Ax5.7)
+Thm
+strong permission, multi-policy conflict, and the end-to-end remedy chain. All checks
+pass (Table 2); E omits the 3 satisfiable problems (no finite-model finder) and Z3 times
+out on them in the UF fragment, while Vampire’s portfolio schedule discharges them.
+7. Related Work
+A formal semantics for ODRL is still emerging. The behaviour of an evaluator is de-
+scribed in the ODRL Formal Semantics, a W3C ODRL Community Group draft report
+(10 March 2026) [5]. The draft specifies rule applicability and the evaluation of obliga-
+tions and prohibitions, providing a foundation for formal reasoning about ODRL. How-
+ever, aspects such as remedy evaluation and violation handling remain underspecified
+and are expressed at the level of evaluator decisions rather than a formal account of au-
+thority and enforcement [5]. Steyskal and Polleres [21], and Bonatti et al. [22], provide
+formal and trace-based semantics for ODRL 2.1 and 2.2, capturing sanctioned interpre-
+tations and open/closed-world assumptions. Salas et al. [23,6] further develop semantic
+frameworks for policy comparison, query answering, and normalisation. However, these
+approaches do not explicitly represent the normative positions underlying evaluator de-
+cisions or competence-level authority. A survey of usage control frameworks identifies
+the lack of formal semantics as a persistent gap [24]. Dam et al. [25] instantiate this issue
+through 22 policy patterns covering achievement, maintenance, and process obligations,
+but without an explicit account of the normative positions or authority roles they induce.
+Rodr´ıguez-Doncel and Roman [26] further show that conformance applies to policies
+but not processors, highlighting the lack of a unified theoretical grounding for policy en-
+forcement. GUCON [27] provides a formal policy meta-model based on graph patterns
+and deontic logic, which can be instantiated using OWL 2, SHACL, and ODRL.
+We adopt UFO-L as the foundational ontology due to its representation of legal and so-
+cial normative concepts such as commitments, claims, and powers, which align closely
+with deontic notions in policy languages. In contrast, foundational ontologies such as
+BFO [28] and DOLCE [29] provide general ontological structures but do not explicitly
+model normative and institutional aspects required for representing policy authority, obli-
+gations, and permissions. De Vos et al. [30] translate ODRL into Answer Set Program-
+ming using deontic fluents for permission, prohibition, and institutional power, but do
+not formalise the underlying normative positions between parties, as is also the case for
+input/output logic [31] and defeasible deontic logic [32]. Oliveira et al. [33] align ODRL
+with UFO-L legal moments via OWL class equivalences, but without a full axiomatic
+grounding of correlative normative and competence-level structures. The Soberana On-
+
+
+===== PAGE 14 / 16 =====
+
+D.M. Mustafa et al. /
+tology [34] applies UFO to model business ecosystems in data spaces, whereas our work
+focuses on the deontic layer for policy specification.
+8. Conclusion
+An ODRL evaluator returns a verdict, but not what normative situation a policy creates,
+who holds the authority behind it, or who may declare it violated; a formal semantics
+fixes the verdict, not what exists once a policy is in force. Answering that needs an ontol-
+ogy of legal positions rather than another account of verdicts, which is why we grounded
+ODRL in the foundational ontology UFO-L rather than giving it a denotational seman-
+tics. Our central result is the Cross-Level Design Principle: any policy language whose
+norms can be broken and carry consequences needs conduct-level positions (who may
+or must do what) together with competence-level positions (who may declare a violation
+and impose its consequences), because a conduct-only vocabulary cannot ground the step
+from violation to remedy. This is a necessity result, not a richer mapping, and it is what
+separates the work from earlier conduct-level-only alignments. Applying it to ODRL, we
+map each activated rule to a concrete legal relationship between assignee and assigner,
+surface the correlatives an evaluator leaves silent (the assigner’s entitlement and the au-
+thority to declare a violation), widen what a policy makes explicit from two positions to
+eight, and let a companion profile state that authority at authoring time; the whole theory
+is checked mechanically.
+Those checks rely on general-purpose provers because no ODRL engine yet cov-
+ers the full vocabulary and constraint language, and the same gap makes the grounding
+reusable: the profile lets standard reasoners carry it on an evaluator’s verdicts, query-
+ing authority, detecting conflicts, and grounding remedies without a bespoke engine.
+In the opening scenario the two providers’ authority structures come out distinct, so
+which provider may demand which remedy is fixed by the model, not the implemen-
+tation. The grounding covers simple legal relationships only; richer constructs such as
+the Liberty relator lie outside its scope. Future Work. (1) extend conflict detection
+to inheritance-based (odrl:inheritFrom) policies; and (2) connect the grounding to
+LLM-based ODRL generation, where the surfaced positions give an ontological target
+for policy extraction and compliance checking.
+Declaration on Generative AI: The authors used Claude (Anthropic) and Grammarly
+for grammar and sentence refinement, reviewed all content, and take full responsibility
+for the publication’s content.
+Acknowledgments: Supported by a Fraunhofer ICON grant through the Next Genera-
+tion Dataspaces Initiative (NGDI), and the German Ministry for Research and Education
+(BMBF) project WestAI (Grant no. 01IS22094D). Also supported by the JUPITER AI
+Factory (JAIF) Project, funded via the EuroHPC Joint Undertaking (JU) under Grant ID
+101250682 (https://cordis.europa.eu/project/id/101250682); and in part by
+the German Federal Government and the German States of North Rhine-Westphalia and
+Hesse, coordinated by the Forschungszentrum J¨ulich and the involving consortium part-
+ners, including RWTH Aachen University, Fraunhofer, and the Hessian AI Ecosystem.
+
+
+===== PAGE 15 / 16 =====
+
+D.M. Mustafa et al. /
+References
+[1]
+Iannella R, Villata S. ODRL Information Model 2.2. W3C; 2018. Available from: https://www.w3
+.org/TR/odrl-model/.
+[2]
+Otto B, ten Hompel M, Wrobel S. International Data Spaces. In: Digital Transformation. Berlin, Hei-
+delberg: Springer Berlin Heidelberg; 2019. p. 109-28.
+[3]
+Theissen-Lipp J, Kocher M, Lange C, Decker S, Paulus A, Pomp A, et al. Semantics in Dataspaces:
+Origin and Future Directions. In: Companion Proceedings of the ACM Web Conference 2023. WWW
+’23 Companion. New York, NY, USA: Association for Computing Machinery; 2023. p. 1504-7.
+[4]
+Vanwambeke J, Sellami Y. Gaia-X and the Policy Reasoning Engine; 2023. Accessed 2025. Gaia-X
+Blog. Available from: https://gaia-x.eu/gaia-x-and-the-policy-reasoning-engine/.
+[5]
+Fornara N, et al. ODRL Formal Semantics. W3C; 2026. Available from: https://w3c.github.io/
+odrl/formal-semantics/.
+[6]
+Salas JO, Pareti P, Yumus¸ak S, Gheisari S, Ib´a˜nez LD, Konstantinidis G. Evaluation and Comparison
+Semantics for ODRL. In: Proceedings of the 14th International Joint Conference on Knowledge Graphs
+(IJCKG 2025). Springer Nature; 2025. ArXiv:2509.05139.
+[7]
+Griffo C, Almeida JPA, Guizzardi G. Conceptual Modeling of Legal Relations. In: Conceptual Mod-
+eling: 37th International Conference, ER 2018, Xi’an, China, October 22–25, 2018, Proceedings. vol.
+11157 of Lecture Notes in Computer Science. Springer; 2018. p. 169-83.
+[8]
+Griffo C, Almeida JPA, Lima JAO, Sales TP, Guizzardi G.
+Legal powers, subjections, disabili-
+ties, and immunities: Ontological analysis and modeling patterns. Data & Knowledge Engineering.
+2023;148:102219.
+[9]
+Griffo C, Almeida JPA, Guizzardi G, Nardi JC. Service contract modeling in enterprise architecture.
+Information Systems. 2021;101:101454.
+[10]
+Guizzardi G, Benevides AB, Fonseca CM, ao Paulo A Almeida J, Sales TP, Porello D. UFO: Unified
+Foundational Ontology. Applied ontology. 2022;1(17):167-210.
+[11]
+Alexy R. A theory of constitutional rights. Oxford university press; 2010.
+[12]
+Guizzardi G. Ontological Foundations for Structural Conceptual Models [PhD Thesis]. University of
+Twente; 2005.
+[13]
+von Wright GH. Norm and Action: A Logical Enquiry. London: Routledge and Kegan Paul; 1963.
+[14]
+Guarino N, Guizzardi G. Processes as variable embodiments. Synthese. 2024;203(104).
+[15]
+Kov´acs L, Voronkov A. First-order theorem proving and Vampire. In: International Conference on
+Computer Aided Verification. Springer; 2013. p. 1-35.
+[16]
+Schulz S. E – A Brainiac Theorem Prover. AI Communications. 2002;15(2–3):111-26.
+[17]
+De Moura L, Bjørner N.
+Z3: An efficient SMT solver.
+In: International conference on Tools and
+Algorithms for the Construction and Analysis of Systems. Springer; 2008. p. 337-40.
+[18]
+Nipkow T, Paulson LC, Wenzel M. Isabelle/HOL: A Proof Assistant for Higher-Order Logic. vol. 2283
+of Lecture Notes in Computer Science. Springer; 2002.
+[19]
+Toubekis G, Decker S. The Culture Dataspace (Datenraum Kultur) – a Data-Sovereign Open-Source
+Digital Infrastructure based on the Eclipse Dataspace Components (EDC) Framework. The International
+Archives of the Photogrammetry, Remote Sensing and Spatial Information Sciences. 2025;XLVIII-M-
+9-2025:1515-23.
+[20]
+Sutcliffe G. The SZS Ontologies for Automated Reasoning Software. In: Proceedings of the LPAR
+Workshops. vol. 418 of CEUR Workshop Proceedings; 2008. .
+[21]
+Steyskal S, Polleres A. Towards Formal Semantics for ODRL Policies. In: RuleML; 2015. .
+[22]
+Bonatti PA, Fornara N, Harth A. Towards a Formal Semantics of the Open Digital Rights Language
+(ODRL 2.2). In: CEUR Workshop Proceedings. vol. 3977. CEUR-WS; 2025. Available from: https:
+//ceur-ws.org/Vol-3977/OPAL2025-4.pdf.
+[23]
+Salas JO, Pareti P, Konstantinidis G. ODRL Policy Comparison Through Normalisation; 2026. Accepted
+at the 23rd European Semantic Web Conference (ESWC 2026). Available from: https://arxiv.or
+g/abs/2603.12926.
+[24]
+Akaichi I, Kirrane S. Usage Control Specification, Enforcement, and Robustness: A Survey; 2022. Avail-
+able from: https://arxiv.org/abs/2203.04800.
+[25]
+Dam T, Krimbacher A, Neumaier S. Policy Patterns for Usage Control in Data Spaces. In: Fifth Interna-
+tional Workshop On A Semantic Data Space For Transport @ SEMANTiCS 2023. Leipzig, Germany;
+2023. .
+
+
+===== PAGE 16 / 16 =====
+
+D.M. Mustafa et al. /
+[26]
+Rodr´ıguez-Doncel V, Roman N. Towards Conformance in ODRL 3.0. In: OPAL 2025: ODRL and
+Beyond – Practical Applications and Challenges for Policy-Based Access and Usage Control, co-located
+with ESWC 2025. CEUR Workshop Proceedings. Portoroˇz, Slovenia; 2025. .
+[27]
+Akaichi I, Flouris G, Fundulaki I, Kirrane S. GUCON: a generic graph pattern based policy framework
+for usage control enforcement. In: International Joint Conference on Rules and Reasoning. Springer;
+2023. p. 34-53.
+[28]
+Otte JN, Beverley J, Ruttenberg A. BFO: Basic Formal Ontology. Applied Ontology. 2022;17:17 43.
+Available from: https://api.semanticscholar.org/CorpusID:247354631.
+[29]
+Gangemi A, Guarino N, Masolo C, Oltramari A, Schneider L. Sweetening ontologies with DOLCE.
+In: International conference on knowledge engineering and knowledge management. Springer; 2002. p.
+166-81.
+[30]
+De Vos M, Kirrane S, Padget J, Satoh K. ODRL Policy Modelling and Compliance Checking. In: Fodor
+P, Montali M, Calvanese D, Roman D, editors. Rules and Reasoning. RuleML+RR 2019. vol. 11784 of
+Lecture Notes in Computer Science. Springer, Cham; 2019. p. 36-51.
+[31]
+Makinson D, van der Torre L. Input/Output Logics. Journal of Philosophical Logic. 2000;29(4):383-
+408.
+[32]
+Governatori G, Olivieri F, Rotolo A, Scannapieco S. Computing Strong and Weak Permissions in De-
+feasible Logic. Journal of Philosophical Logic. 2013;42(6):799-829.
+[33]
+Oliveira V, Silva P, Moreira J. LegIOn-IDS: Legal Interoperability Ontology for International Data
+Spaces. In: Proceedings of the Joint Ontology Workshops (JOWO) – Episode X: The Tukker Zomer
+of Ontology, co-located with the 14th International Conference on Formal Ontology in Information
+Systems (FOIS 2024). Enschede, The Netherlands; 2024. CEUR Workshop Proceedings, ISSN 1613-
+0073.
+[34]
+Cunha M, Silva P, Moreira J, Amaral G.
+The Soberana Ontology: Modeling Business Ecosystems
+for International Data Spaces. In: Formal Ontology in Information Systems. vol. 409 of Frontiers in
+Artificial Intelligence and Applications. IOS Press; 2025. p. 240-54.

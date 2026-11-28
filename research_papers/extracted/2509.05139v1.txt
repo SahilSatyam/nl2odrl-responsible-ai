@@ -1,0 +1,809 @@
+# SOURCE: 2509.05139v1.pdf
+# PAGES: 15
+
+
+
+===== PAGE 1 / 15 =====
+
+Evaluation and Comparison Semantics for ODRL
+Jaime Osvaldo Salas
+, Paolo Pareti
+, Semih Yumuşak
+, Soulmaz Gheisari
+, Luis-Daniel Ibáñez
+, and George Konstantinidis
+University of Southampton, University Road, Southampton, SO17 1BJ, UK
+Contact: p.pareti@soton.ac.uk
+Abstract. We consider the problem of evaluating, and comparing com-
+putational policies in the Open Digital Rights Language (ODRL), which
+has become the de facto standard for governing the access and usage of
+digital resources. Although preliminary progress has been made on the
+formal specification of the language’s features, a comprehensive formal
+semantics of ODRL is still missing. In this paper, we provide a simple
+and intuitive formal semantics for ODRL that is based on query an-
+swering. Our semantics refines previous formalisations, and is aligned
+with the latest published specification of the language (2.2). Building on
+our evaluation semantics, and motivated by data sharing scenarios, we
+also define and study the problem of comparing two policies, detecting
+equivalent, more restrictive or more permissive policies.
+Keywords: ODRL · Data Sharing · Policy Evaluation
+1
+Introduction
+The Open Digital Rights Language (ODRL) is a W3C Recommendation that
+aims at providing a flexible and interoperable way to express rights and obliga-
+tions related to digital content. Notably, ODRL has been adopted by developers
+of Data Spaces1 to regulate access to datasets, and is set to play a key role
+in regulating data usage within AI pipelines. However, to be useful in practice,
+policy specifications need to be implementable, enforceable, and universally un-
+derstandable within the Data Spaces ecosystem. The first step in implementing
+any policy is deciding the semantics of the policy evaluation problem: given a
+usage policy over a resource, e.g., a dataset, and a state of the world capturing
+the operations of actors, evaluate whether the policy is violated or satisfied in
+this state.
+At the same time, a major function of Data Spaces is data exchange in sce-
+narios where a data consumer wants to use data accompanied by a usage policy
+(written by the data provider). In this paper, we model the request of the con-
+sumer as another ODRL policy and define the problem of policy comparison:
+given a provider policy defining usage constraints over a resource, a usage re-
+quest policy describing intended actions over that resource, decide if the request
+conflicts with provider policy, before the exchange takes place.
+1 https://digital-strategy.ec.europa.eu/en/policies/strategy-data
+arXiv:2509.05139v1  [cs.AI]  5 Sep 2025
+
+
+===== PAGE 2 / 15 =====
+
+2
+Salas et al.
+These scenarios require a precise formal semantics for ODRL evaluation and
+comparison. ODRL’s origins come from the area of Deontic Logic [5], which pro-
+vides the formal tools to define such a language. However, as of August 2025, the
+formal semantics of ODRL is still in a draft state2, and most importantly, it is in
+natural language. Only a few academic works have attempted to define seman-
+tics for ODRL [13,16,4,1], that either consider older versions of ODRL, or are
+at a preliminary and partial state of formalisation. A more detailed comparison
+with previous work is provided in Section 5.
+The problem of evaluation is arguably the most fundamental problem of com-
+putational policies, but the fact that it has not been treated in a uniform way is
+not surprising: ODRL has been used in a large variety of very different applica-
+tions and each has its own description of operations, systems and functions that
+the policies should be checked against. Each such system has implemented its
+own ad-hoc policy evaluation , having to closely synchronise with other systems
+to achieve interoperability. In this paper, and in line with the recently published
+draft semantics, we model a state of the world as a set of events and implement
+it as a database relation. Although implementation is orthogonal (e.g., one could
+use an event recognition system within an organisation, or simply a triplestore
+with a log of events) our mathematical representation of this is a simple relation
+that we can query to decide our evaluation and comparison problems.
+Our main contributions are the following: (1) a novel, intuitive and simple
+formal semantics for ODRL, and for a simpler language that we call ODRL
+Lite, based on translating policies to queries on a state of the world and (2) a
+semantics for policy comparison grounded on the notion of query containment
+and equivalence - giving rise to different comparison semantics (symmetric and
+asymmetric) based on the application.
+Another aspect of ODRL semantics that is not strictly defined is how to
+handle reasoning, which leads to many possible interpretations being possible.
+In this paper, instead of committing our semantics to a specific approach, we
+chose to decouple the reasoning dimension and show how our semantics can
+easily be extended with different types of inferences through a separate mate-
+rialisation step. This allows us to provide a core semantics for the basic case
+without inference, and the flexibility to adapt to different reasoning algorithms.
+2
+Background
+ODRL is a policy expression language that provides a flexible and interopera-
+ble information model, vocabulary, and encoding mechanism to represent rules
+about the usage of content and services. ODRL policies have four core compo-
+nents: (1) Asset: a resource that is subject of a policy; (2) Party: an entity that
+undertakes functional roles as the assigner or assignee of a policy; (3) Action:
+an operation (for example Read, Write, Copy, Anonymise) that can be exercised
+on a target asset and (4) Rule: defines the permission, prohibition, or obligation
+2 https://w3c.github.io/odrl/formal-semantics/
+
+
+===== PAGE 3 / 15 =====
+
+Evaluation and Comparison Semantics for ODRL
+3
+of the assignees of the policy to execute actions over assets. A single policy may
+define multiple rules on different core components.
+Components of an ODRL Policy can be constrained. Constraints are boolean
+expressions that either dictate conditions applicable to a Rule, or refine the
+semantics of actions, parties or assets. In ODRL, the former usage is called
+Constraints and the latter Refinements. For example, a permission rule can
+be constrained to a particular datetime, or to a particular location (e.g., the
+European Union); the Action Print can be refined with the boolean expression
+with resolution less than 500dpi; and the asset Document D can be refined with
+subset of pages 1 to 10.
+Complex ODRL policies can also make use of additional types of rules, which
+build on the three basic types of rules previously mentioned. Permissions can
+have duties, which are types of obligations that need to be fulfilled before the
+assignee exercises the permission. The remedy and consequence rules specify
+remedial actions that can restore validity in a state of the world in the case of
+prohibition violations, or in the failure to fulfill an obligation or a duty.
+ODRL policies are usually read as Rule from Assigner for Assignee to Action
+Asset subject to Constraints and Refinements, e.g. Permission from Bob for
+Alice to Read Document D subject to the constraint the day being Monday and
+Document D to be refined to its Subset of Pages 1-10. While all rules must define
+the Action component, all other elements are optional. We assume all instances
+of components are drawn from a known vocabulary or Knowledge Graph.
+Policies act upon a world, e.g., a Socio-Technical System or a Data Space.
+A state of the world is a formal representation of the state of the assets, par-
+ties and any other environmental information relevant for the constraints. For
+example, Bob Read document D, Alice Read Document D, The day is Tuesday.
+An ODRL Evaluator receives as input an ODRL policy and a state of the world
+and decides which rules of the policy are violated or fulfilled in the state of the
+world. An ODRL Evaluator may work in two different scenarios or modalities:
+Access Control, adds to the input an action that is requested, the evaluator must
+decide if the execution of the action would create a state of the world that vio-
+lates any policy; and Monitoring, where the state of the world includes actions
+already performed and the evaluator decides violation/fulfillment. In this paper,
+we focus on the problem of violation and fulfillment of policies given a state of
+the world, conforming to the Monitoring scenario. Note however, that the Access
+Control modality can be reduced to the Monitoring one if the state of the world
+that would result after performing the requested action can be predicted.
+3
+First-order ODRL Semantics
+An ODRL policy is evaluated against a state of the world, which we model as a
+set of events. For a state of the world ω and an event e we write ω(e) when e ∈ω.
+An event is described by a finite number of features i ∈[0, n], corresponding to
+core components, constraints and refinements of the language, e.g., time, actor,
+action, etc. These features can also describe relationships with other events. For
+
+
+===== PAGE 4 / 15 =====
+
+4
+Salas et al.
+Datetime
+Action
+Actor
+Asset
+Print.Resolution
+Book.Pages
+1
+Print
+Alice
+Picture
+500 dpi
+null
+2
+Read
+Bob
+Book
+null
+450
+3
+Print
+Alice
+Book
+600 dpi
+300
+Table 1: A state of the world corresponding to Example 1
+example, a feature can represent the number of times a similar action has been
+already performed, as defined by the ODRL count constraint. Thus an event e
+can be defined as an n-tuple < e0, e1, e2, . . . , en >, where the value of a feature
+ei is either null (unspecified), a constant, or a set of constants. For simplicity,
+we assume that the first value e0 of event e is always the timestamp of when
+the action has been performed, and e1 is the action. All other values correspond
+to the rest of the ODRL components, refinements and constraints an ODRL
+rule can have. Each feature is unique, and its relationship with a specific ODRL
+component known. Two features i and j might both represent the “is located in”
+relation, but the first one might represent this relation as a property (refinement)
+of the assignee component, while the second one as a refinement of the asset.
+For any feature i, let γi be the ODRL component of i, that is, if i represents a
+refinement of the value ek, then γi = k. For example, if i is “has the creation date”
+of the asset component, then γi = Asset. When a feature captures a rule-wide
+property (corresponding to a constraint and not a refinement), or the timestamp
+e0, then γi equals a special constant ρ. In all other cases, that is, when a feature
+i is a component itself, then simply γi = i.
+Example 1. Consider a world with actors Alice and Bob, assets Book and Pic-
+ture, and actions Read and Print. Book has the property “number of pages”, and
+action Print has the property “resolution” that can take an integer value in the
+range 100-5000dpi. Table 1 shows the model of the events “Actor Alice executes
+Action Print at 500dpi on Asset Picture at datetime 1”, “Actor Bob executes
+Action Read on Asset Book with 450 pages at datetime 2” and “Actor Alice
+executes Action Print at 600 dpi on Asset Book with 300 pages at datetime 3”.
+Rules in an ODRL policy apply only to specific events, based on restrictions
+on the values of the features of an event. For example, a prohibition to “print”
+can be restricted to apply only to print actions over certain resolutions. To re-
+strict the value of a feature i we write triples of the form < i, op, v >, where i
+is one of the n features of an event, v is a constant or set of constants, and op
+is one of the following binary comparison operators: odrl:equals (=), odrl:gt
+(>), odrl:gteq (≥), odrl:lt (<), odrl:lteq (≤), odrl:neq (̸=), odrl:isA
+(or rdf:type), odrl:hasPart (⊃), odrl:isPartOf (⊂), odrl:isAllOf (≡),
+odrl:isAnyOf (∈), and odrl:isNoneOf (/∈). A condition C is either a single
+triple < i, op, v >, known as a simple condition, or a complex condition which is
+a boolean combination of simple conditions, combined with the ∧, ∨and ¬ oper-
+
+
+===== PAGE 5 / 15 =====
+
+Evaluation and Comparison Semantics for ODRL
+5
+ators.3 We denote with C(e) the boolean result of the evaluation of condition C
+on event e. Note that, ODRL does not provide negation of conditions directly but
+provides the exclusive-or operator ↮that we can use to obtain negation when
+features are not null.4 A complex condition is evaluated in the natural way as
+a boolean combination of simple conditions. A simple condition < i, op, v > is
+evaluated to true on an event e if the value comparison of ei and v using op-
+erator op is true, and false otherwise. We ground our condition evaluation on
+SPARQL Filter Evaluation semantics, by defining the value comparison as true
+if the equivalent SPARQL filter expression would keep the bound solution. Thus
+evaluation errors, for example due to incomparable types, behave as evaluations
+to false. Condition < i, odrl:isA, v > is evaluated as < ic, odrl:hasPart, {v} >,
+where ic is the set of classes of i. The remaining set operators are evaluated in
+their natural way. When the value of feature i is unspecified (i.e., null) in the
+event, then any simple condition C for that feature evaluates to false.
+Corresponding to ODRL rules, an event rule τ is defined as a conjunction
+of conditions. In the next subsection we will see how event rules are assigned a
+specific type, such as permissions or prohibitions, when used within a policy.
+Example 2. Consider a policy with the following rules (1) “Permission for Alice
+to Print Picture”, is translated as permission <Actor, =, Alice> ∧<Action, =
+, Print> ∧<Asset, =, Picture>; (2) “Prohibition for Bob to Read Book be-
+tween datetimes 3 and 5 and number of pages is greater than 250” trans-
+lates as prohibition <Actor, =, Bob> ∧<Action, =, Read> ∧<Asset, =, Book>
+∧(<Datetime, ≤, 5> ∧<Datetime, ≥, 3>) ∧<Book.Pages, >, 250> (demon-
+strating a complex condition on the Datetime feature); and (3) “Obligation for
+Bob to Read Book before datetime 3” is translated as obligation <Actor, =, Bob>
+∧<Action, =, Read> ∧<Asset, =, Book> ∧<Datetime, <, 3>.
+Given a condition C, let ¯C be the set of simple conditions in C, and IC be the
+set of features that appear in it, that is, the set {i | ∃op, v . < i, op, v >∈¯C}.
+Correspondingly, given an event rule Iτ, let Iτ = S
+C∈τ IC. To align with the
+ODRL specification we require all our rules to be well-formed, as follows. An
+event rule τ is said to be well-formed if:
+1. there is an action a such that < Action, =, a >∈τ; that is, each ODRL rule
+must specify the action a it applies to,
+2. for all i ∈Iτ, if γi ∈{Action, Asset, Party}, then < γi, =, v >∈τ, and there
+exists no other condition C ∈τ such that γi ∈IC (in other words, each
+ODRL core component used in a rule must be specified once, and not used
+in any other condition),
+3. for all complex conditions C ∈τ there do not exist i and i′ in IC with
+γi̸ = γi′; in other words, each boolean combination of constraints must use
+features of a single ODRL component.
+3 We omit the odrl:andSequence logic operator due to its lack of a clear semantic
+interpretation.
+4 For a condition c, holds ¬c ≡c ↮⊤where ⊤is always true; ⊤can be expressed
+with a disjunction of complementary conditions, such as < i, =, x > ∨< i,̸ =, x >.
+
+
+===== PAGE 6 / 15 =====
+
+6
+Salas et al.
+From now on, we will assume that event rules are well-formed. We say that
+an event rule τ matches an event e, denoted by match(τ, e) if all its conditions
+evaluate to true on e, that is when V
+C∈τ C(e) is true. Note that match(τ, e) has
+a natural correspondence to the evaluation of a boolean query on tuple e, and
+we can easily implement it with SQL or SPARQL.
+Example 3. All three rules from Example 2 are well-formed. The rule permitting
+Alice to Print Picture matches the event with datetime 1 from Table 1. The same
+rule does not match the event with datetime 2, because, among other things,
+Action and Actor don’t match, nor with the event with datetime 3 because the
+Assets don’t match. The rule prohibiting Bob to Read the Book does not match
+the event with datetime 1 or 3 because either the Action and Actor don’t match.
+The rule does not match with the event with datetime 2 either: though the
+event specifies Book.Pages must be greater than 250, its datetime falls outside
+the specified range. Finally, the rule obligating Bob to Read the Book does not
+match the first and third event, but it does match the second.
+3.1
+ODRL Lite
+An ODRL Lite policy is a tuple < P, F, O >, where P, F and O are the sets of
+permission, prohibition and obligation event rules, respectively. Faithful to the
+deontic semantics of these concepts permissions model what is allowed in a state
+of the world, but not compulsory, prohibitions state what is not allowed, and
+obligations require certain actions to be performed to be fulfilled.
+Definition 1. We say that a state of the world ω violates a policy < P, F, O >
+if any of the following three cases occurs:
+– (permissions) there exists an event e ∈ω and for all permission rules
+τ ∈P, match(τ, e) is false; equivalently if the following is true:
+∃e ω(e) ∧
+^
+τ∈P
+¬match(τ, e)
+(1)
+– (prohibitions) there exists an event e ∈ω and a prohibition rule τ ∈F,
+such that match(τ, e) is true; equivalently if the following is true:
+∃e ω(e) ∧
+_
+τ∈F
+match(τ, e)
+(2)
+– (obligations) for any of the obligation rules τ ∈O, there does not exist an
+event e ∈ω, such that match(τ, e) is true; equivalently:
+_
+τ∈O
+∄e ω(e) ∧match(τ, e)
+(3)
+Conversely, a state of the world ω is said to be valid with respect to a policy
+p =< P, F, O > if it does not violate it, or equivalently, the policy is satisfied or
+
+
+===== PAGE 7 / 15 =====
+
+Evaluation and Comparison Semantics for ODRL
+7
+true on ω, writing p(ω) = T. Following from Definition 1, to decide violations
+one should evaluate the following logical expression:
+ 
+∃e ω(e) ∧(
+^
+τ∈P
+¬match(τ, e)) ∨(
+_
+τ∈F
+match(τ, e))
+!
+∨
+ _
+τ∈O
+∄e ω(e) ∧match(τ, e)
+!
+(4)
+Since the predicate match is just a shorthand notation for the satisfaction of
+the complex conditions of a rule on an event tuple, as discussed above, expres-
+sion 4 is just a first-order query on relation ω (the state of the world) and can
+be easily implemented via SQL or SPARQL.
+Example 4. Consider the policy p =< P, F, O > where each of P, F, O con-
+tain the single event rule p1, f1 and o1, respectively, as defined in Example 2.
+Permission p1 allows Alice to Print Picture, f1 prohibits Bob to Read Book at
+a certain time and over a number of pages, and o1 obliges Bob to Read Book
+before a timestamp. The evaluation of p over the state of the world ω in Ta-
+ble 1 is as follows: for p1, the matches with events at datetime 2 and 3 return
+false, meaning ω violates the permissions of the policy (e.g. the policy does not
+explicitly grant permission for Bob to Read Book); for f1, none of the events
+match as explained in Example 3, hence, ω is valid wrt the prohibitions of the
+policy; for O1, there is an event where Bob Read[s] Book before datetime 3, so ω
+is valid wrt the obligations of the policy. However, as permissions are violated,
+ω violates the whole policy.
+One can observe that our semantics adopts the prohibited-by-default ap-
+proach, that is, everything not explicitly permitted is implicitly prohibited. Pro-
+hibitions are then primarily useful to “carve out” prohibited subsets of a per-
+mission. We believe this is a practical choice in several use cases, such as data
+sharing, which require a cautious approach to permissions. However, one can
+easily simulate the alternative semantics, permitted-by-default, by adding to all
+policies a universal permission that matches every event. This can be easily done
+with inferences over actions, by defining a single permission for a generic top-
+level action that all other actions are specialisations of. The only limitation of
+simulating this alternative semantics is that it does not allow the “carving out”
+of permitted subsets of prohibitions.
+It should also be noted that our semantics is closed-world; any event that
+does not appear in the state of the world is false, that is, is inferred not to have
+happened. Closed-world semantics are more natural for a usage policy, which by
+nature intends to govern the access and use of resources.
+3.2
+Full ODRL
+In this section we extend ODRL Lite to cover useful ODRL features such as
+duties, remedies and consequences to express the core of the ODRL language.
+
+
+===== PAGE 8 / 15 =====
+
+8
+Salas et al.
+Definition 2. An ODRL Lite policy < P, F, O > can be extended into an ODRL
+Policy < P, F, O, DP, DPC, FR, OC >, where:
+– DP is a set of pairs of event rules <τ, τ ′>, with τ, τ ′ ∈P, specifying that τ ′
+is a duty of permission τ.
+– DPC is a set of triples of event rules <τ, τ ′, τ ′′>, with τ, τ ′, τ ′′ ∈P specifying
+that τ ′ is a duty of permission τ with consequence τ ′′.
+– FR is a set of pairs of event rules <τ, τ ′>, with τ /∈F and τ ′ ∈P specifying
+that τ ′ is a remedy of prohibition τ.
+– OC is a set of pairs of event rules <τ, τ ′>, with < Datetime, ≤, t >∈τ,
+where t is a timestamp, τ /∈O, and τ ′ ∈P, specifying that τ ′ is a consequence
+of not fulfilling the obligation τ by time t.
+Note that per the specification "the Party obligated to perform the duty
+MUST have the ability to exercise the Duty Action"[9]. Thus, every duty rule τ ′
+in a pair <(τ, τ ′)> in DP must explicitly be in P (and this sentence is guaran-
+teed for consistent policies). We have made similar choices for the rest of these
+complex rules as per the specification.
+Unlike ODRL Lite, this extended definition makes direct use of event times-
+tamps, to establish the temporal ordering of events. Intuitively, DP describes
+duties that must have been implemented before a permission was exercised; DPC
+extends this with consequences that must come, alongside the original duty if
+a permission was exercised without fulfilling its duty; FR contains prohibitions
+and remedies which must follow the violation of the former; lastly, OC dictates
+consequences that should occur, in addition to the obliged event, if the latter is
+not performed in time. Given a rule τ and an event e, a time-independent match
+is denoted softmatch(τ, e) and is true if match(τ \{ ⟨Datetime, ≤, t⟩| t ∈T }, e),
+where T is the set of all time points.
+Definition 3. An ODRL Policy < P, F, O, DP, DPC, FR, OC > is violated on
+a state of the world ω if the ODRL Lite Policy < P, F, O > is violated on ω, or
+one of the following holds:
+– (permission duties) there exists an event e ∈ω and a pair of event rules
+<τ, τ ′> in DP such that match(τ, e) is true and there is no event e′ ∈ω
+with e′
+0 ≤e0 and match(τ ′, e′) true; equivalently:
+∃e ω(e) ∧
+_
+<τ,τ ′>∈DP
+match(τ, e) ∧∄e′ ω(e′) ∧match(τ ′, e′) ∧(e′
+0 ≤e0) (5)
+– (permission duties with consequences) there exists an event e ∈ω and
+a triple of rules <τ, τ ′, τ ′′> in DPC such that match(τ, e) is true (per-
+mission exercised), and (a) there is no prior (duty) event e′ ∈ω with
+match(τ ′, e′) and e′
+0 ≤e0 and (b) there is no subsequent duty event e′ ∈ω
+with match(τ ′, e′) and e0 ≤e′
+0, or, there is no subsequent consequence event
+
+
+===== PAGE 9 / 15 =====
+
+Evaluation and Comparison Semantics for ODRL
+9
+e′′ ∈ω with match(τ ′′, e′′) and e0 ≤e′′
+0; equivalently:
+∃e ω(e)∧
+_
+<τ,τ′,τ′′>∈DP C
+match(τ, e)∧
+
+
+
+
+∄e′ ω(e′) ∧match(τ ′, e′) ∧(e′
+0 ≤e0) ∧
+
+
+∄e′ ω(e′) ∧match(τ ′, e′) ∧(e0 ≤e′
+0)
+∨
+∄e′′ ω(e′′) ∧match(τ ′′, e′′) ∧(e0 ≤e′′
+0)
+
+
+
+
+
+
+(6)
+– (prohibition remedies) there exists an event e ∈ω and a pair of event
+rules <τ, τ ′> in FR with match(τ, e) and there is no event e′ ∈ω with
+match(τ ′, e′) and e′
+0 ≥e0; equivalently:
+∃e ω(e) ∧
+_
+<τ,τ ′>∈F R
+match(τ, e) ∧∄e′ ω(e′) ∧match(τ ′, e′) ∧(e′
+0 ≥e0) (7)
+– (obligation consequences) for any pair of event rules <τ, τ ′> in OC, such
+that <Datetime, ≤, t>∈τ there is no event e ∈ω such that match(τ, e)
+(obligation not fulfilled) and there is no pair of events e′, e′′ ∈ω such
+that softmatch(τ, e′) (obligation implemented late), match(τ ′, e′′) and e′′
+0 ≥t
+(consequence implemented); equivalently:
+_
+<τ,τ ′>∈OC,<0,≤,t>∈τ
+
+ ∄e. ω(e) ∧match(τ, e)
+
+∧
+ ∄e′, e′′. ω(e′) ∧ω(e′′)
+∧softmatch(τ, e′) ∧match(τ ′, e′′) ∧(e′′
+0 ≥t)
+
+
+
+(8)
+Again, all elements of Definition 3 are first-order queries and thus detecting
+violations of ODRL policies can be done via query answering.
+Example 5. Consider the following Policy : “Permission for Alice to Print Book
+provided Bob has Read Book”. We translate this as a pair of event rules <
+τ, τ ′ > where the permission component is < Actor, =, Alice > ∧< Action, =
+, Print > ∧< Asset, =, Book > and the duty component is translated as <
+Actor, =, Bob > ∧< Action, =, Read > ∧< Asset, =, Book >. In this case,
+each individual component matches an event in Table 1– the event with datetime
+1 for the permission component, and the event with datetime 2 for the duty
+component. However the datetime feature of the duty component is greater than
+that of the permission component, indicating that the permitted event occurred
+before the duty was carried out. Thus, the state of the world violates the policy.
+Note that equation 5 does not examine if there is a permission for all events,
+as this is already performed in equation 1. This is why any event detected here
+(and equally for should also be explicitly permitted by equation 1; this is required
+by Definition 2 which makes sure that for all pairs <(τ, τ ′)> in DP, rule τ also
+is in P. The same is true for permission rules in DPC. This is not true however
+for prohibitions in FR, i.e., if a for a pair <(τ, τ ′)> a rule τ is also in F then
+equation 2 will capture a violation independent of remedies, a case we want to
+avoid as it would make the remedy meaningless. Similarly, an obligation rule τ
+that exists in a pair <(τ, τ ′)> in OC should not exist in O since the absence of an
+obliged event in O, inside the “deadline”, would trigger a violation by equation 3,
+regardless of whether the obligation and its consequence were later fulfilled.
+
+
+===== PAGE 10 / 15 =====
+
+10
+Salas et al.
+3.3
+Incorporating Reasoning
+Instances of ODRL components may come from an ontology that defines rela-
+tionships between them that are relevant to the problem of policy evaluation.
+For example, W3C’s ODRL Vocabulary5 defines the Actions Use and Trans-
+fer as the top level types, with more specific instances that encompass their
+operational semantics specified with the included in relation. For example the
+operational semantics of action Display (e.g. an image) is included in the opera-
+tional semantics of action Play (e.g. a video). A permission to perform an action,
+such as Play, naturally also implies the permission to perform its sub-actions,
+such as Display. Our semantics can easily be extended to capture this type of
+reasoning, by considering extended policies where all such implied permissions
+are materialized. Other types of reasoning can equally be dealt with similar ma-
+terialisation steps, or through extensions of our definitions of query evaluation,
+containment and equivalence to include reasoning dependencies. For example,
+conjunctive query containment under dependencies [10] can be answered either
+by (a) materialising new event rules, by the use of forward-chaining, algorithms
+that use the dependencies, resulting in saturated policies which can then be
+checked for containment; or (b) directly rewriting the query form of the initial
+policy into a new policy and then checking for containment [2].
+We do not study other rules of inference in this paper, as no obvious interpre-
+tation of them can be extracted from the ODRL specification. For example, it is
+debatable whether a prohibition to perform the Play action should also imply a
+prohibition to perform the Display action. Conversely, a prohibition to Display
+might also imply a prohibition to Play. How reasoning should be dealt with is
+also unclear for obligations or other ODRL components.
+4
+Policy Comparison Semantics
+In this section we model policy comparison using query containment and equiv-
+alence. In particular, query containment models policy implication, intuitively
+stating when a policy is broader or stricter than another policy. On the other
+hand, query equivalence models policies that are true on exactly the same states
+of the world, that is, they are not conflicting. A query q is contained in a query
+q′ (q ⊑q′) if for all database instances D, the result of q on D, denoted q(D) is
+included in the result of q′ on the same D, that is q(D) ⊆q′(D). When q ⊑q′
+and q′ ⊑q we say that the two queries are equivalent and write q ≡q′.
+Given ODRL policies p and p′, p is contained in p′, denoted p ⊑p′, if: for
+any state of the world ω, whenever p(ω) is true then p′(ω) is true. Thus by
+translating the policies p and p′ to queries, qp, qp′ correspondingly, as dictated
+by Def 3, it holds that p ⊑p′ iff qp ⊑qp′. If p ⊑p′ and p′ ⊑p then we say that
+p is equivalent to p′, denoted p ≡p′.
+In the general case, any semantic difference between two policies could be
+considered a cause for conflict, such as in a policy negotiation scenario when
+5 https://www.w3.org/TR/odrl-vocab
+
+
+===== PAGE 11 / 15 =====
+
+Evaluation and Comparison Semantics for ODRL
+11
+each party is not willing to compromise on their chosen set of policy rules. We
+call this a symmetric conflict. When a symmetric conflict exists between policies
+p and p′, then it also exists between p′ and p.
+Definition 4. Given policies p and p′, we say that there is a symmetric conflict
+between p and p′ if p̸ ≡p′.
+Often, it is useful to determine whether a policy is strictly more/less permis-
+sive than another one. For example, in a data sharing scenario, no conflict arises
+if the policy proposed by a data requester is stricter than the policy offered by
+the data provider. This relaxation leads to the notion of asymmetric conflicts.
+Definition 5. Given a requester policy pr and a provider policy po, we say that
+there is an asymmetric conflict between them, if pr̸ ⊑po.
+4.1
+Comparison of ODRL Lite policies
+We now provide an approach, alternative to query containment, to detect asym-
+metric conflicts (and thus also symmetric ones) among ODRL Lite policies that
+is simpler to implement. As evidence of this, we developed an implementation6
+which is currently used in the UPCAST project [17] to facilitate policy negotia-
+tion in Data Marketplaces. This approach works by directly comparing the rules
+of two policies against each other. For this, we are going to use the notions of
+event rule containment and event rule overlap.
+Definition 6. For all event rules τ, τ ′, we say that τ is contained in τ ′, denoted
+τ ⊑τ ′ if for all events e, match(τ, e) implies match(τ ′, e).
+Definition 7. For all event rules τ, τ ′, we say that τ overlaps with τ ′, denoted
+τ ⊓τ ′ if there exists an event e such that match(τ, e) ∧match(τ ′, e).
+These definitions are trivially lifted to sets of event rules on either side of the
+containment and overlap operator. This approach also assumes that the policies
+are in a consistent normal form, that is, when there is no overlap between prohi-
+bitions and permissions/obligations, and every event that matches an obligation
+also matches a permission. While the existing implementation assumes that poli-
+cies are already in this format, any ODRL Lite policy can be made consistent
+by removing from a policy the following redundant elements: (1) every part of a
+permission and obligation that is explicitly forbidden, and (2) every part of an
+obligation that is not permitted. Note how these elements are redundant, and
+thus their removal does not change the meaning of the policy. Also note how
+prohibitions can be removed too, as they are redundant in a consistent policy.
+Definition 8. An ODRL Lite policy p =<P, F, O> is consistent if P ⊓/ F,
+O ⊓/ F, and O ⊑P.
+6 https://github.com/paolo7/ODRL2SHACL
+
+
+===== PAGE 12 / 15 =====
+
+12
+Salas et al.
+Theorem 1. Given a consistent ODRL Lite requester policy p =<P, F, O>,
+and a consistent ODRL Lite provider policy p′ =<P ′, F ′, O′>, p̸ ⊑p′ iff:
+1. The requester’s permissions are not contained in the provider’s permissions,
+that is, P̸ ⊑P ′ is true, or
+2. The requester is not explicitly agreeing to every obligation set by the provider,
+that is, ∃τ ′ ∈O′, ∄τ ∈O (τ ⊑τ ′)
+Proof. ⇐If p̸ ⊑p′, then there must exist a state of the world ω where p is
+valid but p′ is not. Since prohibitions are redundant in consistent policies, there
+must exist a violation for p′ in ω from the permission or obligation equation of
+Definition 1. If the violation is caused by the permission equation, then there
+exists an event e ∈ω that matches a permission in P but no permissions in
+P ′. Thus P̸ ⊑P ′. If the violation is caused by the obligation equation, then
+there exist an obligation τ ′ ∈O′ such that no event e exists in ω, such that
+match(τ ′, e) is true. Thus, there cannot exist a τ ∈O such that τ ⊑τ ′, as this
+would imply the existence of an e in ω that matches τ and, by inclusion, τ ′.
+⇒If either condition (1) or condition (2) of the theorem are true, then we
+can construct a state of the world ω where p is valid but p′ is not (thus proving
+p̸ ⊑p′) as follows. If the second condition of the theorem is true, pick an
+obligation τ ′ ∈O′ such that ∄τ ∈O (τ ⊑τ ′). Construct ω from an empty set by
+adding an event e to ω for each τ ∈O, such that match(τ, e) and ¬match(τ ′, e)
+(note that, by the premises, such element must exist). It is easy to see that ω
+satisfies p but not p′, as it violates obligation τ ′. If the second condition of
+the theorem is false, but the first is true, construct ω by adding an event e
+to ω for each τ ∈O (thus every obligation of O is satisfied, and so naturally also
+every obligation in O′, as every obligation in O′ is satisfied by the same events
+that satisfy the obligations from O that they contain), then pick one permission
+τ ∈P such that {τ}̸ ⊑P ′, and one event e∗such that match(τ, e∗) and not
+exists a τ ′ ∈P ′ such that match(τ, e∗). Such element must exist if P̸ ⊑P ′.
+After adding e∗to ω, ω still satisfies p but not longer p′.
+5
+Related Work
+We will now present a brief overview of the evolution of ODRL and its formalisa-
+tions, and how they compare with the work in this paper. Iannella’s work in [7]
+and [8] presented ODRL’s early development and use cases, as well as introduced
+its XML structure and application to Creative Commons licensing. These studies
+also discussed the challenges of semantic mapping and policy interpretation. The
+Open Mobile Alliance and multimedia scenarios provided additional grounding
+in practical implementation contexts. Serrão et al. [14] demonstrated the role of
+ODRL in the OpenSDRM architecture for managing streaming media and sen-
+sor data, [18] offered a broader review of ODRL’s evolution and its comparative
+position among rights expression languages (RELs), while [12] highlighted the
+challenges in using ODRL for real-world data-sharing infrastructures.
+
+
+===== PAGE 13 / 15 =====
+
+Evaluation and Comparison Semantics for ODRL
+13
+The problem of providing an ODRL formal semantics has been tackled since
+the inception of the language. Pucella and Weissman defined a formal semantics
+of ODRL 1.1 for the problem of defining when a permission (or prohibition)
+follows from a set of ODRL statements [13]. At the time, the link with RDF had
+not been established; ODRL was XML based and lacked a proper way to specify
+instances of Parties and Assets. To the best of our knowledge, the refinement
+of XML Schemas into RDF and ontologies was first proposed by [6], while [11]
+proposed the first OWL modelling of ODRL, before the release of ODRL 2.0.
+Steyskal and Polleres [16] proposed semantics for ODRL 2.1 supporting rea-
+soning encoded in the functions that matched requests against rules in a policy.
+Requests contain actions, parties, assets and constraints. The requested actions
+are matched against rule actions, and return one of six values depending on the
+relationship between actions (match, no match, broader, narrower, part of, re-
+quired). Constraints are evaluated as boolean functions, while parties and assets
+are matched exactly. Based on these matches a policy is found to be permitted,
+conditionally permitted, conditionally prohibited, not active or not applicable.
+De Vos et al. [4] defined the ODRL Regulatory Compliance Profile (ORCP),
+a custom ODRL profile, and semantics based on answer set programming where
+processes (series of events, in our case) are modelled as model states, and ODRL
+policies, which are in RDF format, are translated into fluents –facts that are
+true if present and false otherwise – following the closed-world assumption. The
+model and fluents would be compiled into an answer set program and solved
+to check for compliance between policies and regulatory frameworks. All men-
+tions of reasoning under dependencies are left as future work, but still discussed
+briefly. Our approach instead saturates policies by materialising new event rules
+according to dependencies specified in a given ontology.
+The work in [3] proposes a novel approach to express ODRL policies that
+integrates the descriptive ontology terms of ODRL with other languages that al-
+low dynamic data handling or function evaluation. Our evaluation problem can
+then be cast as the execution of the program in the target language. The frame-
+work proposes abstract functions transformConstraints and transformActions
+to translate ODRL to a target programming language and provide implemen-
+tations for Python and Java. They do not propose a formal semantics of the
+transformation functions, highlighting instead flexibility and practicality.
+Recently [15] introduced a Compliance Report Model and test suite to sup-
+port systematic analysis of policy engines. They also implement an ODRL Eval-
+uator based on the current ODRL formal semantics draft with reasoning ca-
+pabilities implemented by using the EYE reasoner. However, their evaluator is
+incomplete due to the incompleteness of the W3C draft.
+We now provide a more detailed comparison with the formalisation of ODRL
+semantics by Bonatti et al. [1]. While their work is an early stage of development,
+with certain components being left for future work, it is the most comprehensive
+formalisation of ODRL 2.2 to date, which builds and expands on previous work.
+They provide a declarative semantics for ODRL which focuses on a variant of
+the evaluation problem, where policies are used to determine compliance over
+
+
+===== PAGE 14 / 15 =====
+
+14
+Salas et al.
+traces (i.e. sequence of states). A core difference between our semantics and the
+one presented by Bonatti et al. is that ours is based on query answering and
+it is (1) our semantics uses a single domain of constants by abstracting away
+from identifiers (e.g. when two or more syntactical expression refer to the same
+entity); (2) it deals with inferences (such as dependencies between actions), as
+a separate materialisation step; (3) it does not require a distinction between
+“nontemporal” and “temporal” left operands, and between “active” or “inactive”
+rules.
+At a semantic level, our formalisation differs from the one in Bonatti et al.
+in the following ways. In [1], obligations need to be fulfilled by all possible as-
+signees, while in ours only by one. Our choice simplifies computing compliance
+with obligations, as determining a complete list of all possible assignees might
+not always be trivial or even possible. Our semantics also provides an inter-
+pretation of obligation with consequences, while in [1] it is not specified under
+which conditions an obligation can be considered fulfilled in time (thus not re-
+quiring consequences), and when instead consequences are required. Moreover,
+in [1], events that fulfil obligations are automatically permitted. However this
+is not formalised, and if any one of multiple events fulfils a single obligation,
+it is unclear if all of them are automatically permitted. Our semantics is more
+expressive, as it can also capture the case in which some events that could fulfil
+an obligation are not directly permitted, but might require duties or incur conse-
+quences. We also provide an interpretation of constraint operators which avoids
+redundancy and better aligns with the specification (e.g. differentiating between
+isA, isPartOf and isAnyOf). Lastly, we extend the study of policy comparison
+with an asymmetric case and motivate it in a practical scenario.
+6
+Conclusion
+In this paper, we proposed a comprehensive formal semantics for the latest
+ODRL specification (2.2). Our semantics directly addresses both the problem
+of policy evaluation (i.e. whether a policy is satisfied in a state of the world)
+and the problem of policy comparison. For the latter problem, we define both
+a strict symmetric comparison and a softer asymmetric one. We discussed the
+need for both comparison approaches in the context of data usage policies in
+data marketplaces and Data Spaces, providing an answer to the increasing need
+for data usage regulation in the age of AI. Our policy comparison semantics is
+intuitive and easy to interpret, and, due to its grounding in query containment,
+is easy to implement in any standard query language such as SQL or SPARQL.
+In particular, we provided a streamlined approach to detect both types of pol-
+icy comparisons for a core subset of ODRL policies, proved its correctness and
+provided a reference implementation. Future work will focus on a theoretical
+analysis of our semantics, and extending its implementation with the aim of
+making it more usable for the community.
+
+
+===== PAGE 15 / 15 =====
+
+Evaluation and Comparison Semantics for ODRL
+15
+References
+1. Bonatti, P.A., Fornara, N., Harth, A.: Towards a Formal Semantics of the Open
+Digital Rights Language (ODRL 2.2). CEUR Workshop Proceedings, vol. 3977
+(2025), https://ceur-ws.org/Vol-3977/OPAL2025-4.pdf
+2. Calvanese, D., De Giacomo, G., Lembo, D., Lenzerini, M., Rosati, R.: Tractable
+reasoning and efficient query answering in description logics: The DL-Lite family.
+Journal of Automated Reasoning 39, 385–429 (2007)
+3. Cimmino, A., Cano-Benito, J., García-Castro, R.: Open Digital Rights Enforce-
+ment framework (ODRE): from descriptive to enforceable policies. Computers &
+Security 150, 104282 (2025)
+4. De Vos, M., Kirrane, S., Padget, J., Satoh, K.: ODRL policy modelling and com-
+pliance checking. In: Rules and Reasoning. pp. 36–51. Springer International Pub-
+lishing, Cham (2019)
+5. Føllesdal, D., Hilpinen, R.: Deontic logic: An introduction. In: Deontic logic: In-
+troductory and systematic readings, pp. 1–35. Springer (1971)
+6. García, R., Gil, R., Gallego, I., Delgado, J.: Formalising ODRL semantics using web
+ontologies. In: Proc. of the 2nd International ODRL Workshop. pp. 1–10 (2005)
+7. Iannella, R.: The Open Digital Rights Language: XML for digital rights manage-
+ment. Information Security Technical Report 9(3), 47–55 (2004)
+8. Iannella, R.: Open Digital Rights Language (ODRL). Sydney University Press
+(2007)
+9. Iannella, R., Villata, S.: ODRL Information Model 2.2, https://www.w3.org/TR/
+odrl-model/, (accessed: 20.08.2025)
+10. Johnson, D.S., Klug, A.: Testing containment of conjunctive queries under func-
+tional and inclusion dependencies. In: Proceedings of the 1st ACM SIGACT-
+SIGMOD Symposium on Principles of Database Systems. p. 164–169. PODS ’82,
+Association for Computing Machinery (1982)
+11. Kasten, A., Grimm, R.: Making the semantics of ODRL and URM explicit using
+web ontologies. In: Virtual Goods. pp. 77–91 (2010)
+12. Kebede, M., Sileno, G., Van Engers, T.: A critical reflection on ODRL. In: Inter-
+national Workshop on AI Approaches to the Complexity of Legal Systems. pp.
+48–61. Springer (2018)
+13. Pucella, R., Weissman, V.: A formal foundation for ODRL (2006). https://doi.
+org/10.48550/arXiv.cs/0601085
+14. Serrão, C., Dias, M., Delgado, J.: Using ODRL to express rights for different con-
+tent usage scenarios. In: ODRL 2005 (2005), http://hdl.handle.net/10071/250
+15. Slabbinck, W., Rojas, J., Esteves, B., Colpaert, P., Verborgh, R.: Interoper-
+able interpretation and evaluation of ODRL policies. In: Semantic Web–22nd
+International Conference, ESWC. vol. 2025 (2025). https://doi.org/10.1007/
+978-3-031-94578-6_11
+16. Steyskal, S., Polleres, A.: Towards formal semantics for ODRL policies. In: Inter-
+national Symposium on Rules and Rule Markup Languages for the Semantic Web.
+pp. 360–375. Springer (2015). https://doi.org/10.1007/978-3-319-21542-6_23
+17. Yumusak, S., Gheisari, S., Salas, J.O., Ibáñez, L.D., Konstantinidis, G.: Data
+sharing negotiation and contracting. CEUR Workshop Proceedings, vol. Vol-3828
+(2024), https://ceur-ws.org/Vol-3828/paper39.pdf
+18. Zhang, Y., Wei, X., Zhao, S.: Research on ODRL connecting with application
+scenarios. In: 2008 International Seminar on Future Information Technology and
+Management Engineering. pp. 261–264. IEEE (2008). https://doi.org/10.1109/
+FITME.2008.43

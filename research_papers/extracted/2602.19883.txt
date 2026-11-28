@@ -1,0 +1,1049 @@
+# SOURCE: 2602.19883.pdf
+# PAGES: 17
+
+
+
+===== PAGE 1 / 17 =====
+
+Denotational Semantics for ODRL:
+Knowledge-Based Constraint Conflict Detection
+Daham M. Mustafa1,2, Diego Collarana2, Yixin Peng1, Rafiqul Haque3,
+Christoph Lange-Bever1,2, Christoph Quix1,2, and Stefan Decker1,2
+1 RWTH Aachen University, Germany
+2 Fraunhofer FIT, Sankt Augustin, Germany
+3 University of Galway, Ireland
+daham.mustafa@rwth-aachen.de
+Abstract. ODRL’s six set-based operators—isA, isPartOf, hasPart,
+isAnyOf, isAllOf, isNoneOf—depend on external domain knowledge
+that the W3C specification leaves unspecified. Without it, every cross-
+dataspace policy comparison defaults to Unknown. We present a de-
+notational semantics that maps each ODRL constraint to the set of
+knowledge-base concepts satisfying it. Conflict detection reduces to deno-
+tation intersection under a three-valued verdict—Conflict, Compat-
+ible, or Unknown—that is sound under incomplete knowledge. The
+framework covers all three ODRL composition modes (and, or, xone)
+and all three semantic domains arising in practice: taxonomic (class sub-
+sumption), mereological (part-whole containment), and nominal (iden-
+tity). For cross-dataspace interoperability, we define order-preserving
+alignments between knowledge bases and prove two guarantees: conflicts
+are preserved across different KB standards, and unmapped concepts
+degrade gracefully to Unknown—never to false conflicts. A runtime
+soundness theorem ensures that design-time verdicts hold for all exe-
+cution contexts. The encoding stays within the decidable EPR fragment
+of first-order logic. We validate it with 154 benchmarks across six knowl-
+edge base families (GeoNames, ISO 3166, W3C DPV, a GDPR-derived
+taxonomy, BCP 47, and ISO 639-3) and four structural KBs targeting
+adversarial edge cases. Both the Vampire theorem prover and the Z3
+SMT solver agree on all 154 verdicts. A key finding is that exclusive
+composition (xone) requires strictly stronger KB axioms than conjunc-
+tion or disjunction: open-world semantics blocks exclusivity even when
+positive evidence appears to satisfy exactly one branch.
+Keywords: ODRL · Policy Conflict Detection · Denotational Semantics
+· Three-Valued Reasoning · Knowledge Bases · Automated Reasoning
+1
+Introduction
+The Open Digital Rights Language (ODRL) is the W3C Recommendation for ex-
+pressing digital policies [7], adopted across European data ecosystems including
+arXiv:2602.19883v1  [cs.CL]  23 Feb 2026
+
+
+===== PAGE 2 / 17 =====
+
+2
+D. Mustafa et al.
+Gaia-X [5], IDSA and the Eclipse Dataspace Connector [8]. ODRL defines set-
+based operators—isA, isPartOf, isAnyOf, isNoneOf—but provides no mecha-
+nism to compute them. Their meaning depends on external domain knowledge
+that the standard deliberately leaves unspecified.
+Table 1 traces a scenario from the German cultural dataspace (Datenraum
+Kultur) [17] through four escalating interoperability challenges. The Bayerische
+Staatsbibliothek (BSB) [1] permits access to its digitized German language
+manuscripts for non-commercial use within Europe. A French national archive
+requests access from France, in French, for scientific research.
+Challenge 1: Single-KB grounding. Without a knowledge base, an ODRL
+engine sees incomparable strings and defaults to Unknown. Grounding against
+GeoNames, BCP 47, and W3C DPV yields per-dimension verdicts: Compati-
+ble (France ⪯Europe), Conflict (French̸ ⊑German), Unknown (DPV clas-
+sifies scientific research under R&D without committing to the commercial/non-
+commercial distinction).
+Challenge 2: Cross-dataspace composition. Three constraint dimen-
+sions must overlap simultaneously under conjunction. A single Conflict blocks
+the request; the framework identifies which dimension caused the failure.
+Challenge 3: Cross-standard alignment. The BSB uses GeoNames [6]
+and DPV [13]; the French archive uses ISO 3166 [9] and a GDPR-derived taxon-
+omy [3]. When a concept lacks a counterpart (GeoNames has bavaria; ISO 3166
+does not), the verdict degrades to Unknown—never to a false Conflict. Con-
+flicts detected in one KB must be preserved across aligned KBs.
+None of these challenges is addressed by existing approaches. Current ODRL
+reasoners either ignore set-based operators or hardcode domain-specific logic
+that cannot generalize across dataspaces. The result is a “default deny” posture
+that blocks legitimate data sharing.
+Challenge 4: Policy quality assurance. Policies must be internally con-
+sistent before data flows. Self-contradictions arise when and is written instead
+of or, requiring a purpose to be simultaneously commercial and academic—
+unsatisfiable. Redundancies occur when constraints imply each other: requir-
+ing France and Europe adds no restriction since France ⪯Europe. The DSSC
+blueprint further requires downstream policies to only restrict upstream terms [2].
+Without formal verification, these errors go undetected.
+We present a semantic grounding framework that addresses all four chal-
+lenges. Each ODRL constraint maps to a denotation—the set of KB concepts
+satisfying it. Conflict detection reduces to denotation intersection: non-empty
+means Compatible; provably empty means Conflict; insufficient KB informa-
+tion means Unknown. For cross-standard alignment, we define order-preserving
+injections between concept spaces and prove that conflicts are preserved while
+unmapped concepts degrade gracefully. Design-time verdicts guarantee runtime
+enforcement.
+The encoding stays within the Effectively Propositional (EPR) fragment of
+first-order logic, guaranteeing decidability. Bidirectional denotation rules are es-
+sential: if -direction axioms populate denotations from KB facts (proving com-
+
+
+===== PAGE 3 / 17 =====
+
+Denotational Semantics for ODRL Conflict Detection
+3
+Table 1. Four interoperability challenges illustrated through a single scenario: BSB
+permits European access to German-language manuscripts for non-commercial use; a
+French archive requests access from France, in French, for scientific research.
+Challenge
+Scenario
+Without framework
+With framework
+Single-KB
+grounding
+Can we compute
+ODRL’s
+set
+operators?
+Policy uses isPartOf, isA; request uses
+eq. Three dimensions:
+spatial: France vs. Europe
+purpose: ScientificRes. vs. NonCom-
+mercial
+language: fr vs. de
+All
+three
+return
+Un-
+known—engine sees incom-
+parable strings
+Per-dimension
+ver-
+dicts:
+Compatible
+(France
+⪯Europe)
+Unknown (R&D ⊑?
+NonComm.)
+Conflict (fr̸ ⊑de)
+Cross-
+dataspace
+composition
+Do
+multi-
+dimensional
+policies
+com-
+pose?
+BSB policy: 3 constraints. French re-
+quest: 3 constraints. Compatibility re-
+quires all pairs to overlap.
+No mechanism to conjoin
+verdicts across operands
+Language
+Conflict
+blocks entire request.
+Diagnostic
+isolates
+blocking dimension.
+Cross-
+standard
+alignment
+What if each side
+uses a different
+KB?
+BSB uses GeoNames, DPV, BCP 47.
+French archive uses ISO 3166, GDPR
+taxonomy, ISO 639-3. Same scenario,
+different standards.
+Policies
+from
+different
+standards
+are
+mutually
+opaque—no interoperability
+Conflicts
+preserved
+across
+KB
+pairs.
+Unmapped
+concepts
+degrade to Unknown,
+never to false Con-
+flict.
+patibility); only-if axioms constrain membership (proving conflict). Neither di-
+rection alone suffices.
+ODRL defines 14 KB-dependent left operands across three semantic domains:
+taxonomic (⊑: purpose, language), mereological (⪯: spatial), and nominal (iden-
+tity: device). A single framework handles all 14 uniformly.
+Contributions. (1) A denotational semantics for all eight ODRL KB-dependent
+operators across three semantic domains, supporting conflict detection, self-
+contradiction analysis, redundancy identification, and refinement verification—
+all under a three-valued verdict sound under incomplete knowledge (Section 2).
+(2) A decidable EPR encoding with bidirectional denotation rules covering
+all three ODRL composition modes, validated by 100% Vampire/Z3 agreement
+across 154 benchmarks (Section 3). (3) A benchmark suite of 154 problems
+across six KB families and four structural KBs, revealing that xone requires
+strictly stronger KB axioms than and/or (Section 3).
+This framework operates at the constraint level: it determines whether con-
+straint denotations can co-exist, not whether a complete ODRL rule activates.
+The W3C ODRL Formal Semantics draft [4] specifies rule activation via con-
+straint satisfaction, duty fulfillment, and refinement matching. Our framework
+addresses the logically prior question: can two constraints ever be simultaneously
+
+
+===== PAGE 4 / 17 =====
+
+4
+D. Mustafa et al.
+satisfied? Static conflict detection prunes unsatisfiable combinations at design
+time; operational semantics evaluates activation at runtime. The two are com-
+plementary.
+Supplementary Material. Related work and empirical runtime analysis will ap-
+pear in the extended version. The benchmark suite, Isabelle/HOL theory files,
+and TPTP/SMT-LIB encodings will be made available at https://github.
+com/Daham-Mustaf/odrl-benchmark upon publication.
+2
+Semantic Grounding Framework
+We formalize the grounding of ODRL constraints against external knowledge
+bases. Conflict detection reduces to testing denotation intersection under a three-
+valued semantics that is sound even when knowledge is incomplete.
+Definition 1 (ODRL Constraint). A constraint is a tuple c = (ℓ, ▷◁, v) where
+ℓ∈L is a left operand, ▷◁∈O is an operator, and v ∈V is a right operand value.
+Definition 2 (Knowledge Base). A knowledge base for operand ℓis a struc-
+ture KBℓ= (C, ≤, ⊥⊥, γ) where:
+– C is a finite set of domain concepts,
+– ≤is a reflexive, transitive relation on C,
+– ⊥⊥⊆C ×C is a symmetric, irreflexive disjointness relation satisfying down-
+ward closure: if x ⊥⊥y, x′ ≤x, and y′ ≤y, then x′ ⊥⊥y′,
+– γ : V ⇀C maps right operand values to concepts (γ(v) = ⊥when un-
+mapped).
+The finiteness of C ensures decidability of conflict detection. The framework re-
+quires only ≤and ⊥⊥; the following classification guides KB selection in practice:
+Taxonomic: ≤= ⊑(class subsumption). Operands: purpose, language, industry,
+fileFormat, media, recipient.
+Mereological: ≤= ⪯(part-whole containment). Operands: spatial, virtualLocation.
+Nominal: ≤= = (identity only); ⊥⊥is total on distinct concepts (x ⊥⊥y ⇐⇒
+x̸ = y). Operands: deliveryChannel, device, event, product, system,
+unitOfCount. Under identity, isA degenerates to eq and isAllOf requires
+all values to coincide.
+The classification is a deployment guideline; all definitions are parameterized by
+≤and ⊥⊥alone.
+Lemma 1 (Disjointness–Order Consistency). If x ≤y then ¬(x ⊥⊥y).
+Proof. Suppose x ≤y and x ⊥⊥y. By reflexivity, x ≤x. Downward closure with
+x′ = y′ = x gives x ⊥⊥x, contradicting irreflexivity.
+Assumption 1 (KB Correctness) For grounded values (γ(v)̸ = ⊥), KB relations—
+both ≤and ⊥⊥—accurately model domain semantics. Knowledge bases may be
+incomplete but contain no incorrect positive (≤) or negative (⊥⊥) assertions.
+
+
+===== PAGE 5 / 17 =====
+
+Denotational Semantics for ODRL Conflict Detection
+5
+Table 2. KB-dependent ODRL operands with semantic domain classification
+Left Operand
+ODRL Specification
+Domain
+Relation ⊥⊥Source
+language
+“A natural language”
+Taxonomic
+⊑
+Ontology
+purpose
+“A defined purpose”
+Taxonomic
+⊑
+Ontology
+industry
+“A defined industry sector”
+Taxonomic
+⊑
+Ontology
+fileFormat
+“A transformed file format”
+Taxonomic
+⊑
+Ontology
+media
+“Category of a media asset”
+Taxonomic
+⊑
+Ontology
+recipient
+“The party receiving the result”
+Taxonomic
+⊑
+Ontology
+spatial
+“A named geospatial area”
+Mereological ⪯
+Siblings
+virtualLocation “A location of the IT space”
+Mereological ⪯
+Siblings
+deliveryChannel “The delivery channel used”
+Nominal
+—
+x̸ = y
+device
+“An identified device”
+Nominal
+—
+x̸ = y
+event
+“An identified event”
+Nominal
+—
+x̸ = y
+product
+“Category of product or service”
+Nominal
+—
+x̸ = y
+system
+“An identified computing system” Nominal
+—
+x̸ = y
+unitOfCount
+“The unit of measure”
+Nominal
+—
+x̸ = y
+2.1
+Constraint Interpretation
+Each constraint is mapped to a denotation: the set of domain concepts satisfying
+it. When the KB cannot ground a value, the denotation is ⊤(indeterminate, i.e.,
+not computable from the KB—distinct from the universal concept in description
+logics).
+Definition 3 (Constraint Denotation).
+Let KBℓ= (C, ≤, ⊥⊥, γ) be the
+knowledge base for operand ℓ, and let c = (ℓ, ▷◁, v) with g = γ(v). If g = ⊥,
+then [[c]]KB = ⊤. Otherwise: Equality operators (all domains):
+[[ℓeq v]]KB = {g}
+(1)
+[[ℓneq v]]KB = C \ {g}
+(2)
+Hierarchical operators:
+[[ℓisA v]]KB = {x ∈C | x ≤g}
+(3)
+[[ℓisPartOf v]]KB = {x ∈C | x ≤g}
+(4)
+isA and isPartOf receive identical denotations because the semantic distinction
+is carried by the KB’s ordering ≤, not the operator label4 (cf. Definition 2).
+[[ℓhasPart v]]KB = {x ∈C | g ≤x}
+(5)
+4 The ODRL vocabulary glosses isA as instance-of and isPartOf as contained-by,
+but provides no distinct formal evaluation rules—both test downward closure in a
+hierarchy. Our framework recovers the intended distinction through KB selection:
+taxonomic KBs supply ⊑, mereological KBs supply ⪯(Definition 2). The operator
+label is thus redundant given the KB’s semantic domain.
+
+
+===== PAGE 6 / 17 =====
+
+6
+D. Mustafa et al.
+Set-valued operators (with gi = γ(vi); if any gi = ⊥, then [[c]]KB = ⊤):
+[[ℓisAnyOf {v1, . . . , vn}]]KB = Sn
+i=1{x ∈C | x ≤gi}
+(6)
+[[ℓisAllOf {v1, . . . , vn}]]KB = {x ∈C | ∀i : x ≤gi}
+(7)
+[[ℓisNoneOf {v1, . . . , vn}]]KB = C \ Sn
+i=1{x ∈C | x ≤gi}
+(8)
+In all cases, ≤is the ordering from KBℓ(Definition 2).
+Definition 4 (Conservative Intersection). For denotations D1, D2 ∈P(C)∪
+{⊤}:
+D1 ⊓D2 =
+
+
+
+
+
+∅
+if D1 = ∅or D2 = ∅
+D1 ∩D2
+if D1, D2̸ = ⊤
+⊤
+otherwise
+(9)
+The first case ensures that a provably empty denotation yields ∅regardless of
+the other operand, since ∅∩S = ∅for any set S—including indeterminate sets.
+Here ⊤denotes epistemic indeterminacy—the denotation cannot be computed
+from the KB—not the universal concept set C. The domain P(C) ∪{⊤} forms
+a flat information ordering where ⊤sits above all classical sets; ⊓is monotone
+with respect to this ordering.
+Definition 5 (Conflict Detection).
+For constraints c1, c2 over the same
+operand ℓ:
+verdict(c1, c2) =
+
+
+
+
+
+Conflict
+if [[c1]]KB ⊓[[c2]]KB = ∅
+Compatible
+if [[c1]]KB ⊓[[c2]]KB /∈{∅, ⊤}
+Unknown
+if [[c1]]KB ⊓[[c2]]KB = ⊤
+(10)
+When γ is total on all values appearing in a policy set, no denotation equals ⊤
+and every verdict is definite (Conflict or Compatible).
+Theorem 1 (Soundness).
+If verdict(c1, c2) = Conflict, then no value si-
+multaneously satisfies both constraints.
+Proof. Conflict requires [[c1]] ⊓[[c2]] = ∅. Two cases arise:
+Case 1: Both denotations are grounded (not ⊤) with [[c1]] ∩[[c2]] = ∅. By
+Assumption 1, no concept exists in both denotations.
+Case 2: One denotation is ∅(the other may be ⊤). Without loss of generality,
+let [[c1]] = ∅. By Definition 3, no KB concept satisfies c1. By Assumption 1,
+this is accurate: no runtime value can satisfy c1, hence no value satisfies both
+constraints.
+Assumption 2 (Operand Independence) KB axioms are operand-local: no
+axiom relates concepts across different operands. Each operand ℓis interpreted
+over its own concept space Cℓ, and witnesses for different operands are drawn
+from disjoint domains. This justifies decomposing multi-operand verdicts into
+independent per-operand tests.
+
+
+===== PAGE 7 / 17 =====
+
+Denotational Semantics for ODRL Conflict Detection
+7
+Definition 6 (Constraint Composition).
+Given two ODRL rules (e.g., a
+permission and a prohibition) whose refinement constraints share operands ℓ1, . . . , ℓn,
+each operand yields a constraint pair (c(k)
+1 , c(k)
+2 )—one from each rule. ODRL
+groups these pairs using three modes. Let Vk = verdict(c(k)
+1 , c(k)
+2 ) denote the per-
+operand verdict from Definition 5. Conjunction (and): all operand pairs must
+overlap simultaneously.
+verdictand =
+
+
+
+
+
+Compatible
+if ∀k : Vk = Compatible
+Conflict
+if ∃k : Vk = Conflict
+Unknown
+otherwise
+(11)
+Disjunction (or): at least one operand pair must overlap.
+verdictor =
+
+
+
+
+
+Compatible
+if ∃k : Vk = Compatible
+Conflict
+if ∀k : Vk = Conflict
+Unknown
+otherwise
+(12)
+Exclusive disjunction (xone): exactly one operand pair must overlap, and exclu-
+sivity must be provable.
+verdictxone =
+
+
+
+
+
+
+
+
+
+Compatible
+if ∃!k : Vk = Compatible
+and ∀j̸ = k : Vj = Conflict
+Conflict
+if ∀k : Vk = Conflict
+Unknown
+otherwise
+(13)
+The composition follows three-valued Kleene semantics: Unknown propagates
+conservatively through conjunction and exclusive disjunction, while disjunction
+can resolve it if one branch yields a definite verdict. Conjunction and disjunction
+require only positive knowledge to reach definite verdicts. Exclusive disjunction
+additionally requires provable non-overlap of the other branch—via ⊥⊥axioms in
+the KB, contradictory operators, or structural impossibility. For example, if g1 ⊥
+⊥g2 from the KB’s disjointness relation, the non-overlapping branch is provably
+empty by downward closure (Definition 2). When such evidence is absent, open-
+world semantics forces Unknown, even if positive evidence appears to satisfy
+exactly one branch (cf. ODRL086 in Section 3).
+Remark 1 (Choice of Three-Valued Semantics). We adopt strong Kleene seman-
+tics (K3) because Unknown represents epistemic incompleteness, not logical
+indeterminacy. Three requirements guide the choice: (i) soundness: Conflict
+implies unsatisfiability under all KB completions; (ii) monotonicity: adding KB
+facts may refine Unknown but never reverse definite verdicts; (iii) composition-
+ality: verdicts combine locally without quantifying over completions. Kleene sat-
+isfies all three. Supervaluations require reasoning over all completions—incompatible
+with decidable EPR. Bochvar is too conservative (T ∨⊥= ⊥). Paraconsistent
+logics address inconsistency, not incompleteness.
+
+
+===== PAGE 8 / 17 =====
+
+8
+D. Mustafa et al.
+Table 3. Conflict detection verdicts and their prover encodings. The negated-
+conjecture pattern maps each verdict to a unique SZS/SMT-LIB result pair.
+[[c1]] ⊓[[c2]] Verdict
+Conjecture SZS [16]
+SMT
+∅
+Conflict
+¬∃x(. . .)
+Theorem
+unsat
+S̸ = ∅
+Compatible ∃x(. . .)
+Theorem
+unsat
+⊤
+Unknown
+either
+CounterSat sat
+Remark 2 (Scope of Composition Operators). The ODRL specification defines
+and, or, and xone as intra-rule connectives determining a single rule’s activa-
+tion [7]. Our framework applies these same connectives to cross-rule conflict
+detection, testing whether constraints from different rules (e.g., a permission
+and a prohibition) can be simultaneously satisfied.
+Theorem 2 (Composition Soundness). If verdictand yields Conflict, then
+no execution context simultaneously satisfies all constraint pairs. Analogously for
+or and xone.
+Proof. Conjunction. Conflict requires ∃k : Vk = Conflict. By Theorem 1,
+no value satisfies both c(k)
+1
+and c(k)
+2 . By Assumption 2, operands are interpreted
+over disjoint concept spaces, so satisfying other operand pairs cannot provide a
+witness for operand ℓk. The conjunction fails.
+Disjunction. Conflict requires ∀k : Vk = Conflict. By Theorem 1 applied
+to each k, no operand pair admits a satisfying value. By Assumption 2, witnesses
+for distinct operands are drawn from disjoint domains, so no disjunct succeeds.
+Exclusive disjunction. Conflict requires ∀k : Vk = Conflict, reducing to
+the disjunction case.
+Proposition 1 (Decidability). For any finite KBℓand grounded constraints
+c1, c2, verdict(c1, c2) is computable.
+Proof. Finiteness of C ensures each denotation (Definition 3) is a finite, enu-
+merable subset of C. Set intersection and emptiness testing over finite sets are
+decidable.
+Definition 7 (Constraint Subsumption).
+For constraints c1, c2 over the
+same operand ℓ:
+subsumes(c1, c2) =
+
+
+
+
+
+Confirmed
+if [[c1]], [[c2]]̸ = ⊤and [[c1]] ⊆[[c2]]
+Refuted
+if [[c1]], [[c2]]̸ = ⊤and [[c1]]̸ ⊆[[c2]]
+Unknown
+otherwise
+(14)
+When subsumes(c1, c2) = Confirmed, we write c1 ⊑c c2 and say c1 refines c2:
+every value satisfying c1 also satisfies c2, so c1 is at least as restrictive. Over
+grounded denotations, ⊑c is a preorder; it becomes a partial order on the quotient
+C/≡where c1 ≡c2 iff [[c1]] = [[c2]].
+
+
+===== PAGE 9 / 17 =====
+
+Denotational Semantics for ODRL Conflict Detection
+9
+Lemma 2 (Conflict Propagation). If c1 ⊑c c2 and verdict(c2, c3) = Conflict,
+then verdict(c1, c3) = Conflict.
+Proof. c1 ⊑c c2 gives [[c1]] ⊆[[c2]] with both grounded. Conflict gives [[c2]] ∩
+[[c3]] = ∅with [[c3]] grounded. Since [[c1]] ⊆[[c2]], we have [[c1]] ∩[[c3]] = ∅, and all
+three denotations are grounded, yielding Conflict.
+2.2
+Cross-Dataspace Alignment
+The preceding framework assumes a shared KB per operand. In practice, datas-
+paces maintain independent knowledge bases for the same domain–GeoNames [6]
+vs. ISO 3166 [9] for spatial concepts, BCP 47 [14] vs. ISO 639-3 [10] for lan-
+guage codes, or national purpose taxonomies derived from different regulations.
+A conflict detected in one KB must remain valid when translated to another;
+conversely, translation must never fabricate conflicts where none exist. We for-
+malize these guarantees through order-preserving alignment.
+Definition 8 (KB Alignment).
+An alignment from KBA = (CA, ≤A, ⊥⊥A
+, γA) to KBB = (CB, ≤B, ⊥⊥B, γB) is an injective partial function α : CA ⇀CB
+satisfying: for all x, y ∈dom(α),
+x ≤A y ⇐⇒α(x) ≤B α(y)
+(15)
+x ⊥⊥A y =⇒α(x) ⊥⊥B α(y)
+(16)
+Additionally, if γA(v) = g̸ = ⊥and α(g)̸ = ⊥, then ↓g ⊆dom(α) ( witness
+completeness).
+Injectivity ensures distinct concepts remain distinct. The biconditional pre-
+serves hierarchical structure in both directions, preventing false compatibilities.
+Disjointness preservation (⇒only) retains source incompatibilities. Witness com-
+pleteness ensures all concepts below a mapped grounding value are themselves
+mapped, preventing false conflicts through witness loss (Example 1). We write
+α(v) = ⊥when v /∈dom(α).
+Example 1 (Witness Loss without Witness Completeness).
+Let CA = {a, b, c}
+with a ≤b, a ≤c, b and c incomparable. For c1 = (ℓ, isA, vb) and c2 =
+(ℓ, isA, vc): [[c1]]A = {a, b}, [[c2]]A = {a, c}, intersection = {a}, verdict Com-
+patible. An alignment α with dom(α) = {b, c} satisfies order and disjointness
+preservation vacuously, but a /∈dom(α). The aligned denotations {α(b)} and
+{α(c)} have empty intersection, fabricating Conflict. Witness completeness
+prevents this: α(b)̸ = ⊥requires ↓b = {a, b} ⊆dom(α).
+Three alignment configurations arise, each with distinct guarantees:
+Total (dom(α) = CA). All concepts map. Typical when KBs follow the same
+standard with different identifiers (e.g., BCP 47 ↔ISO 639-3). Verdicts are
+fully preserved.
+
+
+===== PAGE 10 / 17 =====
+
+10
+D. Mustafa et al.
+Partial (dom(α) ⊂CA). Some concepts lack counterparts. Typical when KBs
+differ in granularity (e.g., GeoNames includes cities and regions; ISO 3166
+covers only countries). Unmapped concepts degrade verdicts toward Un-
+known but never introduce false conflicts.
+Empty (dom(α) = ∅). KBs are structurally incompatible. All cross-KB verdicts
+default to Unknown—the status quo without alignment.
+Definition 9 (Aligned Constraint).
+Given alignment α : CA ⇀CB and
+constraint c = (ℓ, ▷◁, v) in KBA with g = γA(v):
+α(c) =
+(
+(ℓ, ▷◁, v′) with γ′
+B(v′) = α(g)
+if g̸ = ⊥and α(g)̸ = ⊥
+⊤
+otherwise
+(17)
+When alignment succeeds, α(c) is evaluated over the restricted KB′
+B = (α(CA), ≤B↾α(CA)
+, ⊥⊥B↾α(CA), γ′
+B)
+When it fails, the aligned constraint has indeterminate denotation.
+Lemma 3 (Denotation Preservation).
+If α is an alignment with [[c]]A ⊆
+dom(α), then interpretation commutes with alignment:
+[[α(c)]]KB′
+B = α([[c]]A)
+(18)
+Proof. For c = (ℓ, isA, v) with g = γA(v): (⊆): Let y ∈[[α(c)]]KB′
+B. Then y ∈
+α(CA) and y ≤B α(g). Since y = α(x) for some x ∈CA, the embedding property
+gives x ≤A g, so x ∈[[c]]A and y ∈α([[c]]A). (⊇): Let y = α(x) for x ∈[[c]]A. Then
+x ≤A g implies α(x) ≤B α(g) by preservation, so y ∈[[α(c)]]KB′
+B. The proof
+extends to all operators whose denotation is defined via monotone closure over
+the KB ordering ≤.
+Proposition 2 (Verdict Preservation). Let α : CA ⇀CB be an alignment
+(Definition 8).
+1. Conflict preservation. If [[c1]]A ∪[[c2]]A ⊆dom(α) and verdictA(c1, c2) =
+Conflict, then verdictKB′
+B(α(c1), α(c2)) = Conflict.
+2. Graceful degradation. If α(gi)̸ = ⊥for the grounding values of c1, c2
+but [[ci]]A̸ ⊆dom(α) for some i, then—without downward-closure totality—
+the aligned verdict may strengthen to a false Conflict (Example 1). With
+downward-closure totality (Definition 8), this case cannot arise for grounded
+constraints: α(g)̸ = ⊥implies ↓g ⊆dom(α), so [[ci]]A ⊆dom(α) and the
+verdict reduces to case (1) or the following: if α(gi) = ⊥for some grounding
+value, then α(ci) = ⊤by Definition 9, yielding Unknown. In no case does
+a false Conflict arise.
+Proof. (1) Conflict implies [[c1]]A ∩[[c2]]A = ∅with both sets classical (not
+⊤). Injectivity preserves disjointness: α([[c1]]A) ∩α([[c2]]A) = ∅. By Lemma 3,
+[[α(c1)]]KB′
+B ∩[[α(c2)]]KB′
+B = ∅, yielding Conflict.
+(2) When α(g) = ⊥for a grounding value, Definition 9 yields ⊤, and ⊤⊓D =
+⊤by Definition 4, producing Unknown. When α(gi) = ⊥for a grounding value,
+
+
+===== PAGE 11 / 17 =====
+
+Denotational Semantics for ODRL Conflict Detection
+11
+α(ci) = ⊤by Definition 9, yielding Unknown. When denotations partially
+exceed dom(α), witness completeness ensures this cannot occur for grounded
+constraints. In neither case can a false Conflict arise.
+The monotonicity guarantee in Proposition 2(2) is the central safety prop-
+erty: under witness completeness, alignment can only weaken verdicts toward
+Unknown, never fabricate conflicts (Example 1).
+Corollary 1 (Subsumption Preservation). Let α : CA ⇀CB be an align-
+ment. If [[c1]]A ∪[[c2]]A ⊆dom(α) and c1 ⊑c c2 in KBA, then α(c1) ⊑c α(c2) in
+KB′
+B.
+Proof. By Lemma 3, [[α(ci)]]KB′
+B = α([[ci]]A) for i = 1, 2. Injectivity of α preserves
+subset inclusion: [[c1]]A ⊆[[c2]]A implies α([[c1]]A) ⊆α([[c2]]A).
+Proposition 3 (KB Monotonicity).
+Let KB = (C, ≤, ⊥⊥, γ) and KB+ =
+(C, ≤, ⊥⊥+, γ+) with ⊥⊥⊆⊥⊥+ and γ+ extending γ (same C and ≤). Then:
+1. If verdictKB(c1, c2) = Conflict, then verdictKB+(c1, c2) = Conflict.
+2. If verdictKB(c1, c2) = Compatible, then verdictKB+(c1, c2) = Compatible.
+3. If verdictKB(c1, c2) = Unknown, the verdict may resolve to any value.
+Proof. (1) and (2): Denotations depend on C and ≤, both unchanged. Thus
+[[ci]]KB+ = [[ci]]KB for all grounded constraints. Empty intersections remain empty;
+non-empty intersections remain non-empty. For previously ungrounded constraints
+([[c]] = ⊤), the original verdict was Unknown, so neither case (1) nor (2) arises.
+(3) Extending γ replaces ⊤with a classical set, enabling definite intersection
+and yielding either Conflict or Compatible.
+Runtime Semantics The denotational semantics reasons about concepts—
+abstract KB entities like gn:France or dpv:ScientificResearch. At runtime,
+a policy engine receives concrete requests with actual values. We bridge this gap
+with two definitions and a soundness result.
+Definition 10 (Execution Context).
+An execution context ω : L ⇀V is a
+partial function assigning right operand values to left operands, representing a
+concrete access request.
+Definition 11 (Constraint Satisfaction).
+Given KBℓ= (C, ≤, ⊥⊥, γ), con-
+text ω satisfies constraint c = (ℓ, ▷◁, v), written ω |= c, if:
+ℓ∈dom(ω) ∧γ(ω(ℓ))̸ = ⊥∧
+ [[c]] = ⊤∨γ(ω(ℓ)) ∈[[c]]
+
+(19)
+When γ(ω(ℓ)) = ⊥—the runtime value has no KB counterpart—the context does
+not satisfy the constraint. This default-deny stance at enforcement complements
+the conservative Unknown at analysis time: ungrounded values block neither
+policy authoring nor conflict detection, but do block runtime access until the KB
+is extended.
+
+
+===== PAGE 12 / 17 =====
+
+12
+D. Mustafa et al.
+Table 4. Paper results and Isabelle/HOL mechanization. 44 results, 0 sorry.
+Paper Result
+Isabelle Name
+Locale
+Lemma 1
+disj_order_consistency
+knowledge_base
+Theorem 1
+soundness
+knowledge_base
+Theorem 3
+runtime_soundness
+knowledge_base
+Theorem 2
+composition_soundness_*
+knowledge_base
+Lemma 2
+conflict_propagation
+knowledge_base
+Proposition 3
+kb_monotonicity_verdict
+kb_extension
+Lemma 3
+denotation_preservation_isA
+alignment
+Proposition 2(1) verdict_preservation_conflict_full alignment
+Corollary 1
+subsumption_preservation_verdict
+alignment
+Theorem 3 (Runtime Soundness).
+For constraints c1 = (ℓ, ▷◁1, v1) and
+c2 = (ℓ, ▷◁2, v2) over the same operand, if verdict(c1, c2) = Conflict, then
+¬∃ω : (ω |= c1 ∧ω |= c2).
+Proof. Suppose ω |= c1∧ω |= c2. By Definition 11, ℓ∈dom(ω) and γ(ω(ℓ))̸ = ⊥.
+Since verdict(c1, c2) = Conflict, Definition 5 requires both denotations are
+grounded (not ⊤) with [[c1]] ∩[[c2]] = ∅. Therefore γ(ω(ℓ)) ∈[[c1]] and γ(ω(ℓ)) ∈
+[[c2]], implying [[c1]] ∩[[c2]]̸ = ∅—contradicting the conflict verdict.
+This result justifies static policy analysis: policy administrators can reject
+incompatible constraint combinations during authoring, before any data flows.
+Soundness does not imply completeness: Unknown may conceal conflicts that
+only manifest at runtime when additional context resolves KB gaps. All meta-
+theorems (Theorems 1–3, Lemmas 1–2, Propositions 1–3, Corollary 1) are me-
+chanically verified in Isabelle/HOL; the theory file is included in the supplemen-
+tary material.
+2.3
+Mechanical Verification
+All meta-theorems are mechanically verified in Isabelle/HOL 2025: The formal-
+ization uses three locales: knowledge_base encodes Definition 2. Carries 11 re-
+sults including soundness (Theorems 1–2), conflict propagation (Lemma 2), and
+disjointness–order consistency (Lemma 1). kb_extension models KB evolution
+with extended γ and ⊥⊥. Verifies KB monotonicity (Proposition 3). alignment
+formalizes Definition 8. Verifies denotation, conflict, and subsumption preserva-
+tion (Lemma 3, Proposition 2, Corollary 1).
+All proofs complete via automated tactics (simp, auto, blast) without man-
+ual proof scripts—reflecting that definitions were chosen to remain within the
+decidable fragment Isabelle’s simplifier handles natively. Table 4 gives the full
+correspondence; the theory file is in the supplementary material.
+
+
+===== PAGE 13 / 17 =====
+
+Denotational Semantics for ODRL Conflict Detection
+13
+Table 5. Knowledge bases and axiom files used in the benchmark suite. Original KBs
+provide primary domain knowledge; alternative KBs test cross-standard alignment;
+auxiliary files supply UNA axioms and structural edge cases.
+Operand KB
+|C| Role
+spatial
+GEO000
+4 GeoNames (primary)
+GEO001
+3 ISO 3166 (alignment)
+GEO002 — UNA + negative partOf
+purpose
+DPV000 10 W3C DPV (primary)
+DPV001
+6 GDPR-derived (alignment)
+DPV002 — Same-level UNA
+DPV003 — Cross-level UNA
+language LNG000 10 BCP 47 (primary)
+LNG001
+6 ISO 639-3 (alignment)
+LNG002 — UNA
+channel
+NOM000 4 Nominal (delivery channels)
+Structural KBs (operator stress tests)
+CHN000
+5 Depth-5 linear chain
+DIA000
+4 Diamond inheritance (DAG)
+SNG000
+1 Single-concept (domain closure)
+NMS000
+6 Near-miss overlap
+3
+Evaluation
+We validate the framework through 154 benchmarks across 19 categories, eval-
+uated by two independent provers: Vampire (superposition calculus) and Z3
+(DPLL(T)). All problems are encoded in both TPTP and SMT-LIB, enabling
+dual-prover concordance as a correctness check. Both provers agree on all 154 ver-
+dicts.
+3.1
+Benchmark Design
+Each benchmark pairs two ODRL constraints over one or more operands, grounded
+against concrete knowledge bases. The negated-conjecture pattern (Table 3)
+maps each verdict to a unique prover output. Sixteen Layer 0 axiom files in-
+stantiate three semantic domains (Table 5).
+3.2
+Operator Coverage
+The first 90 problems validate Definition 3 across all eight operators (eq, neq,
+isA, isPartOf, hasPart, isAnyOf, isAllOf, isNoneOf) and all three semantic
+domains (taxonomic, mereological, nominal). Problems 010–056 cover the six
+original operators over GeoNames, DPV, and BCP 47. Problems 090–096 in-
+troduce neq (complement denotation C \ {g}), including the edge case where
+|C| = 1 collapses the complement to ∅(ODRL095). Problems 100–106 test
+hasPart (upward closure {x | g ≤x}), validating that it produces the inverse
+
+
+===== PAGE 14 / 17 =====
+
+14
+D. Mustafa et al.
+Table
+6.
+XONE
+requires
+explicit
+negative
+axioms.
+Both
+problems
+test
+xone(commercial, nonCommercial) but with different request values. The asymmetric
+KB coverage produces different verdicts.
+Problem Request
+⊑branch? ¬ ⊑other?
+Verdict
+ODRL085 nonCommRes
+✓
+explicit
+Compatible
+ODRL086 commRes
+✓
+absent
+Unknown
+of isPartOf. Problems 110–147 extend isAnyOf, isAllOf, and isNoneOf cover-
+age to mereological and nominal domains, and introduce 12 cross-operator pair
+tests (150–161) that stress interactions absent from single-operator benchmarks.
+Three structural KBs target adversarial patterns: a depth-5 chain validates tran-
+sitive closure (170–171), a diamond DAG validates multiple-inheritance (172–
+174), and a single-concept KB validates degenerate cases where complements
+collapse (175–176). The near-miss KB (177–178) tests the boundary between
+Compatible and Conflict when denotations overlap on exactly one concept.
+Nominal domain (140–147). Under identity (≤= =), isA degenerates to eq
+and isAllOf requires all values to coincide. All eight nominal tests confirm this
+degeneration, validating the claim in Definition 2 that operator semantics is
+determined by the KB relation, not the operator name.
+3.3
+Logical Composition
+Twenty-one problems validate Definition 6 across all three ODRL composition
+modes. Conjunction (and, 030–033 + 200–201): multi-operand and requires all di-
+mensions to overlap simultaneously. A single Conflict or Unknown blocks the
+conjunction. ODRL200 confirms three-operand compatibility; ODRL201 con-
+firms that a language conflict in the third operand blocks an otherwise-compatible
+pair. Disjunction (or, 080–084 + 202–203): at least one branch must overlap.
+ODRL202 confirms that a single Compatible branch resolves the disjunction
+even when the other is Unknown. ODRL206 tests nested spatial ∧or(purpose).
+Exclusive disjunction (xone, 085–088 + 204–207): the key finding is that xone
+requires strictly stronger KB axioms than conjunction or disjunction. Table 6
+shows that asymmetric negative-axiom coverage in the DPV KB produces differ-
+ent verdicts for structurally symmetric problems. By design, composition opera-
+tors are evaluated at the meta-level: the prover returns per-branch verdicts, and
+Definition 6 combines them via the truth table. This decomposition is essential—
+encoding xone directly would require ∃under negation (∀∃∀prefix), breaking
+the EPR fragment and forfeiting the decidability guarantee.
+3.4
+Cross-KB Alignment
+Twenty-three problems validate Proposition 2. The original 13 problems (057–
+066) test three alignment pairs with complete concept coverage. The extension
+
+
+===== PAGE 15 / 17 =====
+
+Denotational Semantics for ODRL Conflict Detection
+15
+(190–199) targets adversarial edge cases: unmapped witnesses that force degra-
+dation (190–192), operator coverage across aligned KBs (isAnyOf, isNoneOf,
+hasPart, neq: 193–197), and multi-domain alignment where all three operands
+degrade simultaneously (199). Across all 23 tests, no false Conflict arises.
+Degradation tests include paired checks: for each case, both the compatibility
+and conflict conjectures return CounterSatisfiable, confirming that the ver-
+dict is genuinely indeterminate rather than accidentally resolved.
+3.5
+Runtime Semantics
+Six problems (070–075) bridge concept-level reasoning to runtime enforcement
+(Theorem 3): witness extraction for Compatible pairs, pointwise rejection for
+Conflict pairs, and an exhaustive finite-model check (ODRL073) confirming
+that no BCP 47 concept satisfies both constraints in a conflict pair.
+Remark 3 (Branch-Aware Exclusivity). Definition 6 conservatively requires all
+cross-branch per-operand verdicts to be Conflict for xone compatibility. When
+branches use conjunction internally, this is stricter than necessary: a single per-
+operand Conflict suffices for mutual exclusivity by Theorem 2, since one failing
+operand under and renders the entire branch unsatisfiable. The refined exclusiv-
+ity test applies verdictand to cross-branch per-operand verdicts:
+excl(Bj, Bk) = verdictand
+ verdict(c(ℓ)
+j , c(ℓ)
+k ) | ℓ∈shared(Bj, Bk)
+
+(20)
+where shared(Bj, Bk) denotes operands constrained in both branches. When
+branches share no operands, excl(Bj, Bk) = Compatible (vacuous conjunction),
+correctly reflecting that orthogonal branches cannot be proven exclusive. This
+refinement strictly reduces Unknown verdicts without affecting soundness: the
+proof chains through Theorem 1, Assumption 2, and Theorem 2.
+Related Work. Concurrent standardization efforts address ODRL processor con-
+formance [15], complementing our focus on constraint-level semantics. A com-
+prehensive discussion of related work will appear in the extended version.
+4
+Conclusion
+We presented a semantic grounding framework for ODRL constraint conflict de-
+tection, validated by a benchmark suite of 154 problems across 19 categories
+with 100% agreement between the Vampire theorem prover and the Z3 SMT
+solver [11,12]. The framework makes three contributions. First, a denotational
+semantics for all eight ODRL operators with a three-valued verdict (Conflict,
+Compatible, Unknown) that is sound under incomplete knowledge. Second, a
+decidable EPR encoding with bidirectional denotation rules and formal composi-
+tion semantics for ODRL’s and, or, and xone operators—revealing that exclusive
+composition requires strictly stronger KB axioms than conjunction or disjunc-
+tion. Third, cross-KB alignment with proven verdict preservation and graceful
+
+
+===== PAGE 16 / 17 =====
+
+16
+D. Mustafa et al.
+degradation, bridging the gap between dataspaces that adopt different stan-
+dards for the same operand. The benchmark suite covers single-KB reasoning
+(90 problems), logical composition including all three ODRL modes (21 prob-
+lems), cross-standard alignment with adversarial edge cases (23 problems), and
+runtime soundness validation (6 problems). The alignment and composition
+results—absent from all prior ODRL conflict detection work—demonstrate that
+semantic grounding enables interoperability across dataspaces without manual
+re-encoding and without introducing false conflicts.
+Future work. Three directions remain: extending coverage to the remaining
+11 KB-dependent operands, rule-level conflict detection composing constraint-
+level verdicts with permission/prohibition resolution, and a standardized KB
+registry enabling dataspaces to discover and reuse verified alignments.
+References
+1. Bayerische Staatsbibliothek: Preisliste für reproduktionen (2024), https://www.
+bsb-muenchen.de/, accessed: 2026-02-22
+2. Data Spaces Support Centre: Blueprint for data spaces interoperability. Tech. rep.,
+DSSC (2024), https://dssc.eu/
+3. European Parliament and Council: Regulation (eu) 2016/679 on the protection of
+natural persons with regard to the processing of personal data and on the free
+movement of such data (general data protection regulation) (2016), http://data.
+europa.eu/eli/reg/2016/679/oj
+4. Fornara, N., Rodríguez-Doncel, V., Esteves, B., Steyskal, S., Whittam Smith, B.,
+Sellami, Y., Cimmino Arriaga, A.: ODRL formal semantics. Draft community
+group report, W3C ODRL Community Group (Feb 2026), https://w3c.github.
+io/odrl/formal-semantics/
+5. Gaia-X European Association for Data and Cloud: Gaia-x architecture document.
+Technical report, Gaia-X AISBL (2023), https://gaia-x.eu/
+6. GeoNames:
+Geonames
+geographical
+database.
+https://www.geonames.org/
+(2024), accessed: 2025-02-11
+7. Iannella, R., Villata, S.: ODRL information model 2.2. W3c recommendation, W3C
+(Feb 2018), https://www.w3.org/TR/odrl-model/
+8. International Data Spaces Association: IDSA connector specification. Technical
+report, IDSA (2022), https://internationaldataspaces.org/
+9. ISO: ISO 3166: Codes for the representation of names of countries and their sub-
+divisions. International standard, International Organization for Standardization
+(2020)
+10. ISO 639-3 Registration Authority: ISO 639-3: Codes for the representation of names
+of languages. Tech. rep., SIL International (2023), https://iso639-3.sil.org/
+11. Kovács, L., Voronkov, A.: First-order theorem proving and Vampire. In: CAV 2013.
+Springer (2013)
+12. de Moura, L., Bjørner, N.: Z3: An efficient SMT solver. In: TACAS 2008. Springer
+(2008)
+13. Pandit, H.J., Esteves, B., Krog, G.P., Ryan, P., Golpayegani, D., Flake, J.: Data
+privacy vocabulary (DPV) – version 2.0. In: Demartini, G., et al. (eds.) The Seman-
+tic Web – ISWC 2024. Lecture Notes in Computer Science, vol. 15233, pp. 171–193.
+Springer, Cham (2024). https://doi.org/10.1007/978-3-031-77847-6_10
+
+
+===== PAGE 17 / 17 =====
+
+Denotational Semantics for ODRL Conflict Detection
+17
+14. Phillips, A., Davis, M.: BCP 47: Tags for identifying languages. Tech. rep., IETF
+(2009), https://www.rfc-editor.org/info/bcp47
+15. Rodríguez-Doncel, V., Roman, N.: Towards conformance in ODRL 3.0. In: ODRL
+and Beyond: Practical Applications and Challenges for Policy-Based Access
+and Usage Control (OPAL 2025). CEUR Workshop Proceedings, CEUR-WS.org
+(2025), co-located with ESWC 2025
+16. Sutcliffe, G.: The SZS ontologies for automated reasoning software. In: Proceed-
+ings of the LPAR Workshops. CEUR Workshop Proceedings, vol. 418, pp. 38–49.
+CEUR-WS.org (2008)
+17. Toubekis, G., Decker, S.: The culture dataspace (Datenraum Kultur) – a data-
+sovereign open-source digital infrastructure based on the Eclipse Dataspace
+Components (EDC) framework. Int. Arch. Photogramm. Remote Sens. Spa-
+tial Inf. Sci. XLVIII-M-9-2025, 1515–1523 (2025). https://doi.org/10.5194/
+isprs-archives-XLVIII-M-9-2025-1515-2025

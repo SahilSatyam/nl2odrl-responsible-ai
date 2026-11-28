@@ -1,0 +1,425 @@
+# SOURCE: 2506.03301v1.pdf
+# PAGES: 10
+
+
+
+===== PAGE 1 / 10 =====
+
+From Instructions to ODRL Usage Policies: An
+Ontology Guided Approach
+Daham M. Mustafa1,*, Abhishek Nadgeri1, Diego Collarana1,3, Benedikt T. Arnold1,2,
+Christoph Quix2, Christoph Lange1,2 and Stefan Decker1,2
+1Fraunhofer FIT, Schloss Birlinghoven 53757, Sankt Augustin, Germany
+2Chair of Computer Science 5, RWTH Aachen University, Ahornstr. 55, 52074 Aachen, Germany
+3Universidad Privada Boliviana, , Av Juan Pablo II, Cochabamba, Bolivia
+Abstract
+This study presents an approach that uses large language models such as GPT-4 to generate usage policies
+in the W3C Open Digital Rights Language ODRL automatically from natural language instructions. Our
+approach uses the ODRL ontology and its documentation as a central part of the prompt. Our research
+hypothesis is that a curated version of existing ontology documentation will better guide the policy
+generation. We present various heuristics for adapting the ODRL ontology and its documentation to
+guide an end-to-end KG construction process. We evaluate our approach in the context of dataspaces, i.e.,
+distributed infrastructures for trustworthy data exchange between multiple participating organizations
+for the cultural domain. We created a benchmark consisting of 12 use cases of varying complexity. Our
+evaluation shows excellent results with up to 91.95% accuracy in the resulting knowledge graph.1
+Keywords
+Large Language Models, Knowledge Graphs, Ontologies, Dataspaces, ODRL
+1. Introduction
+The data economy increasingly relies on dataspaces, which are distributed infrastructures
+for data exchange among multiple participating organizations based on data sovereignty and
+interoperability principles. To achieve interoperability in dataspaces, initiatives such as the
+International Data Spaces Association (IDSA) [1] and the Gaia-X European Association for
+Data and Cloud strongly rely on Semantic Web technologies. Semantic Web technologies
+are not easily accessible to non-technical users – this problem also holds in dataspaces. The
+specifications of both IDSA and Gaia-X rely on the W3C Open Digital Rights Language (ODRL)
+to describe the usage policies of assets. Formulating usage policies in ODRL requires familiarity
+with the RDF graph data model, its serializations, and the ODRL concepts. This requirement
+has become a significant entry barrier with the adoption of dataspaces in highly digitalized
+sectors such as car manufacturing, transportation, and the cultural sector. For example, to create
+the ODRL policy from the instruction, “Painting 𝑋from Museum 𝑀is authorized for display
+1LLM4ODRL: Repository containing the datasets, prompts, and code used in this paper.
+LLM+KG’24: The International Workshop on Data Management Opportunities in Unifying Large Language Models +
+Knowledge Graphs, August 25, 2024, Guangzhou, China
+*Corresponding author.
+$ daham.mohammed.mustafa@fit.fraunhofer.de (D. M. Mustafa)
+© 2024 Copyright for this paper by its authors. Use permitted under Creative Commons License Attribution 4.0 International (CC BY 4.0).
+arXiv:2506.03301v1  [cs.CL]  3 Jun 2025
+
+
+===== PAGE 2 / 10 =====
+
+Natural Language Instruction
+Painting X from Museum M is authorized for display within 
+Germany but prohibited within the USA.
+LLM-​Based End-​to-​End KG Construction
+LLM
+ODRL 
+Ontology
+SHACL
++
++
+PaintingX
+MuseumM
+use
+permission
+target
+assigner
+constraint
+Germany
+spatial
+Figure 1: Our method takes a natural language description of a usage policy as input. Using an LLM,
+a curated description of the ODRL ontology and associated SHACL shapes, we generate a KG that
+corresponds to the ODRL representation of the described policy.
+within Germany but prohibited within the USA”, a domain expert is required to know all the
+terminology from ODRL, including Asset, Permission, Constraint, etc.
+The ODRL version 2.2, a W3C recommendation since February 2018 [2], is an ontology
+for expressing rights over physical or digital goods. ODRL enables owners and consumers
+to effectively express the terms and obligations governing digital asset access and use. We
+show a high-level overview of the ODRL information model in Figure 1. The main class of
+the Core Vocabulary is Policy, which acts as a container for Rules. A Set serves as the default
+subclass of Policy for conveying a Rule over an Asset to define general terms of usage without
+specific Constraint or Duty. An Offer, as a subclass of Policy in the Core Model, describes the
+rules presented by the assigning parties and specifies the conditions for the recipient party of
+these rules. An Agreement is a subclass of Policy in the core model, which encompasses all
+terms governing the usage agreement between an Assigner (the party that proposes the policy
+statements) and an Assignee (the party that receives the policy statements) regarding an Asset. A
+Permission specifies Actions over an Asset. Permissions can also be linked with a duty, especially
+when the action is obligatory. In contrast to permissions, Prohibitions restrict specific actions.
+To alleviate the barrier of familiarity with ODRL and Semantic Web technologies for creating
+usage policies in dataspaces, we contribute with an end-to-end approach that generates usage
+policies in ODRL directly from natural language instructions given by an application domain
+expert. Our approach employs Large Language Models (LLMs) combined with a hand-crafted
+ontology description based on the ODRL specification. We equip our approach with a self-
+correction component that evaluates the generated output and applies rules. We evaluate
+our approach with GPT-3.5-turbo, GPT-4, and GPT-4o on twelve realistic use cases from the
+cultural domain, with increasing complexity, about the described usage permissions. We rely on
+SHACL (Shapes Constraint Language [3]) shapes to perform the evaluation from the syntax and
+semantic perspective. Our results show a promising path in ontology-guided KG generation.
+
+
+===== PAGE 3 / 10 =====
+
+2. Related Work
+Formally a knowledge graph KG is defined as a tuple given by KG = (ℰ, ℛ, 𝒯+) where ℰ
+denotes the set of all vertices in the graph representing entities, ℛis the set of edges representing
+relations, and 𝒯+ ⊆ℰ× ℛ× ℰis a set of all KG triples [4]. The task of KG construction can
+be defined as, given unstructured sources 𝑆= (𝑠1, 𝑠2, . . . , 𝑠𝑛), a model 𝑀being trained to
+approximate the function 𝐹(𝑆) →KG [5]. Traditionally, KG construction comprises several
+tasks, namely Name Entity Recognition (NER) [6], Relation Extraction (RE) [7], Entity Linking
+(EL) [8] and Coreference Resolution (CR) [9]. Early, the construction of knowledge graphs
+relied on a pipeline architecture and tools to effectively create and incrementally update a
+knowledge graph [10]. With the advent of deep learning approaches, each of these tools was
+further improved [11]. However, in recent years, Large Language Models (LLMs) have caused a
+paradigm shift in Natural Language Processing (NLP) by creating generalist agents [12]. The
+remarkable properties of LLMs now enable end-to-end KG construction. Early attempts included
+BERT style models [13] to extract entities and associated relations [14], whereas Guo et al. [15]
+propose end-to-end knowledge graph construction with BERT. The work by Han et al. [16]
+aligns with our work, using a larger LLM (GPT-4) for KG construction. However, to correct
+errors in the previously generated knowledge graph, they use a small fine-tuning LLM (T5).
+While more efficient during inference, this also poses the method’s main drawback due to the
+need for labeled data that might be unavailable.
+3. Method
+The KG construction process begins by developing an LLM Guidance Template (LGT)1, a
+framework for guiding the LLM-based KG construction. We provide a Task Description (TD)
+in natural language with the specific requirements and constraints for the desired ODRL. The
+LLM then uses the LGT and TD to construct an ODRL KG end-to-end. After generating
+the ODRL knowledge graph, our approach incorporates a Self-Correction Model (SCM ) to
+refine the generated KG. The SCM utilizes predefined rules to correct inconsistencies and
+errors within the KG, resulting in a refined ODRL knowledge graph. Figure 2 illustrates the
+complete workflow of our approach, where we explain the process of generating the ODRL
+and subsequently refining it using the SCM . Now, we describe each module in detail.
+3.1. Ontology-Guided KG Construction
+From the perspective of computer science, An ontology is a formal, explicit specification of
+a shared conceptualization [17]. The 𝐿𝐺𝑇in this approach is based on the ODRL version
+2.2 ontology2 This ontology defines ODRL classes, core concepts, and includes various OWL
+axioms (e.g., domain, range, and others) that represent relationships between classes and prop-
+erties. The ontology uses SKOS3 annotations (skos:definition, skos:note, rdfs:label)
+for metadata, conceptual definitions, and labels. We pass this ontology directly to the LLM,
+1The LLM guidance templates used in this study can be found in the templates directory on GitHub.
+2https://www.w3.org/ns/odrl/2/ODRL22.ttl
+3https://www.w3.org/2004/02/skos/
+
+
+===== PAGE 4 / 10 =====
+
+Figure 2: Approach. The LLM Guidance Template (LGT) comprises two modules, i.e., the ODRL
+ontology in Turtle serialization and contextual insights in PDF format. KG is constructed by passing
+Task Description (TD) and the LGT as input to the LLM. Next, the Self-correction Model (SCM ) refines
+the generated KG by providing the TD, the first version of the KG, and the ODRL Self-Correction
+Rules (SCR) as input for the LLM to produce the refined KG.
+leveraging both its formal structure and human-readable annotations. The LLM then interprets
+this information to generate an ODRL KG.
+Relying solely on the ODRL ontology challenges LLMs in accurately predicting complex KGs,
+especially with multiple constraints (e.g., date, time, location, special conditions). LLMs may
+misinterpret ontology elements, leading to errors such as:
+• Incorrect property values (e.g., using odrl:use, an odrl:Action instance, for
+odrl:leftOperand, which requires an odrl:LeftOperand instance)
+• Introduction of undefined properties (e.g., using odrl:location instead of a valid
+odrl:leftOperand value)
+These errors cause inconsistencies and misalignments with the ODRL standard. To mitigate
+these issues, we enrich the LGT with additional context about ODRL syntax and semantics,
+aiding LLMs in distinguishing between various data types and object properties within the
+ontology.
+3.2. Ontology, Syntax, Semantics, and Examples (𝑂𝑆𝐸𝑆) Insights
+We translate the structured ODRL ontology into plain text, incorporating syntactic and se-
+mantic aspects to guide the LLM. However, directly importing the text of the ODRL W3C
+recommendation4 into the LGT file presents a significant challenge. The main issue lies in
+the clarity guidance. The recommendations often contain lengthy explanations and duplicated
+information, leading to confusion and hallucinations. In response to these challenges, we under-
+take a process of distillation [18], extracting essential information from the ODRL ontology and
+recommendations. As part of this distillation process, we have created guidelines inside the LGT
+file for the main classes of the ODRL information model and their properties, detailing how they
+should be utilized by the LLM. This distilled information is then organized into three key dimen-
+sions within the LGT file, considering three main aspects: Firstly, we address ODRL’s syntactic
+interpretation, the syntactic structure defines how its main entities are aligned and how they
+4https://www.w3.org/TR/odrl-model/
+
+
+===== PAGE 5 / 10 =====
+
+should be used. Secondly, we consider ODRL Semantics: ODRL odrl:Duty instances can
+represent obligations when linked to odrl:Policy via odrl:obligation or conditions for
+permission activation when linked to odrl:Permission via odrl:duty. Finally, integrated
+ODRL examples in the LGT provide practical guidance for policy implementation, aiding in
+understanding and selection of relations for the output. LGT guides the LLM to generate the
+ODRL KG by solving tasks. Separate LGTs are established for each ODRL type (Agreement,
+Rule, Offer), providing guidance for accurate results. Despite careful design, there may be
+inaccuracies or discrepancies, including syntactic errors and semantic inconsistencies, in the
+output generated by LLM. Therefore, we apply a third self-correction model.
+3.3. ODRL Self-Correction Model
+For ODRL self-correction, we establish 175 rules for Agreement, 16 for Offer, and ODRL Rule.
+These rules, termed correction rules, are derived from the ODRL W3C recommendation and
+ontology relations, ensuring alignment with the official ODRL specification and leveraging
+the semantic structure defined in the ontology. ODRL Self-Correction Rules (SCR), rules are
+expressed in human-readable language, which allows for accurate interpretation and application
+by the LLM. The inputs include the TD along with it resulting ODRL KG, as has been detailed
+previously in section 3.1, and the SCR. These inputs are then passed to the LLM. We have two
+options for applying self-correction. The first option is to define each rule separately and iterate
+over them. The second option is to consolidate all rules into one prompt and then pass it to the
+LLM. Although this method is less expensive than the first option, it may slightly compromise
+accuracy due to the large text processing required by the LLM. The SHACL violation messages
+alone do not effectively guide the LLM to produce KG correction. This is due to the stateless
+nature of LLMs, which do not retain memory of previous interactions or learn from individual
+correction attempts. As such, simply passing SHACL violation messages back to the LLM does
+not guarantee improved KG. The LLM compares the ODRL 𝐾𝐺policy with the 𝑆𝐶𝑅. If any
+inconsistencies are detected, the LLM makes adjustments to ensure compliance with the 𝑆𝐶𝑅.
+This results in a refined ODRL 𝐾𝐺, as illustrated in Figure 2. Unlike SHACL shapes, which
+primarily detect violations without modifying the 𝐾𝐺, the LLM can autonomously refine the
+KG based on detected rule violations.
+4. Evaluation
+Evaluating outputs from LLMs is crucial due to their probabilistic nature. Unlike deterministic
+systems, LLMs may generate varying outputs for the same task, as LLMs may still generate
+probabilistic outputs even when provided with factual data. We conducted a comprehensive set
+of 108 experiments to evaluate the performance of three different LLM models: GPT-3.5-turbo,
+GPT-4, and GPT-4o. For each use case, we employed three different methodologies: Ontology-
+Guided, OSES Insights, and Refinement, resulting in 36 experiments per model. The experiments
+aimed to assess the models’ capabilities in managing and enforcing digital rights.
+5ODRL self-correction rules
+
+
+===== PAGE 6 / 10 =====
+
+Dataset: Inspired by the context of the project Datenraum Kultur(DRK)6, We designed a
+dataset of twelve different use cases.7 These use cases represent tasks defined in plain text,
+designed to prompt LLMs to generate ODRL KGs. These use cases are derived from real
+scenarios in the context of the DRK and encapsulate different criteria for determining the
+appropriate application of policies to assets where digital rights need to be managed and
+enforced in the cultural domain. Each use case serves as a task description for the LLM. The
+dataset includes 4 Agreement, 5 Offer and 3 Set of type ODRL Policy. Case 1, illustrated below,
+demonstrates a typical scenario for ODRL policy generation. This example policy regulates
+access to the ShowTimesAPI’ dataAPI managed by DE_Staatstheater_Augsburg, a German
+cultural organization. The policy’s main objective is to control access to valuable cultural assets
+stored in the dataAPI. Access is restricted to subscribers such as Regional Newspaper’, Culture
+Research Institute’, and Cultural Platform Bavaria’. Furthermore, access is limited to users
+located in Germany, and usage rights expire on May 10, 2025.
+Criteria Definition and Constraint Establishment: Criteria 𝐶1–𝐶9 Table 1 are defined for
+each use case based on the W3C ODRL recommendation, focusing on both semantic and syn-
+tactic representations. Each criterion sets expectations for an ODRL representation, ensuring
+that the selected use cases comply with both the structural and content constraints neces-
+sary for effective digital rights management. The next step is mapping to SHACL constraints
+for validation. Each criterion is translated into a SHACL shape with associated constraints
+manually generated for this study8. This constraint encompasses five shapes: PolicyShape,
+PermissionShape, PartyShape, AssetShape, and ConstraintShape collectively eval-
+uate 22 ranges of properties for Agreement, 20 for Offer, and 16 for Asset policy types.
+Assignment of Scores: Each Focus Nodes and property shape in side data graph evaluated
+by SHACL shapes is assigned a score of 1 if it meets the defined criteria and 0 if not. We utilized
+the SHACL Playground10 for determining the scores. In addition, a script was used to automate
+the calculation of these scores. After evaluating the scores for each use case, we aggregated
+the results to provide an overview of the performance across all scenarios for each approach
+developed in our methodology. These scores, representing metrics for the quality of KG use
+cases, serve as accuracy indicators. Higher scores directly correspond to greater accuracy and
+better adherence to the defined criteria, reflecting a more precise and effective representation of
+the use cases.
+Result: In the Ontology-Guided approach, the LLM faced challenges in extracting infor-
+mation solely from ODRL ontology. The large size compounded these challenges. Without
+the assistance of real ODRL examples, the LLM struggled to accurately predict the ODRL
+Figure 3. However, in the 𝑂𝑆𝐸𝑆Insights approach, the ODRL 𝐾𝐺is enhanced with prop-
+erties and relations. By formulating the ontology in text and providing semantic, syntactic,
+and real examples, the guidance provided to the LLM is improved. Refined ODRL KG quality
+improves through self-correction rules11 targeting crucial omitted properties. This iterative
+6https://datenraum-kultur.fit.fraunhofer.de/
+7The use cases can be found in the YAML file on GitHub.
+8SHACL shapes for ODRL KGs evaluation
+10SHACL Playground: https://shacl.org/playground/
+11https://github.com/Daham-Mustaf/LLM4ODRL/blob/main/correction_report.py
+
+
+===== PAGE 7 / 10 =====
+
+Table 1
+ODRL Criteria and Violations
+Name
+Assertion
+SHACL
+𝐶1: odrl:uid
+Instances of classes Policy,
+Asset,
+Party, and
+Constraint MUST be associated with an (odrl:uid).
+PolicyShape.
+𝐶2: Data type
+specification
+MUST explicitly specify the corresponding XML Schema
+Definition (XSD) data type.
+All Shapes
+𝐶3: Meta info
+MUST
+include
+mandatory
+meta-information:
+dc:creator,
+dc:title,
+dc:description,
+and
+dc:issued.
+PolicyShape
+𝐶4: Function
+Offer MUST have one odrl:assigner of type Party.
+Agreement MUST have one odrl:assigner and
+odrl:assignee of type Party.
+PartyShape
+𝐶5: Relation
+Policy MUST have one odrl:target property with an
+object of type Asset.
+AssetShape
+𝐶6: Action
+PolicyMUST have one odrl:action property of type
+Action.
+PermissionShape
+𝐶7: Rule
+Policy MUST contain at least one rule specifying actions
+on Assets, which can be Permission, Prohibition,
+or Obligation.
+PolicyShape
+𝐶8:
+Con-
+straint
+Rule Constraint MUST have properties leftOperand
+(LeftOperand), operator of type (Operator), and
+rightOperand (Literal, IRI, or RightOperand).
+ConstraintShape
+𝐶9:
+ODRL
+Extension
+New elements introduced by LLM MUST either be ex-
+plicitly defined in ODRL or adhere to the the ODRL
+Profile Mechanism. 9.
+All shapes
+process enhances KG completeness and accuracy, with effectiveness highly dependent on the
+initial KG generation quality. Initially, we ran each use case once and scored the output as the
+first exploration. the results indicate varying degrees of performance across the LLM variants
+and methodologies, with GPT-4 and GPT-4o exhibiting similar performance patterns across the
+use cases.
+Accuracy =
+∑︀𝑅
+∑︀𝑇× 100%
+𝑅: Total obtained score 𝑇: Total possible score
+Use Case 1 (with refinement):
+217
+236 × 100% ≈91.95%
+5. Conclusions
+This work proposes a novel methodology for generating KGs from textual data using an LLM.
+We demonstrate that interpreting the ontology in plain text significantly boosts LLM accuracy.
+The LLM can compare KGs with textual predefined rules presented in human-readable text and
+refine the results. This capability to refine KGs underscores the advantages of employing LLM in
+KG construction. One limitation of our current work is that it is evaluated on using the ODRL
+
+
+===== PAGE 8 / 10 =====
+
+Figure 3: Figure 3 illustrates performance across 12 use cases for GPT-3.5-turbo, GPT-4, and GPT-
+4o. LLMs learn progressively from ontology input, with improved context and examples enhancing
+performance. The Refinement method, combining ontology guidance and self-correction, consistently
+achieves the highest scores across all models and use cases, demonstrating its effectiveness in generating
+accurate ODRL policies.
+ontology. However, our approach is generic and can be extended to diverse ontologies. In our
+current methodology, 𝐿𝐺𝑇guidelines for KG construction (section 3.1) and selfcorrection rules
+(section 3.3) have been derived and formulated from the W3C Recommendation and ODRL
+ontology, which involves manual interpretation and analysis. A potential area for future work
+could be to automate this task, e.g., by identifying and extracting the most important parts of
+the ontology using a statistical analysis of existing knowledge graphs that are built upon the
+ontology. An LLM could be used to verbalize the remaining parts.
+Acknowledgments
+This work was supported by the German Ministry for Research and Education (BMBF) project
+WestAI (Grant no. 01IS22094D) and the German Federal Commissioner for Culture and the
+Media via Datenraum Kultur (Grant no. 2522DIG012).
+References
+[1] T. Dam, A. Krimbacher, S. Neumaier, Policy patterns for usage control in data spaces,
+arXiv preprint arXiv:2309.11289 (2023).
+[2] S. Villata, R. Iannella, ODRL Information Model 2.2, Recommendation REC-odrl-model-
+20180215, W3C, 2018. URL: https://www.w3.org/TR/2018/REC-odrl-model-20180215/.
+
+
+===== PAGE 9 / 10 =====
+
+[3] H. Knublauch, D. Kontokostas, Shapes Constraint Language (SHACL), Recommendation
+REC-shacl-20170720, W3C, 2017. URL: https://www.w3.org/TR/2017/REC-shacl-20170720/.
+[4] Y. Liu, Y. Wan, L. He, H. Peng, S. Y. Philip, Kg-bart: Knowledge graph-augmented bart for
+generative commonsense reasoning, in: Proceedings of the AAAI Conference on Artificial
+Intelligence, volume 35, 2021, pp. 6418–6425.
+[5] H. Ye, N. Zhang, H. Chen, H. Chen, Generative knowledge graph construction: A review, in:
+Y. Goldberg, Z. Kozareva, Y. Zhang (Eds.), Proceedings of the 2022 Conference on Empirical
+Methods in Natural Language Processing, Association for Computational Linguistics, Abu
+Dhabi, United Arab Emirates, 2022. URL: https://aclanthology.org/2022.emnlp-main.1.
+doi:10.18653/v1/2022.emnlp-main.1.
+[6] I. Keraghel, S. Morbieu, M. Nadif, A survey on recent advances in named entity recog-
+nition,
+CoRR abs/2401.10825 (2024). URL: https://doi.org/10.48550/arXiv.2401.10825.
+doi:10.48550/ARXIV.2401.10825. arXiv:2401.10825.
+[7] Z. Xiaoyan, D. Yang, Y. Min, W. Lingzhi, Z. Rui, C. Hong, L. Wai, S. Ying, X. Ruifeng, A
+comprehensive survey on deep learning for relation extraction: Recent advances and new
+frontiers, arXiv preprint arXiv:2306.02051 (2023).
+[8] Ö. Sevgili, A. Shelmanov, M. Arkhipov, A. Panchenko, C. Biemann, Neural entity linking:
+A survey of models based on deep learning, Semantic Web 13 (2022) 527–570.
+[9] R. Liu, R. Mao, A. T. Luu, E. Cambria, A brief survey on recent advances in coreference
+resolution, Artificial Intelligence Review (2023) 1–43.
+[10] M. Hofer, D. Obraczka, A. Saeedi, H. Köpcke, E. Rahm, Construction of knowledge graphs:
+State and challenges, arXiv preprint arXiv:2302.11509 (2023).
+[11] Y. Zhu, X. Wang, J. Chen, S. Qiao, Y. Ou, Y. Yao, S. Deng, H. Chen, N. Zhang, Llms for
+knowledge graph construction and reasoning: Recent capabilities and future opportunities,
+arXiv preprint arXiv:2305.13168 (2023).
+[12] R. Bommasani, D. A. Hudson, E. Adeli, R. Altman, S. Arora, S. von Arx, M. S. Bernstein,
+J. Bohg, A. Bosselut, E. Brunskill, et al., On the opportunities and risks of foundation
+models, arXiv preprint arXiv:2108.07258 (2021).
+[13] J. Devlin, M.-W. Chang, K. Lee, Google, kt, language, ai: Bert: pre-training of deep
+bidirectional transformers for language understanding, in: Proceedings of NAACL-HLT,
+2019, pp. 4171–4186.
+[14] A. Kumar, A. Pandey, R. Gadia, M. Mishra, Building knowledge graph using pre-trained
+language model for learning entity-aware relationships, in: 2020 IEEE International
+Conference on Computing, Power and Communication Technologies (GUCON), IEEE,
+2020, pp. 310–315.
+[15] Q. Guo, Y. Sun, G. Liu, Z. Wang, Z. Ji, Y. Shen, X. Wang, Constructing chinese historical
+literature knowledge graph based on bert, in: Web Information Systems and Applica-
+tions: 18th International Conference, WISA 2021, Kaifeng, China, September 24–26, 2021,
+Proceedings 18, Springer, 2021, pp. 323–334.
+[16] J. Han, N. Collier, W. Buntine, E. Shareghi, Pive: Prompting with iterative verification
+improving graph-based generative capability of llms, arXiv preprint arXiv:2305.12392
+(2023).
+[17] T. R. Gruber, A translation approach to portable ontology specifications, Knowledge
+acquisition 5 (1993) 199–220.
+
+
+===== PAGE 10 / 10 =====
+
+[18] Y. Anand, Z. Nussbaum, B. Duderstadt, B. Schmidt, A. Mulyar, Gpt4all: Training an
+assistant-style chatbot with large scale data distillation from gpt-3.5-turbo, GitHub (2023).
